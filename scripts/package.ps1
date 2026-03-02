@@ -57,7 +57,7 @@ if (Test-Path $StagingDir) { Remove-Item $StagingDir -Recurse -Force }
 New-Item -ItemType Directory -Path $StagingDir | Out-Null
 
 Write-Host "Copying Flutter build…"
-Copy-Item -Path "$FlutterBuild\*" -Destination $StagingDir -Recurse
+Copy-Item -Path "$FlutterBuild\*" -Destination $StagingDir -Recurse -Force
 
 # ---------------------------------------------------------------------------
 # Validate that essential Flutter runtime files were copied
@@ -67,7 +67,8 @@ $RequiredFiles = @(
     (Join-Path $StagingDir 'icudtl.dat')
 )
 $RequiredDirs = @(
-    (Join-Path $StagingDir 'data')
+    (Join-Path $StagingDir 'data'),
+    (Join-Path $StagingDir 'data\flutter_assets')
 )
 
 foreach ($f in $RequiredFiles) {
@@ -80,6 +81,18 @@ foreach ($d in $RequiredDirs) {
     if (-not (Test-Path $d)) {
         Write-Error "Missing required Flutter directory: $d`nThe build output is incomplete. Re-run: flutter build windows --release"
         exit 1
+    }
+}
+
+# Debug: List what was copied to staging
+Write-Host "Staging directory contents:"
+Get-ChildItem -Path $StagingDir -Recurse | Select-Object -First 20 | ForEach-Object {
+    $relativePath = $_.FullName.Substring($StagingDir.Length + 1)
+    if ($_.PSIsContainer) {
+        Write-Host "  [DIR]  $relativePath"
+    } else {
+        $size = [math]::Round($_.Length / 1KB, 1)
+        Write-Host "  [FILE] $relativePath ($size KB)"
     }
 }
 
