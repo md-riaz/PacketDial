@@ -56,7 +56,10 @@ jobs:
 
       - name: Build Rust core (cdylib → voip_core.dll)
         working-directory: core_rust
-        run: cargo build --release
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Verify DLL exists
+        run: dir core_rust\target\x86_64-pc-windows-msvc\release
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -80,7 +83,7 @@ jobs:
       - name: Copy voip_core.dll into Flutter output
         shell: pwsh
         run: |
-          $dll  = "core_rust\target\release\voip_core.dll"
+          $dll  = "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
           $dest = "app_flutter\build\windows\x64\runner\Release"
           if (Test-Path $dll) {
             Copy-Item $dll -Destination $dest
