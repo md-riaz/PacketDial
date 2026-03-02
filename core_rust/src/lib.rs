@@ -1,10 +1,11 @@
 use once_cell::sync::Lazy;
 use once_cell::sync::OnceCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
 // Global state
@@ -17,6 +18,26 @@ static NEXT_CALL_ID: AtomicU32 = AtomicU32::new(1);
 static EVENT_QUEUE: Lazy<Mutex<VecDeque<String>>> = Lazy::new(|| Mutex::new(VecDeque::new()));
 static ACCOUNTS: Lazy<Mutex<Vec<Account>>> = Lazy::new(|| Mutex::new(Vec::new()));
 static CALLS: Lazy<Mutex<Vec<Call>>> = Lazy::new(|| Mutex::new(Vec::new()));
+static CALL_HISTORY: Lazy<Mutex<Vec<CallHistoryEntry>>> =
+    Lazy::new(|| Mutex::new(Vec::new()));
+static MEDIA_STATS: Lazy<Mutex<HashMap<u32, MediaStats>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+static AUDIO_DEVICES: Lazy<Mutex<Vec<AudioDevice>>> = Lazy::new(|| {
+    Mutex::new(vec![
+        AudioDevice {
+            id: 0,
+            name: "Default Input".to_owned(),
+            kind: AudioDeviceKind::Input,
+        },
+        AudioDevice {
+            id: 1,
+            name: "Default Output".to_owned(),
+            kind: AudioDeviceKind::Output,
+        },
+    ])
+});
+static SELECTED_INPUT: AtomicU32 = AtomicU32::new(0);
+static SELECTED_OUTPUT: AtomicU32 = AtomicU32::new(1);
 
 // ---------------------------------------------------------------------------
 // Error codes
@@ -46,6 +67,9 @@ struct Account {
     server: String,
     username: String,
     password: String,
+    transport: String,
+    stun_server: String,
+    turn_server: String,
     reg_state: RegistrationState,
 }
 
@@ -78,6 +102,7 @@ struct Call {
     state: CallState,
     muted: bool,
     on_hold: bool,
+    started_at: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +140,137 @@ impl CallState {
     }
 }
 
+#[derive(Debug, Clone)]
+struct CallHistoryEntry {
+    call_id: u32,
+    account_id: String,
+    uri: String,
+    direction: String,
+    started_at: u64,
+    ended_at: u64,
+    duration_secs: u64,
+    end_state: String,
+}
+
+#[derive(Debug, Clone)]
+struct MediaStats {
+    call_id: u32,
+    jitter_ms: f32,
+    packet_loss_pct: f32,
+    codec: String,
+    bitrate_kbps: u32,
+}
+
+#[derive(Debug, Clone)]
+struct AudioDevice {
+    id: u32,
+    name: String,
+    kind: AudioDeviceKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum AudioDeviceKind {
+    Input,
+    Output,
+}
+
+impl AudioDeviceKind {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Input => "Input",
+            Self::Output => "Output",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Mask sensitive values from a SIP header string.
+/// Replaces the value of Authorization and Proxy-Authorization headers,
+/// and any sip: URI that contains a password (user:pass@host).
+pub fn mask_sip_log(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for line in input.lines() {
+        let lower = line.to_lowercase();
+        if lower.starts_with("authorization:")
+            || lower.starts_with("proxy-authorization:")
+        {
+            // Keep the header name, redact everything after the colon
+            if let Some(colon) = line.find(':') {
+                out.push_str(&line[..=colon]);
+                out.push_str(" ***MASKED***");
+            } else {
+                out.push_str(line);
+            }
+        } else if lower.contains("sip:") && line.contains('@') && line.contains(':') {
+            // Mask password portion in sip:user:password@host URIs
+            out.push_str(&mask_sip_uri_passwords(line));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    // Remove trailing newline added by the loop if input didn't end with one
+    if !input.ends_with('\n') && out.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
+/// Replace `sip:user:password@host` with `sip:user:***@host` in [s].
+fn mask_sip_uri_passwords(s: &str) -> String {
+    let mut result = String::new();
+    let mut remaining = s;
+    while let Some(start) = remaining.to_lowercase().find("sip:") {
+        result.push_str(&remaining[..start]);
+        let uri_start = &remaining[start..];
+        // Find end of URI (whitespace or end of string)
+        let uri_end = uri_start
+            .find(|c: char| c.is_whitespace() || c == '>' || c == '<' || c == '"')
+            .unwrap_or(uri_start.len());
+        let uri = &uri_start[..uri_end];
+        result.push_str(&mask_single_uri(uri));
+        remaining = &uri_start[uri_end..];
+    }
+    result.push_str(remaining);
+    result
+}
+
+fn mask_single_uri(uri: &str) -> String {
+    // sip:user:password@host  →  sip:user:***@host
+    // sip:user@host           →  unchanged
+    let body = if uri.to_lowercase().starts_with("sip:") {
+        &uri[4..]
+    } else if uri.to_lowercase().starts_with("sips:") {
+        &uri[5..]
+    } else {
+        return uri.to_owned();
+    };
+    let prefix = &uri[..uri.len() - body.len()];
+    // body is user[:password]@host[:port][;params]
+    if let Some(at_pos) = body.find('@') {
+        let userinfo = &body[..at_pos];
+        let hostinfo = &body[at_pos..];
+        if let Some(colon_pos) = userinfo.find(':') {
+            // Has password — mask it
+            format!("{}{}:***{}", prefix, &userinfo[..colon_pos], hostinfo)
+        } else {
+            uri.to_owned()
+        }
+    } else {
+        uri.to_owned()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Event helpers
 // ---------------------------------------------------------------------------
@@ -149,6 +305,17 @@ fn push_call_state(call: &Call) {
     ));
 }
 
+fn push_media_stats(stats: &MediaStats) {
+    push_event(format!(
+        r#"{{"type":"MediaStatsUpdated","payload":{{"call_id":{},"jitter_ms":{:.1},"packet_loss_pct":{:.1},"codec":"{}","bitrate_kbps":{}}}}}"#,
+        stats.call_id,
+        stats.jitter_ms,
+        stats.packet_loss_pct,
+        stats.codec,
+        stats.bitrate_kbps
+    ));
+}
+
 // ---------------------------------------------------------------------------
 // Command dispatch
 // ---------------------------------------------------------------------------
@@ -163,6 +330,11 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "CallHangup" => cmd_call_hangup(payload),
         "CallMute" => cmd_call_mute(payload),
         "CallHold" => cmd_call_hold(payload),
+        "MediaStatsUpdate" => cmd_media_stats_update(payload),
+        "AudioListDevices" => cmd_audio_list_devices(payload),
+        "AudioSetDevices" => cmd_audio_set_devices(payload),
+        "CallHistoryQuery" => cmd_call_history_query(payload),
+        "SipCaptureMessage" => cmd_sip_capture(payload),
         "DiagExportBundle" => cmd_diag_export(payload),
         _ => EngineErrorCode::UnknownCommand,
     }
@@ -179,6 +351,9 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         existing.server = p["server"].as_str().unwrap_or("").to_owned();
         existing.username = p["username"].as_str().unwrap_or("").to_owned();
         existing.password = p["password"].as_str().unwrap_or("").to_owned();
+        existing.transport = p["transport"].as_str().unwrap_or("udp").to_owned();
+        existing.stun_server = p["stun_server"].as_str().unwrap_or("").to_owned();
+        existing.turn_server = p["turn_server"].as_str().unwrap_or("").to_owned();
     } else {
         let acct = Account {
             id: id.clone(),
@@ -186,6 +361,9 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
             server: p["server"].as_str().unwrap_or("").to_owned(),
             username: p["username"].as_str().unwrap_or("").to_owned(),
             password: p["password"].as_str().unwrap_or("").to_owned(),
+            transport: p["transport"].as_str().unwrap_or("udp").to_owned(),
+            stun_server: p["stun_server"].as_str().unwrap_or("").to_owned(),
+            turn_server: p["turn_server"].as_str().unwrap_or("").to_owned(),
             reg_state: RegistrationState::Unregistered,
         };
         accts.push(acct);
@@ -255,6 +433,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         state: CallState::Ringing,
         muted: false,
         on_hold: false,
+        started_at: now_secs(),
     };
     push_call_state(&call);
     CALLS.lock().unwrap().push(call);
@@ -289,6 +468,21 @@ fn cmd_call_hangup(p: &serde_json::Value) -> EngineErrorCode {
         Some(call) => {
             call.state = CallState::Ended;
             push_call_state(call);
+            let ended_at = now_secs();
+            let duration = ended_at.saturating_sub(call.started_at);
+            let entry = CallHistoryEntry {
+                call_id: call.id,
+                account_id: call.account_id.clone(),
+                uri: call.uri.clone(),
+                direction: call.direction.variant_name().to_owned(),
+                started_at: call.started_at,
+                ended_at,
+                duration_secs: duration,
+                end_state: "Ended".to_owned(),
+            };
+            CALL_HISTORY.lock().unwrap().push(entry);
+            // Remove media stats for this call
+            MEDIA_STATS.lock().unwrap().remove(&call_id);
             EngineErrorCode::Ok
         }
     }
@@ -333,10 +527,113 @@ fn cmd_call_hold(p: &serde_json::Value) -> EngineErrorCode {
     }
 }
 
+fn cmd_media_stats_update(p: &serde_json::Value) -> EngineErrorCode {
+    let call_id = match p["call_id"].as_u64() {
+        Some(n) => n as u32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let stats = MediaStats {
+        call_id,
+        jitter_ms: p["jitter_ms"].as_f64().unwrap_or(0.0) as f32,
+        packet_loss_pct: p["packet_loss_pct"].as_f64().unwrap_or(0.0) as f32,
+        codec: p["codec"].as_str().unwrap_or("PCMU").to_owned(),
+        bitrate_kbps: p["bitrate_kbps"].as_u64().unwrap_or(64) as u32,
+    };
+    push_media_stats(&stats);
+    MEDIA_STATS.lock().unwrap().insert(call_id, stats);
+    EngineErrorCode::Ok
+}
+
+fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
+    let devices = AUDIO_DEVICES.lock().unwrap();
+    let mut items = String::new();
+    for (i, d) in devices.iter().enumerate() {
+        if i > 0 {
+            items.push(',');
+        }
+        items.push_str(&format!(
+            r#"{{"id":{},"name":"{}","kind":"{}"}}"#,
+            d.id,
+            d.name,
+            d.kind.as_str()
+        ));
+    }
+    let selected_in = SELECTED_INPUT.load(Ordering::Relaxed);
+    let selected_out = SELECTED_OUTPUT.load(Ordering::Relaxed);
+    push_event(format!(
+        r#"{{"type":"AudioDeviceList","payload":{{"devices":[{items}],"selected_input":{selected_in},"selected_output":{selected_out}}}}}"#
+    ));
+    EngineErrorCode::Ok
+}
+
+fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
+    let input_id = match p["input_id"].as_u64() {
+        Some(n) => n as u32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let output_id = match p["output_id"].as_u64() {
+        Some(n) => n as u32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let devices = AUDIO_DEVICES.lock().unwrap();
+    let has_input = devices.iter().any(|d| d.id == input_id && d.kind == AudioDeviceKind::Input);
+    let has_output = devices.iter().any(|d| d.id == output_id && d.kind == AudioDeviceKind::Output);
+    drop(devices);
+    if !has_input || !has_output {
+        return EngineErrorCode::NotFound;
+    }
+    SELECTED_INPUT.store(input_id, Ordering::Relaxed);
+    SELECTED_OUTPUT.store(output_id, Ordering::Relaxed);
+    // TODO: apply to PJSIP audio device selection here.
+    push_event(format!(
+        r#"{{"type":"AudioDevicesSet","payload":{{"input_id":{input_id},"output_id":{output_id}}}}}"#
+    ));
+    EngineErrorCode::Ok
+}
+
+fn cmd_call_history_query(_p: &serde_json::Value) -> EngineErrorCode {
+    let history = CALL_HISTORY.lock().unwrap();
+    let mut items = String::new();
+    for (i, e) in history.iter().enumerate() {
+        if i > 0 {
+            items.push(',');
+        }
+        items.push_str(&format!(
+            r#"{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","started_at":{},"ended_at":{},"duration_secs":{},"end_state":"{}"}}"#,
+            e.call_id,
+            e.account_id,
+            e.uri,
+            e.direction,
+            e.started_at,
+            e.ended_at,
+            e.duration_secs,
+            e.end_state
+        ));
+    }
+    push_event(format!(
+        r#"{{"type":"CallHistoryResult","payload":{{"entries":[{items}]}}}}"#
+    ));
+    EngineErrorCode::Ok
+}
+
+fn cmd_sip_capture(p: &serde_json::Value) -> EngineErrorCode {
+    let direction = p["direction"].as_str().unwrap_or("?");
+    let raw = p["raw"].as_str().unwrap_or("");
+    let masked = mask_sip_log(raw);
+    // Escape the masked string for JSON embedding
+    let escaped = masked.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r");
+    push_event(format!(
+        r#"{{"type":"SipMessageCaptured","payload":{{"direction":"{direction}","raw":"{escaped}"}}}}"#
+    ));
+    EngineErrorCode::Ok
+}
+
 fn cmd_diag_export(p: &serde_json::Value) -> EngineErrorCode {
     let anonymize = p["anonymize"].as_bool().unwrap_or(true);
+    let history_count = CALL_HISTORY.lock().unwrap().len();
+    let account_count = ACCOUNTS.lock().unwrap().len();
     push_event(format!(
-        r#"{{"type":"DiagBundleReady","payload":{{"anonymize":{anonymize},"note":"TODO: real export"}}}}"#
+        r#"{{"type":"DiagBundleReady","payload":{{"anonymize":{anonymize},"call_history_count":{history_count},"account_count":{account_count},"note":"TODO: real export"}}}}"#
     ));
     EngineErrorCode::Ok
 }
@@ -463,7 +760,7 @@ pub unsafe extern "C" fn engine_free_string(ptr: *mut c_char) {
 mod tests {
     use super::*;
 
-    /// Serialise test execution so that global state does not leak between tests.
+    /// Serialize test execution so that global state does not leak between tests.
     static TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn reset() {
@@ -471,6 +768,10 @@ mod tests {
         EVENT_QUEUE.lock().unwrap().clear();
         ACCOUNTS.lock().unwrap().clear();
         CALLS.lock().unwrap().clear();
+        CALL_HISTORY.lock().unwrap().clear();
+        MEDIA_STATS.lock().unwrap().clear();
+        SELECTED_INPUT.store(0, Ordering::Relaxed);
+        SELECTED_OUTPUT.store(1, Ordering::Relaxed);
     }
 
     fn drain_events() {
@@ -495,6 +796,8 @@ mod tests {
         unsafe { engine_free_string(ptr) };
         s
     }
+
+    // --- original tests (unchanged) -----------------------------------------
 
     #[test]
     fn init_shutdown_ok() {
@@ -542,10 +845,7 @@ mod tests {
         reset();
         engine_init();
         drain_events();
-        assert_eq!(
-            send("not json"),
-            EngineErrorCode::InvalidJson as i32
-        );
+        assert_eq!(send("not json"), EngineErrorCode::InvalidJson as i32);
         engine_shutdown();
     }
 
@@ -556,7 +856,6 @@ mod tests {
         engine_init();
         drain_events();
 
-        // Upsert account — emits Unregistered
         assert_eq!(
             send(r#"{"type":"AccountUpsert","payload":{"id":"acc1","display_name":"Test","server":"sip.example.com","username":"user","password":"pass"}}"#),
             0
@@ -564,7 +863,6 @@ mod tests {
         let ev = next_event();
         assert!(ev.contains("Unregistered"), "got: {ev}");
 
-        // Register — emits Registering then Registered
         assert_eq!(
             send(r#"{"type":"AccountRegister","payload":{"id":"acc1"}}"#),
             0
@@ -574,7 +872,6 @@ mod tests {
         let ev = next_event();
         assert!(ev.contains("Registered"), "got: {ev}");
 
-        // Unregister
         assert_eq!(
             send(r#"{"type":"AccountUnregister","payload":{"id":"acc1"}}"#),
             0
@@ -605,7 +902,6 @@ mod tests {
         engine_init();
         drain_events();
 
-        // Start call → Ringing
         assert_eq!(
             send(r#"{"type":"CallStart","payload":{"account_id":"acc1","uri":"sip:bob@example.com"}}"#),
             0
@@ -613,29 +909,24 @@ mod tests {
         let ev = next_event();
         assert!(ev.contains("Ringing"), "got: {ev}");
 
-        // Parse call_id from the event
         let v: serde_json::Value = serde_json::from_str(&ev).unwrap();
         let call_id = v["payload"]["call_id"].as_u64().unwrap();
 
-        // Answer → InCall
         let cmd = format!(r#"{{"type":"CallAnswer","payload":{{"call_id":{call_id}}}}}"#);
         assert_eq!(send(&cmd), 0);
         let ev = next_event();
         assert!(ev.contains("InCall"), "got: {ev}");
 
-        // Hold → OnHold
         let cmd = format!(r#"{{"type":"CallHold","payload":{{"call_id":{call_id},"hold":true}}}}"#);
         assert_eq!(send(&cmd), 0);
         let ev = next_event();
         assert!(ev.contains("OnHold"), "got: {ev}");
 
-        // Mute
         let cmd = format!(r#"{{"type":"CallMute","payload":{{"call_id":{call_id},"muted":true}}}}"#);
         assert_eq!(send(&cmd), 0);
         let ev = next_event();
         assert!(ev.contains("OnHold"), "got: {ev}"); // state unchanged, muted=true
 
-        // Hangup → Ended
         let cmd = format!(r#"{{"type":"CallHangup","payload":{{"call_id":{call_id}}}}}"#);
         assert_eq!(send(&cmd), 0);
         let ev = next_event();
@@ -659,5 +950,138 @@ mod tests {
         assert!(ev.contains("DiagBundleReady"), "got: {ev}");
 
         engine_shutdown();
+    }
+
+    // --- new M2/M3 tests ----------------------------------------------------
+
+    #[test]
+    fn account_upsert_with_transport() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(
+            send(r#"{"type":"AccountUpsert","payload":{"id":"acc2","display_name":"T","server":"sip.test","username":"u","password":"p","transport":"tcp","stun_server":"stun.test:3478","turn_server":""}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("Unregistered"), "got: {ev}");
+        let accts = ACCOUNTS.lock().unwrap();
+        let a = accts.iter().find(|a| a.id == "acc2").unwrap();
+        assert_eq!(a.transport, "tcp");
+        assert_eq!(a.stun_server, "stun.test:3478");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn call_history_recorded() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(
+            send(r#"{"type":"CallStart","payload":{"account_id":"acc1","uri":"sip:alice@example.com"}}"#),
+            0
+        );
+        let ev = next_event();
+        let v: serde_json::Value = serde_json::from_str(&ev).unwrap();
+        let call_id = v["payload"]["call_id"].as_u64().unwrap();
+
+        let cmd = format!(r#"{{"type":"CallHangup","payload":{{"call_id":{call_id}}}}}"#);
+        assert_eq!(send(&cmd), 0);
+        drain_events();
+
+        // Query history
+        assert_eq!(send(r#"{"type":"CallHistoryQuery","payload":{}}"#), 0);
+        let ev = next_event();
+        assert!(ev.contains("CallHistoryResult"), "got: {ev}");
+        assert!(ev.contains("sip:alice@example.com"), "got: {ev}");
+        assert!(ev.contains("Outgoing"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn media_stats_update() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(
+            send(r#"{"type":"MediaStatsUpdate","payload":{"call_id":42,"jitter_ms":12.5,"packet_loss_pct":0.5,"codec":"OPUS","bitrate_kbps":32}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("MediaStatsUpdated"), "got: {ev}");
+        assert!(ev.contains("OPUS"), "got: {ev}");
+        assert!(ev.contains("12.5"), "got: {ev}");
+        let stats = MEDIA_STATS.lock().unwrap();
+        let s = stats.get(&42).unwrap();
+        assert_eq!(s.codec, "OPUS");
+        assert!((s.jitter_ms - 12.5).abs() < 0.01);
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn audio_list_and_set_devices() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(send(r#"{"type":"AudioListDevices","payload":{}}"#), 0);
+        let ev = next_event();
+        assert!(ev.contains("AudioDeviceList"), "got: {ev}");
+        assert!(ev.contains("Default Input"), "got: {ev}");
+
+        assert_eq!(
+            send(r#"{"type":"AudioSetDevices","payload":{"input_id":0,"output_id":1}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("AudioDevicesSet"), "got: {ev}");
+        assert_eq!(SELECTED_INPUT.load(Ordering::Relaxed), 0);
+        assert_eq!(SELECTED_OUTPUT.load(Ordering::Relaxed), 1);
+
+        // Invalid device ids
+        assert_eq!(
+            send(r#"{"type":"AudioSetDevices","payload":{"input_id":99,"output_id":1}}"#),
+            EngineErrorCode::NotFound as i32
+        );
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn sip_capture_message() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(
+            send(r#"{"type":"SipCaptureMessage","payload":{"direction":"recv","raw":"INVITE sip:bob@example.com SIP/2.0\nAuthorization: Digest username=\"alice\", response=\"abc123\"\n"}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("SipMessageCaptured"), "got: {ev}");
+        assert!(ev.contains("MASKED"), "Authorization should be masked; got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn log_masking() {
+        let input = "INVITE sip:user:secret@sip.example.com SIP/2.0\nAuthorization: Digest username=\"alice\", response=\"abc\"\nContact: sip:alice@192.168.1.1\n";
+        let masked = mask_sip_log(input);
+        assert!(!masked.contains("secret"), "password leaked: {masked}");
+        assert!(!masked.contains("Digest"), "auth details leaked: {masked}");
+        assert!(masked.contains("alice@192.168.1.1"), "non-sensitive data missing: {masked}");
+        assert!(masked.contains("MASKED"), "mask marker missing: {masked}");
     }
 }

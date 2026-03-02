@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../core/engine_channel.dart';
 import '../models/call.dart';
+import '../models/media_stats.dart';
+import '../models/audio_device.dart';
 
 class ActiveCallScreen extends StatefulWidget {
   const ActiveCallScreen({super.key});
@@ -24,23 +26,89 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   void _hangup(int callId) =>
       _channel.sendCommand('CallHangup', {'call_id': callId});
 
-  void _toggleMute(ActiveCall call) =>
-      _channel.sendCommand('CallMute', {'call_id': call.callId, 'muted': !call.muted});
+  void _toggleMute(ActiveCall call) => _channel
+      .sendCommand('CallMute', {'call_id': call.callId, 'muted': !call.muted});
 
-  void _toggleHold(ActiveCall call) =>
-      _channel.sendCommand('CallHold', {'call_id': call.callId, 'hold': !call.onHold});
+  void _toggleHold(ActiveCall call) => _channel
+      .sendCommand('CallHold', {'call_id': call.callId, 'hold': !call.onHold});
+
+  void _showDevicePicker() {
+    final devices = _channel.audioDevices;
+    final inputs = devices.where((d) => d.isInput).toList();
+    final outputs = devices.where((d) => d.isOutput).toList();
+    int selIn = _channel.selectedInputId;
+    int selOut = _channel.selectedOutputId;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('Audio Devices'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Microphone',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              ...inputs.map((d) => RadioListTile<int>(
+                    value: d.id,
+                    groupValue: selIn,
+                    title: Text(d.name),
+                    onChanged: (v) => setDlgState(() => selIn = v!),
+                    dense: true,
+                  )),
+              const SizedBox(height: 8),
+              const Text('Speaker',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              ...outputs.map((d) => RadioListTile<int>(
+                    value: d.id,
+                    groupValue: selOut,
+                    title: Text(d.name),
+                    onChanged: (v) => setDlgState(() => selOut = v!),
+                    dense: true,
+                  )),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                _channel.sendCommand('AudioSetDevices',
+                    {'input_id': selIn, 'output_id': selOut});
+                Navigator.pop(ctx);
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final call = _channel.activeCall;
+    final MediaStats? stats =
+        call != null ? _channel.mediaStats[call.callId] : null;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Active Call')),
+      appBar: AppBar(
+        title: const Text('Active Call'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.speaker),
+            tooltip: 'Audio Devices',
+            onPressed: _showDevicePicker,
+          ),
+        ],
+      ),
       body: call == null
           ? const Center(child: Text('No active call.'))
-          : Padding(
+          : SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.call, size: 64, color: Colors.green),
                   const SizedBox(height: 16),
@@ -55,11 +123,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   if (call.direction == CallDirection.incoming)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Chip(label: const Text('Incoming call')),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Chip(label: Text('Incoming call')),
                     ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -70,7 +138,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                         onTap: () => _toggleMute(call),
                       ),
                       _controlButton(
-                        icon: call.onHold ? Icons.play_arrow : Icons.pause,
+                        icon:
+                            call.onHold ? Icons.play_arrow : Icons.pause,
                         label: call.onHold ? 'Resume' : 'Hold',
                         onTap: () => _toggleHold(call),
                       ),
@@ -83,6 +152,10 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                     icon: const Icon(Icons.call_end),
                     label: const Text('Hang Up'),
                   ),
+                  if (stats != null) ...[
+                    const SizedBox(height: 32),
+                    _MediaStatsCard(stats: stats),
+                  ],
                 ],
               ),
             ),
@@ -107,6 +180,52 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
               Text(label),
             ],
           ),
+        ),
+      );
+}
+
+class _MediaStatsCard extends StatelessWidget {
+  final MediaStats stats;
+  const _MediaStatsCard({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Media Quality',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            _StatRow('Codec', stats.codec),
+            _StatRow('Bitrate', '${stats.bitrateKbps} kbps'),
+            _StatRow('Jitter', '${stats.jitterMs.toStringAsFixed(1)} ms'),
+            _StatRow('Packet Loss',
+                '${stats.packetLossPct.toStringAsFixed(1)} %'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: const TextStyle(color: Colors.grey)),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+          ],
         ),
       );
 }

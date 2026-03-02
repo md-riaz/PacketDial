@@ -38,17 +38,22 @@ void engine_free_string(char* ptr);
 
 ## Supported Commands
 
-| Command            | Required payload fields                                                  |
-|--------------------|--------------------------------------------------------------------------|
-| `AccountUpsert`    | `id`, `display_name`, `server`, `username`, `password`                   |
-| `AccountRegister`  | `id`                                                                     |
-| `AccountUnregister`| `id`                                                                     |
-| `CallStart`        | `account_id`, `uri`                                                      |
-| `CallAnswer`       | `call_id`                                                                |
-| `CallHangup`       | `call_id`                                                                |
-| `CallMute`         | `call_id`, `muted` (bool)                                                |
-| `CallHold`         | `call_id`, `hold` (bool)                                                 |
-| `DiagExportBundle` | `anonymize` (bool, default true)                                         |
+| Command              | Required payload fields                                                  |
+|----------------------|--------------------------------------------------------------------------|
+| `AccountUpsert`      | `id`, `display_name`, `server`, `username`, `password`, `transport` (udp/tcp), `stun_server`, `turn_server` |
+| `AccountRegister`    | `id`                                                                     |
+| `AccountUnregister`  | `id`                                                                     |
+| `CallStart`          | `account_id`, `uri`                                                      |
+| `CallAnswer`         | `call_id`                                                                |
+| `CallHangup`         | `call_id`                                                                |
+| `CallMute`           | `call_id`, `muted` (bool)                                                |
+| `CallHold`           | `call_id`, `hold` (bool)                                                 |
+| `MediaStatsUpdate`   | `call_id`, `jitter_ms`, `packet_loss_pct`, `codec`, `bitrate_kbps`      |
+| `AudioListDevices`   | _(none)_                                                                 |
+| `AudioSetDevices`    | `input_id`, `output_id`                                                  |
+| `CallHistoryQuery`   | _(none)_                                                                 |
+| `SipCaptureMessage`  | `direction` (send/recv), `raw` (SIP message text)                        |
+| `DiagExportBundle`   | `anonymize` (bool, default true)                                         |
 
 ## Events Emitted
 
@@ -57,5 +62,10 @@ void engine_free_string(char* ptr);
 | `EngineReady`              | _(empty)_                                                           |
 | `RegistrationStateChanged` | `account_id`, `state` (Unregistered/Registering/Registered/Failed), `reason` |
 | `CallStateChanged`         | `call_id`, `account_id`, `uri`, `direction`, `state`, `muted`, `on_hold` |
-| `DiagBundleReady`          | `anonymize`, `note`                                                 |
+| `MediaStatsUpdated`        | `call_id`, `jitter_ms`, `packet_loss_pct`, `codec`, `bitrate_kbps` |
+| `AudioDeviceList`          | `devices[]` (id/name/kind), `selected_input`, `selected_output`    |
+| `AudioDevicesSet`          | `input_id`, `output_id`                                             |
+| `CallHistoryResult`        | `entries[]` (call_id, account_id, uri, direction, started_at, ended_at, duration_secs, end_state) |
+| `SipMessageCaptured`       | `direction`, `raw` (masked)                                         |
+| `DiagBundleReady`          | `anonymize`, `call_history_count`, `account_count`, `note`          |
 

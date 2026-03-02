@@ -22,80 +22,109 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   void _showAccountDialog({Account? existing}) {
-    final idCtrl =
-        TextEditingController(text: existing?.id ?? '');
-    final nameCtrl =
-        TextEditingController(text: existing?.displayName ?? '');
-    final serverCtrl =
-        TextEditingController(text: existing?.server ?? '');
-    final userCtrl =
-        TextEditingController(text: existing?.username ?? '');
-    final passCtrl =
-        TextEditingController(text: existing?.password ?? '');
+    final idCtrl = TextEditingController(text: existing?.id ?? '');
+    final nameCtrl = TextEditingController(text: existing?.displayName ?? '');
+    final serverCtrl = TextEditingController(text: existing?.server ?? '');
+    final userCtrl = TextEditingController(text: existing?.username ?? '');
+    final passCtrl = TextEditingController(text: existing?.password ?? '');
+    final stunCtrl = TextEditingController(text: existing?.stunServer ?? '');
+    final turnCtrl = TextEditingController(text: existing?.turnServer ?? '');
+    String transport = existing?.transport ?? 'udp';
     final isNew = existing == null;
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isNew ? 'Add Account' : 'Edit Account'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isNew)
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Text(isNew ? 'Add Account' : 'Edit Account'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isNew)
+                  TextField(
+                      controller: idCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'Account ID')),
                 TextField(
-                    controller: idCtrl,
+                    controller: nameCtrl,
                     decoration:
-                        const InputDecoration(labelText: 'Account ID')),
-              TextField(
-                  controller: nameCtrl,
+                        const InputDecoration(labelText: 'Display Name')),
+                TextField(
+                    controller: serverCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'SIP Server')),
+                TextField(
+                    controller: userCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Username')),
+                TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Password')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: transport,
                   decoration:
-                      const InputDecoration(labelText: 'Display Name')),
-              TextField(
-                  controller: serverCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'SIP Server')),
-              TextField(
-                  controller: userCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Username')),
-              TextField(
-                  controller: passCtrl,
-                  obscureText: true,
-                  decoration:
-                      const InputDecoration(labelText: 'Password')),
-            ],
+                      const InputDecoration(labelText: 'Transport'),
+                  items: const [
+                    DropdownMenuItem(value: 'udp', child: Text('UDP')),
+                    DropdownMenuItem(value: 'tcp', child: Text('TCP')),
+                  ],
+                  onChanged: (v) =>
+                      setDlgState(() => transport = v ?? 'udp'),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                    controller: stunCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'STUN Server (optional)',
+                        hintText: 'stun.example.com:3478')),
+                TextField(
+                    controller: turnCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'TURN Server (optional)',
+                        hintText: 'turn.example.com:3478')),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final id = isNew ? idCtrl.text.trim() : existing.id;
+                if (id.isEmpty) return;
+                final acct = Account(
+                  id: id,
+                  displayName: nameCtrl.text.trim(),
+                  server: serverCtrl.text.trim(),
+                  username: userCtrl.text.trim(),
+                  password: passCtrl.text,
+                  transport: transport,
+                  stunServer: stunCtrl.text.trim(),
+                  turnServer: turnCtrl.text.trim(),
+                );
+                _channel.accounts[id] = acct;
+                _channel.sendCommand('AccountUpsert', {
+                  'id': acct.id,
+                  'display_name': acct.displayName,
+                  'server': acct.server,
+                  'username': acct.username,
+                  'password': acct.password,
+                  'transport': acct.transport,
+                  'stun_server': acct.stunServer,
+                  'turn_server': acct.turnServer,
+                });
+                Navigator.pop(ctx);
+                setState(() {});
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final id = isNew ? idCtrl.text.trim() : existing.id;
-              if (id.isEmpty) return;
-              final acct = Account(
-                id: id,
-                displayName: nameCtrl.text.trim(),
-                server: serverCtrl.text.trim(),
-                username: userCtrl.text.trim(),
-                password: passCtrl.text,
-              );
-              _channel.accounts[id] = acct;
-              _channel.sendCommand('AccountUpsert', {
-                'id': acct.id,
-                'display_name': acct.displayName,
-                'server': acct.server,
-                'username': acct.username,
-                'password': acct.password,
-              });
-              Navigator.pop(ctx);
-              setState(() {});
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
@@ -111,7 +140,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
         child: const Icon(Icons.add),
       ),
       body: accounts.isEmpty
-          ? const Center(child: Text('No accounts configured.\nTap + to add one.'))
+          ? const Center(
+              child: Text('No accounts configured.\nTap + to add one.'))
           : ListView.separated(
               padding: const EdgeInsets.all(12),
               itemCount: accounts.length,
@@ -127,7 +157,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   ),
                   title: Text(a.displayName.isEmpty ? a.id : a.displayName),
                   subtitle: Text(
-                      '${a.username}@${a.server}  •  ${a.registrationState.label}'),
+                      '${a.username}@${a.server}  •  ${a.transport.toUpperCase()}  •  ${a.registrationState.label}'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

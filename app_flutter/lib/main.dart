@@ -6,6 +6,7 @@ import 'screens/accounts_screen.dart';
 import 'screens/active_call_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
+import 'screens/history_screen.dart';
 
 void main() {
   runApp(const App());
@@ -28,6 +29,7 @@ class _AppState extends State<App> {
     AccountsScreen(),
     DialerScreen(),
     ActiveCallScreen(),
+    HistoryScreen(),
     DiagnosticsScreen(),
   ];
 
@@ -84,6 +86,8 @@ class _AppState extends State<App> {
                       icon: Icon(Icons.dialpad), label: 'Dialer'),
                   NavigationDestination(
                       icon: Icon(Icons.call), label: 'Call'),
+                  NavigationDestination(
+                      icon: Icon(Icons.history), label: 'History'),
                   NavigationDestination(
                       icon: Icon(Icons.bug_report), label: 'Diagnostics'),
                 ],

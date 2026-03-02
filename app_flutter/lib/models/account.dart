@@ -27,6 +27,9 @@ class Account {
   final String server;
   final String username;
   final String password;
+  final String transport;
+  final String stunServer;
+  final String turnServer;
   final RegistrationState registrationState;
   final String failureReason;
 
@@ -36,6 +39,9 @@ class Account {
     required this.server,
     required this.username,
     required this.password,
+    this.transport = 'udp',
+    this.stunServer = '',
+    this.turnServer = '',
     this.registrationState = RegistrationState.unregistered,
     this.failureReason = '',
   });
@@ -45,6 +51,9 @@ class Account {
     String? server,
     String? username,
     String? password,
+    String? transport,
+    String? stunServer,
+    String? turnServer,
     RegistrationState? registrationState,
     String? failureReason,
   }) =>
@@ -54,6 +63,9 @@ class Account {
         server: server ?? this.server,
         username: username ?? this.username,
         password: password ?? this.password,
+        transport: transport ?? this.transport,
+        stunServer: stunServer ?? this.stunServer,
+        turnServer: turnServer ?? this.turnServer,
         registrationState: registrationState ?? this.registrationState,
         failureReason: failureReason ?? this.failureReason,
       );
