@@ -1,5 +1,5 @@
 name: voip_softphone
-description: Scaffold Flutter UI for Windows SIP softphone (Rust FFI)
+description: PacketDial - Windows SIP softphone (Flutter + Rust FFI)
 publish_to: "none"
 version: 0.1.0+1
 

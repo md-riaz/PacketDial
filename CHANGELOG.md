@@ -5,6 +5,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] — M5 Windows Build
+
+### Added
+
+#### Flutter Windows runner (`app_flutter/windows/`)
+- **`windows/CMakeLists.txt`** — top-level CMake; `BINARY_NAME = PacketDial`;
+  bundles `voip_core.dll` from `core_rust/target/release/` via CMake `install()`
+- **`windows/flutter/`** — Flutter engine CMake integration, plugin registrant
+  stubs (`generated_plugin_registrant.cc/.h`), empty plugin list
+  (`generated_plugins.cmake`)
+- **`windows/runner/`** — Win32 C++ application runner:
+  - `main.cpp` — `wWinMain` entry point; opens 1280×720 window titled "PacketDial"
+  - `flutter_window.cpp/.h` — Flutter embedding window subclass
+  - `win32_window.cpp/.h` — DPI-aware Win32 base window (per-monitor V2)
+  - `run_loop.cpp/.h` — Win32 message loop
+  - `utils.cpp/.h` — `CreateAndAttachConsole`, `Utf8FromUtf16`,
+    `GetCommandLineArguments`
+  - `resource.h` / `Runner.rc` — Windows version block; `PacketDial.exe` metadata
+  - `runner.exe.manifest` — PerMonitorV2 DPI awareness, Windows 10/11 compatibility
+  - `resources/app_icon.ico` — app icon (16×16, indigo, 32bpp)
+
+#### Flutter app
+- **`ffi/engine.dart`** — fixed `calloc` import: `dart:ffi` does not expose
+  `calloc`; now imports `package:ffi/ffi.dart as ffi_alloc` and uses
+  `ffi_alloc.calloc` — resolves Dart compile error
+- **`pubspec.yaml`** — updated description to "PacketDial - Windows SIP softphone"
+
+#### CI (`windows-ci.yml`)
+- Removed all `continue-on-error: true` — `cargo build --release` and
+  `flutter build windows --release` now succeed with the Windows runner present
+- Reordered steps: `cargo test` before `cargo build --release`
+- Added **"Copy voip_core.dll into Flutter output"** step: copies
+  `core_rust/target/release/voip_core.dll` into
+  `app_flutter/build/windows/x64/runner/Release/` so `PacketDial.exe` can
+  load it at startup
+
+---
+
 ## [Unreleased] — M4 Packaging
 
 ### Added

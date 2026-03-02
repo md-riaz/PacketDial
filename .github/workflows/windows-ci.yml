@@ -30,14 +30,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build Rust core (cdylib)
-        working-directory: core_rust
-        run: cargo build --release
-        continue-on-error: true  # remove once pjsip libs are present
-
       - name: Cargo test (Rust core)
         working-directory: core_rust
         run: cargo test
+
+      - name: Build Rust core (cdylib → voip_core.dll)
+        working-directory: core_rust
+        run: cargo build --release
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -49,15 +48,25 @@ jobs:
         working-directory: app_flutter
         run: flutter pub get
 
-      - name: Flutter build Windows
+      - name: Flutter build Windows (release)
         working-directory: app_flutter
         run: flutter build windows --release
-        continue-on-error: true  # remove once voip_core.dll is wired in
+
+      - name: Copy voip_core.dll into Flutter output
+        shell: pwsh
+        run: |
+          $dll  = "core_rust\target\release\voip_core.dll"
+          $dest = "app_flutter\build\windows\x64\runner\Release"
+          if (Test-Path $dll) {
+            Copy-Item $dll -Destination $dest
+            Write-Host "Copied $dll -> $dest"
+          } else {
+            Write-Warning "voip_core.dll not found – PJSIP integration pending."
+          }
 
       - name: Package release artifact
         shell: pwsh
         run: ./scripts/package.ps1
-        continue-on-error: true  # remove once Flutter build succeeds
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4

@@ -1,6 +1,8 @@
 import 'dart:ffi' as ffi;
 import 'dart:io';
 
+import 'package:ffi/ffi.dart' as ffi_alloc;
+
 typedef _EngineInitC = ffi.Int32 Function();
 typedef _EngineShutdownC = ffi.Int32 Function();
 typedef _EngineVersionC = ffi.Pointer<ffi.Int8> Function();
@@ -127,7 +129,7 @@ class VoipEngine {
   /// Allocate a native Int8 array from [bytes] using the Dart FFI allocator.
   ffi.Pointer<ffi.Int8> _allocBytes(List<int> bytes) {
     final ptr =
-        ffi.calloc.allocate<ffi.Int8>(ffi.sizeOf<ffi.Int8>() * bytes.length);
+        ffi_alloc.calloc.allocate<ffi.Int8>(ffi.sizeOf<ffi.Int8>() * bytes.length);
     for (int i = 0; i < bytes.length; i++) {
       ptr.elementAt(i).value = bytes[i];
     }
@@ -135,6 +137,6 @@ class VoipEngine {
   }
 
   void _freeNative(ffi.Pointer<ffi.Int8> ptr) {
-    ffi.calloc.free(ptr);
+    ffi_alloc.calloc.free(ptr);
   }
 }
