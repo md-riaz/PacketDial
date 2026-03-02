@@ -15,10 +15,18 @@ namespace {
 /// https://docs.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute
 constexpr DWORD DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
-using EnableNonClientDpiScalingProc =
-    BOOL __stdcall(HWND hwnd);
+using EnableNonClientDpiScalingProc = BOOL __stdcall(HWND hwnd);
+
+// Scales |source| from logical pixels to physical pixels using |scale_factor|.
+int Scale(int source, double scale_factor) {
+  return static_cast<int>(source * scale_factor);
+}
+
+}  // namespace
 
 /// A class that wraps a Windows ATOM registration for a window class.
+/// Must be at file scope so that the friend declaration in win32_window.h
+/// (friend class WindowClassRegistrar) correctly grants access.
 class WindowClassRegistrar {
  public:
   ~WindowClassRegistrar() = default;
@@ -72,15 +80,6 @@ void WindowClassRegistrar::UnregisterWindowClass() {
   UnregisterClass(L"FLUTTER_RUNNER_WIN32_WINDOW", nullptr);
   class_registered_ = false;
 }
-
-}  // namespace
-
-namespace {
-// Scales |source| from logical pixels to physical pixels using |scale_factor|.
-int Scale(int source, double scale_factor) {
-  return static_cast<int>(source * scale_factor);
-}
-}  // anonymous namespace
 
 Win32Window::Win32Window() {}
 

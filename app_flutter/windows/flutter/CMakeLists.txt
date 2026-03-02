@@ -61,3 +61,24 @@ add_custom_target(flutter_assemble DEPENDS
   "${FLUTTER_LIBRARY}"
   ${FLUTTER_LIBRARY_HEADERS}
 )
+
+# === Flutter C++ wrapper library ===
+# Provides the high-level C++ API: dart_project.h, flutter_view_controller.h,
+# plugin_registry.h, etc.  Source files and headers are generated into
+# ephemeral/cpp_client_wrapper/ by the flutter_assemble step above.
+set(WRAPPER_ROOT "${EPHEMERAL_DIR}/cpp_client_wrapper")
+add_library(flutter_wrapper_app STATIC
+  "${WRAPPER_ROOT}/core_implementations.cc"
+  "${WRAPPER_ROOT}/plugin_registrar.cc"
+  "${WRAPPER_ROOT}/standard_codec.cc"
+)
+apply_standard_settings(flutter_wrapper_app)
+set_target_properties(flutter_wrapper_app PROPERTIES
+  POSITION_INDEPENDENT_CODE ON)
+set_target_properties(flutter_wrapper_app PROPERTIES
+  CXX_VISIBILITY_PRESET hidden)
+target_link_libraries(flutter_wrapper_app PUBLIC flutter)
+target_include_directories(flutter_wrapper_app PUBLIC
+  "${WRAPPER_ROOT}/include"
+)
+add_dependencies(flutter_wrapper_app flutter_assemble)
