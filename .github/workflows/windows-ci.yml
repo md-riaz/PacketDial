@@ -41,6 +41,13 @@ jobs:
       - name: Verify DLL exists
         run: dir core_rust\target\x86_64-pc-windows-msvc\release
 
+      - name: Show Rust build directory tree
+        shell: cmd
+        run: |
+          echo === Rust target directory structure ===
+          tree /F /A core_rust\target\x86_64-pc-windows-msvc\release
+        continue-on-error: true
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -59,6 +66,13 @@ jobs:
       - name: Flutter build Windows (release)
         working-directory: app_flutter
         run: flutter build windows --release
+
+      - name: Show Flutter build directory tree
+        shell: cmd
+        run: |
+          echo === Flutter build directory structure ===
+          tree /F /A app_flutter\build\windows
+        continue-on-error: true
 
       - name: Debug - List build output directory structure
         shell: pwsh
@@ -84,6 +98,13 @@ jobs:
           } else {
             Write-Warning "voip_core.dll not found – PJSIP integration pending."
           }
+
+      - name: Show final Release directory tree before packaging
+        shell: cmd
+        run: |
+          echo === Final Release directory structure ===
+          tree /F /A app_flutter\build\windows\x64\runner\Release
+        continue-on-error: true
 
       - name: Package release artifact
         shell: pwsh
