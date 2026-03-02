@@ -88,3 +88,11 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
     COMPONENT Runtime OPTIONAL)
 endif()
+
+# Ensure flutter_assets are present next to the executable for packaging
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${INSTALL_BUNDLE_DATA_DIR}/flutter_assets"
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${PROJECT_BUILD_DIR}/flutter_assets"
+    "${INSTALL_BUNDLE_DATA_DIR}/flutter_assets"
+)
