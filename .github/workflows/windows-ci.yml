@@ -73,6 +73,27 @@ jobs:
             Write-Warning "voip_core.dll not found – PJSIP integration pending."
           }
 
+      - name: Verify build output contains Flutter runtime
+        shell: pwsh
+        run: |
+          $release = "app_flutter\build\windows\x64\runner\Release"
+          Write-Host "Contents of $release :"
+          Get-ChildItem $release -Recurse | ForEach-Object {
+            Write-Host "  $($_.FullName)  ($([math]::Round($_.Length / 1KB, 1)) KB)"
+          }
+          $required = @('flutter_windows.dll', 'icudtl.dat')
+          foreach ($f in $required) {
+            if (-not (Test-Path (Join-Path $release $f))) {
+              Write-Error "FATAL: $f is missing from the build output."
+              exit 1
+            }
+          }
+          if (-not (Test-Path (Join-Path $release 'data'))) {
+            Write-Error "FATAL: data/ directory is missing from the build output."
+            exit 1
+          }
+          Write-Host "All required Flutter runtime files are present."
+
       - name: Package release artifact
         shell: pwsh
         run: ./scripts/package.ps1
