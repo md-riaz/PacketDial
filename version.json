@@ -1,0 +1,7 @@
+{
+  "version": "0.1.0",
+  "build_number": 1,
+  "channel": "dev",
+  "min_windows_version": "10.0.17763",
+  "rust_core": "voip_core 0.1.0"
+}

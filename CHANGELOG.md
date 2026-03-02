@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] — M4 Packaging
+
+### Added
+
+#### CI (`windows-ci.yml`)
+- **Fixed**: replaced `flutter-version: "stable"` (invalid) with `channel: stable`
+  in `subosito/flutter-action@v2` — resolves "Unable to determine Flutter version" failure
+- Added `dtolnay/rust-toolchain@stable` `targets: x86_64-pc-windows-msvc`
+- Added `actions/cache@v4` for `~\.cargo` and `core_rust\target`
+- Run `cargo test` (Rust core) on Windows in CI
+- Upload `PacketDial-windows-x64.zip` as a GitHub Actions artifact via
+  `actions/upload-artifact@v4`
+- Removed obsolete `setup-python`, `bootstrap_flutter.ps1`, `build_pjsip.ps1`,
+  `build_core.ps1` steps (replaced by explicit `cargo build` / `flutter build`)
+
+#### Packaging
+- `version.json` — single-source version, build number, channel, and
+  minimum Windows version
+- `scripts/package.ps1` — PowerShell packaging script: copies Flutter Windows
+  release output + `voip_core.dll` + `version.json` into a staging directory,
+  then compresses to `dist/PacketDial-windows-x64.zip`
+
+#### Docs
+- `README.md` — rewritten: prerequisite list, quick-start commands, CI badges,
+  architecture diagram, milestone status table
+
+---
+
 ## [Unreleased] — M2/M3 Calling & Diagnostics
 
 ### Added

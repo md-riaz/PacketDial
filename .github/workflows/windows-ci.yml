@@ -7,51 +7,61 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core_rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Rust core (cdylib)
+        working-directory: core_rust
+        run: cargo build --release
+        continue-on-error: true  # remove once pjsip libs are present
+
+      - name: Cargo test (Rust core)
+        working-directory: core_rust
+        run: cargo test
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "stable"
+          channel: stable
           cache: true
 
-      - name: Flutter bootstrap (generate windows runner)
-        shell: pwsh
-        run: |
-          ./scripts/bootstrap_flutter.ps1
+      - name: Flutter pub get
+        working-directory: app_flutter
+        run: flutter pub get
 
-      - name: Build PJSIP (scaffold guidance)
-        shell: pwsh
-        run: |
-          ./scripts/build_pjsip.ps1
-        continue-on-error: true
+      - name: Flutter build Windows
+        working-directory: app_flutter
+        run: flutter build windows --release
+        continue-on-error: true  # remove once voip_core.dll is wired in
 
-      - name: Build Rust core (scaffold)
+      - name: Package release artifact
         shell: pwsh
-        run: |
-          ./scripts/build_core.ps1
-        continue-on-error: true
+        run: ./scripts/package.ps1
+        continue-on-error: true  # remove once Flutter build succeeds
 
-      - name: Build Flutter Windows (scaffold)
-        shell: pwsh
-        run: |
-          cd app_flutter
-          flutter pub get
-          flutter build windows
-        continue-on-error: true
-
-      - name: Notes
-        shell: pwsh
-        run: |
-          echo "This CI is scaffold-only until pjproject libs are provided."
-          echo "Once you wire real pjproject build outputs into engine_pjsip/build/out, remove continue-on-error."
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PacketDial-windows-x64
+          path: dist/PacketDial-windows-x64.zip
+          if-no-files-found: warn
