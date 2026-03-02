@@ -93,6 +93,10 @@ jobs:
             Write-Warning "voip_core.dll not found – PJSIP integration pending."
           }
 
+      - name: Verify build output contains Flutter runtime
+        shell: pwsh
+        run: ./scripts/verify-flutter-runtime.ps1
+
       - name: Package release artifact
         shell: pwsh
         run: ./scripts/package.ps1

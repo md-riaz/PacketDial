@@ -56,11 +56,22 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 
 # === Installation ===
-# Support files are copied to the install directory by default.
-# Anything native should be explicitly installed.
-install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/runner/$<CONFIG>/"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}"
-    USE_SOURCE_PERMISSIONS)
+# Support files are copied into the correct output directory by the build.
+set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
+set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+
+install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+install(DIRECTORY "${PROJECT_BUILD_DIR}/flutter_assets"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+  COMPONENT Runtime)
 
 # Bundle voip_core.dll from the Rust build output if present.
 # (The DLL is built by: cd core_rust && cargo build --release)

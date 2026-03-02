@@ -60,6 +60,30 @@ Write-Host "Copying Flutter build…"
 Copy-Item -Path "$FlutterBuild\*" -Destination $StagingDir -Recurse
 
 # ---------------------------------------------------------------------------
+# Validate that essential Flutter runtime files were copied
+# ---------------------------------------------------------------------------
+$RequiredFiles = @(
+    (Join-Path $StagingDir 'flutter_windows.dll'),
+    (Join-Path $StagingDir 'icudtl.dat')
+)
+$RequiredDirs = @(
+    (Join-Path $StagingDir 'data')
+)
+
+foreach ($f in $RequiredFiles) {
+    if (-not (Test-Path $f)) {
+        Write-Error "Missing required Flutter file: $f`nThe build output is incomplete. Re-run: flutter build windows --release"
+        exit 1
+    }
+}
+foreach ($d in $RequiredDirs) {
+    if (-not (Test-Path $d)) {
+        Write-Error "Missing required Flutter directory: $d`nThe build output is incomplete. Re-run: flutter build windows --release"
+        exit 1
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Staging: copy Rust core DLL (if built)
 # ---------------------------------------------------------------------------
 $CoreDll = Join-Path $RustRelease 'voip_core.dll'
