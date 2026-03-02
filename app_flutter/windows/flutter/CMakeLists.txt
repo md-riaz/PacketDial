@@ -54,6 +54,8 @@ add_dependencies(flutter flutter_assemble)
 set(WRAPPER_ROOT "${EPHEMERAL_DIR}/cpp_client_wrapper")
 set(WRAPPER_SRCS
   "${WRAPPER_ROOT}/core_implementations.cc"
+  "${WRAPPER_ROOT}/flutter_engine.cc"
+  "${WRAPPER_ROOT}/flutter_view_controller.cc"
   "${WRAPPER_ROOT}/plugin_registrar.cc"
   "${WRAPPER_ROOT}/standard_codec.cc"
 )
