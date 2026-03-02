@@ -18,3 +18,6 @@
 
 # Misc
 .DS_Store
+
+# CodeQL tooling artifact
+_codeql_detected_source_root
