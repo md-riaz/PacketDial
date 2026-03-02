@@ -1,0 +1,20 @@
+# Rust
+/core_rust/target/
+**/*.pdb
+**/*.dll
+**/*.lib
+**/*.exp
+
+# Flutter
+/app_flutter/.dart_tool/
+/app_flutter/build/
+/app_flutter/.flutter-plugins*
+/app_flutter/.metadata
+/app_flutter/windows/flutter/
+
+# PJSIP builds
+/engine_pjsip/build/
+/engine_pjsip/pjproject/
+
+# Misc
+.DS_Store

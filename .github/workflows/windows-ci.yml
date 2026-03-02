@@ -1,0 +1,57 @@
+name: windows-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "stable"
+          cache: true
+
+      - name: Flutter bootstrap (generate windows runner)
+        shell: pwsh
+        run: |
+          ./scripts/bootstrap_flutter.ps1
+
+      - name: Build PJSIP (scaffold guidance)
+        shell: pwsh
+        run: |
+          ./scripts/build_pjsip.ps1
+        continue-on-error: true
+
+      - name: Build Rust core (scaffold)
+        shell: pwsh
+        run: |
+          ./scripts/build_core.ps1
+        continue-on-error: true
+
+      - name: Build Flutter Windows (scaffold)
+        shell: pwsh
+        run: |
+          cd app_flutter
+          flutter pub get
+          flutter build windows
+        continue-on-error: true
+
+      - name: Notes
+        shell: pwsh
+        run: |
+          echo "This CI is scaffold-only until pjproject libs are provided."
+          echo "Once you wire real pjproject build outputs into engine_pjsip/build/out, remove continue-on-error."
