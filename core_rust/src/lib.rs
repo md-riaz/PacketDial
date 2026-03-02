@@ -3,6 +3,7 @@ use once_cell::sync::OnceCell;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -39,6 +40,11 @@ static AUDIO_DEVICES: Lazy<Mutex<Vec<AudioDevice>>> = Lazy::new(|| {
 static SELECTED_INPUT: AtomicU32 = AtomicU32::new(0);
 static SELECTED_OUTPUT: AtomicU32 = AtomicU32::new(1);
 
+/// In-memory credential store (key → value).
+/// TODO: persist via Windows Credential Manager (wincred) in a future milestone.
+static CRED_STORE: Lazy<Mutex<HashMap<String, String>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
 // ---------------------------------------------------------------------------
 // Error codes
 // ---------------------------------------------------------------------------
@@ -70,6 +76,10 @@ struct Account {
     transport: String,
     stun_server: String,
     turn_server: String,
+    /// Use TLS transport (SIP over TLS / SIPS).
+    tls_enabled: bool,
+    /// Require SRTP for media encryption.
+    srtp_enabled: bool,
     reg_state: RegistrationState,
 }
 
@@ -325,6 +335,7 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "AccountUpsert" => cmd_account_upsert(payload),
         "AccountRegister" => cmd_account_register(payload),
         "AccountUnregister" => cmd_account_unregister(payload),
+        "AccountSetSecurity" => cmd_account_set_security(payload),
         "CallStart" => cmd_call_start(payload),
         "CallAnswer" => cmd_call_answer(payload),
         "CallHangup" => cmd_call_hangup(payload),
@@ -336,6 +347,9 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "CallHistoryQuery" => cmd_call_history_query(payload),
         "SipCaptureMessage" => cmd_sip_capture(payload),
         "DiagExportBundle" => cmd_diag_export(payload),
+        "CredStore" => cmd_cred_store(payload),
+        "CredRetrieve" => cmd_cred_retrieve(payload),
+        "EnginePing" => cmd_engine_ping(payload),
         _ => EngineErrorCode::UnknownCommand,
     }
 }
@@ -354,6 +368,8 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         existing.transport = p["transport"].as_str().unwrap_or("udp").to_owned();
         existing.stun_server = p["stun_server"].as_str().unwrap_or("").to_owned();
         existing.turn_server = p["turn_server"].as_str().unwrap_or("").to_owned();
+        existing.tls_enabled = p["tls_enabled"].as_bool().unwrap_or(existing.tls_enabled);
+        existing.srtp_enabled = p["srtp_enabled"].as_bool().unwrap_or(existing.srtp_enabled);
     } else {
         let acct = Account {
             id: id.clone(),
@@ -364,6 +380,8 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
             transport: p["transport"].as_str().unwrap_or("udp").to_owned(),
             stun_server: p["stun_server"].as_str().unwrap_or("").to_owned(),
             turn_server: p["turn_server"].as_str().unwrap_or("").to_owned(),
+            tls_enabled: p["tls_enabled"].as_bool().unwrap_or(false),
+            srtp_enabled: p["srtp_enabled"].as_bool().unwrap_or(false),
             reg_state: RegistrationState::Unregistered,
         };
         accts.push(acct);
@@ -638,6 +656,88 @@ fn cmd_diag_export(p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
+/// Update TLS/SRTP security flags on an existing account.
+/// `{"type":"AccountSetSecurity","payload":{"id":"...", "tls_enabled":true, "srtp_enabled":true}}`
+fn cmd_account_set_security(p: &serde_json::Value) -> EngineErrorCode {
+    let id = match p["id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let mut accts = ACCOUNTS.lock().unwrap();
+    match accts.iter_mut().find(|a| a.id == id) {
+        None => EngineErrorCode::NotFound,
+        Some(acct) => {
+            if let Some(tls) = p["tls_enabled"].as_bool() {
+                acct.tls_enabled = tls;
+            }
+            if let Some(srtp) = p["srtp_enabled"].as_bool() {
+                acct.srtp_enabled = srtp;
+            }
+            let tls = acct.tls_enabled;
+            let srtp = acct.srtp_enabled;
+            drop(accts);
+            // Use serde_json for safe JSON encoding of the account_id.
+            let id_json = serde_json::to_string(&id).unwrap_or_default();
+            push_event(format!(
+                r#"{{"type":"AccountSecurityUpdated","payload":{{"account_id":{id_json},"tls_enabled":{tls},"srtp_enabled":{srtp}}}}}"#
+            ));
+            // TODO: apply to PJSIP transport and SRTP policy here.
+            EngineErrorCode::Ok
+        }
+    }
+}
+
+/// Store a named credential in the in-memory credential store.
+/// `{"type":"CredStore","payload":{"key":"my_key","value":"secret"}}`
+/// TODO: persist via Windows Credential Manager (wincred) in M7.
+fn cmd_cred_store(p: &serde_json::Value) -> EngineErrorCode {
+    let key = match p["key"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let value = match p["value"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    CRED_STORE.lock().unwrap().insert(key.clone(), value);
+    // Use serde_json for safe JSON encoding of the key.
+    let key_json = serde_json::to_string(&key).unwrap_or_default();
+    push_event(format!(
+        r#"{{"type":"CredStored","payload":{{"key":{key_json}}}}}"#
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Retrieve a named credential from the in-memory credential store.
+/// `{"type":"CredRetrieve","payload":{"key":"my_key"}}`
+/// Returns `EngineErrorCode::NotFound` if the key does not exist.
+fn cmd_cred_retrieve(p: &serde_json::Value) -> EngineErrorCode {
+    let key = match p["key"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let store = CRED_STORE.lock().unwrap();
+    match store.get(&key) {
+        None => EngineErrorCode::NotFound,
+        Some(value) => {
+            // Use serde_json for correct JSON encoding of key and value.
+            let key_json = serde_json::to_string(&key).unwrap_or_default();
+            let value_json = serde_json::to_string(value).unwrap_or_default();
+            push_event(format!(
+                r#"{{"type":"CredRetrieved","payload":{{"key":{key_json},"value":{value_json}}}}}"#
+            ));
+            EngineErrorCode::Ok
+        }
+    }
+}
+
+/// Liveness / health-check ping.
+/// `{"type":"EnginePing","payload":{}}` → event `{"type":"EnginePong","payload":{}}`
+fn cmd_engine_ping(_p: &serde_json::Value) -> EngineErrorCode {
+    push_event(r#"{"type":"EnginePong","payload":{}}"#.to_owned());
+    EngineErrorCode::Ok
+}
+
 // ---------------------------------------------------------------------------
 // Version string
 // ---------------------------------------------------------------------------
@@ -654,25 +754,31 @@ fn version_cstr() -> &'static CString {
 /// In future milestones, this will initialize PJSIP and related subsystems.
 #[no_mangle]
 pub extern "C" fn engine_init() -> i32 {
-    if INITIALIZED.swap(true, Ordering::SeqCst) {
-        return EngineErrorCode::AlreadyInitialized as i32;
-    }
-    // TODO: initialize PJSIP here (pj_init, pjsua_create, etc.)
-    push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
-    EngineErrorCode::Ok as i32
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if INITIALIZED.swap(true, Ordering::SeqCst) {
+            return EngineErrorCode::AlreadyInitialized as i32;
+        }
+        // TODO: initialize PJSIP here (pj_init, pjsua_create, etc.)
+        push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
+        EngineErrorCode::Ok as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Shutdown the engine.
 #[no_mangle]
 pub extern "C" fn engine_shutdown() -> i32 {
-    if !INITIALIZED.swap(false, Ordering::SeqCst) {
-        return EngineErrorCode::NotInitialized as i32;
-    }
-    // TODO: shutdown PJSIP here (pjsua_destroy, etc.)
-    if let Ok(mut q) = EVENT_QUEUE.lock() {
-        q.clear();
-    }
-    EngineErrorCode::Ok as i32
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.swap(false, Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+        // TODO: shutdown PJSIP here (pjsua_destroy, etc.)
+        if let Ok(mut q) = EVENT_QUEUE.lock() {
+            q.clear();
+        }
+        EngineErrorCode::Ok as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Returns a pointer to a static, null-terminated UTF-8 string.
@@ -695,29 +801,33 @@ pub extern "C" fn engine_version() -> *const c_char {
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn engine_send_command(cmd_json: *const c_char) -> i32 {
-    if !INITIALIZED.load(Ordering::SeqCst) {
-        return EngineErrorCode::NotInitialized as i32;
-    }
     if cmd_json.is_null() {
         return EngineErrorCode::InvalidJson as i32;
     }
-    let s = unsafe {
+    // Extract the string before entering catch_unwind (raw pointer ≠ UnwindSafe).
+    let s_owned = unsafe {
         match CStr::from_ptr(cmd_json).to_str() {
-            Ok(s) => s,
+            Ok(s) => s.to_owned(),
             Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
         }
     };
-    let v: serde_json::Value = match serde_json::from_str(s) {
-        Ok(v) => v,
-        Err(_) => return EngineErrorCode::InvalidJson as i32,
-    };
-    let cmd_type = match v["type"].as_str() {
-        Some(t) => t.to_owned(),
-        None => return EngineErrorCode::InvalidJson as i32,
-    };
-    let empty = serde_json::Value::Object(Default::default());
-    let payload = v.get("payload").unwrap_or(&empty);
-    dispatch_command(&cmd_type, payload) as i32
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+        let v: serde_json::Value = match serde_json::from_str(&s_owned) {
+            Ok(v) => v,
+            Err(_) => return EngineErrorCode::InvalidJson as i32,
+        };
+        let cmd_type = match v["type"].as_str() {
+            Some(t) => t.to_owned(),
+            None => return EngineErrorCode::InvalidJson as i32,
+        };
+        let empty = serde_json::Value::Object(Default::default());
+        let payload = v.get("payload").unwrap_or(&empty);
+        dispatch_command(&cmd_type, payload) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Poll for the next queued event from the engine.
@@ -727,17 +837,20 @@ pub extern "C" fn engine_send_command(cmd_json: *const c_char) -> i32 {
 /// `engine_free_string`.**
 #[no_mangle]
 pub extern "C" fn engine_poll_event() -> *mut c_char {
-    let json = {
-        let mut q = EVENT_QUEUE.lock().unwrap();
-        q.pop_front()
-    };
-    match json {
-        None => std::ptr::null_mut(),
-        Some(s) => match CString::new(s) {
-            Ok(cs) => cs.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        },
-    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let json = {
+            let mut q = EVENT_QUEUE.lock().unwrap();
+            q.pop_front()
+        };
+        match json {
+            None => std::ptr::null_mut(),
+            Some(s) => match CString::new(s) {
+                Ok(cs) => cs.into_raw(),
+                Err(_) => std::ptr::null_mut(),
+            },
+        }
+    }));
+    result.unwrap_or(std::ptr::null_mut())
 }
 
 /// Free a string previously returned by `engine_poll_event`.
@@ -770,6 +883,7 @@ mod tests {
         CALLS.lock().unwrap().clear();
         CALL_HISTORY.lock().unwrap().clear();
         MEDIA_STATS.lock().unwrap().clear();
+        CRED_STORE.lock().unwrap().clear();
         SELECTED_INPUT.store(0, Ordering::Relaxed);
         SELECTED_OUTPUT.store(1, Ordering::Relaxed);
     }
@@ -1083,5 +1197,111 @@ mod tests {
         assert!(!masked.contains("Digest"), "auth details leaked: {masked}");
         assert!(masked.contains("alice@192.168.1.1"), "non-sensitive data missing: {masked}");
         assert!(masked.contains("MASKED"), "mask marker missing: {masked}");
+    }
+
+    // --- M6: Hardening & TLS tests ------------------------------------------
+
+    #[test]
+    fn account_tls_srtp_flags() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        // Create account with TLS + SRTP enabled
+        assert_eq!(
+            send(r#"{"type":"AccountUpsert","payload":{"id":"tls1","display_name":"TLS","server":"sips.example.com","username":"u","password":"p","tls_enabled":true,"srtp_enabled":true}}"#),
+            0
+        );
+        drain_events();
+        {
+            let accts = ACCOUNTS.lock().unwrap();
+            let a = accts.iter().find(|a| a.id == "tls1").unwrap();
+            assert!(a.tls_enabled, "tls_enabled should be true");
+            assert!(a.srtp_enabled, "srtp_enabled should be true");
+        }
+
+        // Update via AccountSetSecurity
+        assert_eq!(
+            send(r#"{"type":"AccountSetSecurity","payload":{"id":"tls1","tls_enabled":false,"srtp_enabled":false}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("AccountSecurityUpdated"), "got: {ev}");
+        assert!(ev.contains("\"tls_enabled\":false"), "got: {ev}");
+        {
+            let accts = ACCOUNTS.lock().unwrap();
+            let a = accts.iter().find(|a| a.id == "tls1").unwrap();
+            assert!(!a.tls_enabled);
+            assert!(!a.srtp_enabled);
+        }
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn account_set_security_not_found() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+        assert_eq!(
+            send(r#"{"type":"AccountSetSecurity","payload":{"id":"ghost","tls_enabled":true}}"#),
+            EngineErrorCode::NotFound as i32
+        );
+        engine_shutdown();
+    }
+
+    #[test]
+    fn cred_store_and_retrieve() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(
+            send(r#"{"type":"CredStore","payload":{"key":"acc1_pass","value":"s3cr3t"}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("CredStored"), "got: {ev}");
+        assert!(ev.contains("acc1_pass"), "got: {ev}");
+
+        assert_eq!(
+            send(r#"{"type":"CredRetrieve","payload":{"key":"acc1_pass"}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("CredRetrieved"), "got: {ev}");
+        assert!(ev.contains("s3cr3t"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn cred_retrieve_not_found() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+        assert_eq!(
+            send(r#"{"type":"CredRetrieve","payload":{"key":"missing_key"}}"#),
+            EngineErrorCode::NotFound as i32
+        );
+        engine_shutdown();
+    }
+
+    #[test]
+    fn engine_ping_pong() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(send(r#"{"type":"EnginePing","payload":{}}"#), 0);
+        let ev = next_event();
+        assert!(ev.contains("EnginePong"), "got: {ev}");
+
+        engine_shutdown();
     }
 }

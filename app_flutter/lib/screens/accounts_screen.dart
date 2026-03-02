@@ -30,6 +30,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final stunCtrl = TextEditingController(text: existing?.stunServer ?? '');
     final turnCtrl = TextEditingController(text: existing?.turnServer ?? '');
     String transport = existing?.transport ?? 'udp';
+    bool tlsEnabled = existing?.tlsEnabled ?? false;
+    bool srtpEnabled = existing?.srtpEnabled ?? false;
     final isNew = existing == null;
 
     showDialog<void>(
@@ -86,6 +88,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     decoration: const InputDecoration(
                         labelText: 'TURN Server (optional)',
                         hintText: 'turn.example.com:3478')),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable TLS (SIPS)'),
+                  subtitle: const Text('Encrypts SIP signalling'),
+                  value: tlsEnabled,
+                  onChanged: (v) =>
+                      setDlgState(() => tlsEnabled = v ?? false),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable SRTP'),
+                  subtitle: const Text('Encrypts audio media'),
+                  value: srtpEnabled,
+                  onChanged: (v) =>
+                      setDlgState(() => srtpEnabled = v ?? false),
+                ),
               ],
             ),
           ),
@@ -106,6 +125,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   transport: transport,
                   stunServer: stunCtrl.text.trim(),
                   turnServer: turnCtrl.text.trim(),
+                  tlsEnabled: tlsEnabled,
+                  srtpEnabled: srtpEnabled,
                 );
                 _channel.accounts[id] = acct;
                 _channel.sendCommand('AccountUpsert', {
@@ -117,6 +138,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   'transport': acct.transport,
                   'stun_server': acct.stunServer,
                   'turn_server': acct.turnServer,
+                  'tls_enabled': acct.tlsEnabled,
+                  'srtp_enabled': acct.srtpEnabled,
                 });
                 Navigator.pop(ctx);
                 setState(() {});
@@ -157,7 +180,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   ),
                   title: Text(a.displayName.isEmpty ? a.id : a.displayName),
                   subtitle: Text(
-                      '${a.username}@${a.server}  •  ${a.transport.toUpperCase()}  •  ${a.registrationState.label}'),
+                      '${a.username}@${a.server}  •  ${a.transport.toUpperCase()}${a.tlsEnabled ? ' + TLS' : ''}${a.srtpEnabled ? ' + SRTP' : ''}  •  ${a.registrationState.label}'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

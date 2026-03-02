@@ -5,6 +5,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] — M6 Hardening & TLS
+
+### Fixed
+
+#### CI (`windows-ci.yml`)
+- **Root cause of `flutter build windows` CMake failure**: `app_flutter/windows/flutter/`
+  was listed in `.gitignore`, so the Flutter-managed CMake files (`CMakeLists.txt`,
+  `generated_plugin_registrant.*`, `generated_plugins.cmake`) were never committed.
+  Removed the `.gitignore` entry so those files are now tracked and present in the
+  working tree when `cmake` runs on GitHub Actions.
+
+### Added
+
+#### Rust core (`core_rust/src/lib.rs`)
+- **`Account.tls_enabled`** — flag to use TLS transport (SIP over TLS / SIPS URI scheme).
+  Read from `AccountUpsert` payload (`"tls_enabled": true`); defaults to `false`.
+- **`Account.srtp_enabled`** — flag to require SRTP media encryption. Defaults to `false`.
+- **`AccountSetSecurity` command** — update TLS/SRTP flags on an existing account at runtime.
+  Emits `AccountSecurityUpdated` event. TODO: apply to PJSIP transport + SRTP policy in M7.
+- **`CredStore` command** — store a named credential in the in-memory credential store.
+  Emits `CredStored` event. TODO: persist via Windows Credential Manager in M7.
+- **`CredRetrieve` command** — retrieve a named credential; emits `CredRetrieved` or
+  returns `NotFound`.
+- **`EnginePing` command** — liveness / health-check probe; emits `EnginePong`.
+- **Panic recovery** — `engine_init`, `engine_shutdown`, `engine_send_command`, and
+  `engine_poll_event` are now wrapped with `std::panic::catch_unwind(AssertUnwindSafe(…))`.
+  Any Rust panic inside the engine core returns `EngineErrorCode::InternalError` (100) instead
+  of unwinding across the FFI boundary (undefined behaviour).
+- **5 new unit tests** (20 total): `account_tls_srtp_flags`, `account_set_security_not_found`,
+  `cred_store_and_retrieve`, `cred_retrieve_not_found`, `engine_ping_pong`.
+
+#### Flutter app
+- **`Account` model** — extended with `tlsEnabled` and `srtpEnabled` boolean fields
+  (both default `false`); `copyWith` updated accordingly.
+- **`AccountsScreen`** — add/edit dialog now shows two `CheckboxListTile` entries:
+  *Enable TLS (SIPS)* and *Enable SRTP*. Both values are passed in `AccountUpsert`.
+  Account list subtitle shows `+ TLS` / `+ SRTP` badges when enabled.
+
+---
+
 ## [Unreleased] — M5 Windows Build
 
 ### Added

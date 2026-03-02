@@ -30,6 +30,10 @@ class Account {
   final String transport;
   final String stunServer;
   final String turnServer;
+  /// Use TLS transport (SIP over TLS / SIPS).
+  final bool tlsEnabled;
+  /// Require SRTP for media encryption.
+  final bool srtpEnabled;
   final RegistrationState registrationState;
   final String failureReason;
 
@@ -42,6 +46,8 @@ class Account {
     this.transport = 'udp',
     this.stunServer = '',
     this.turnServer = '',
+    this.tlsEnabled = false,
+    this.srtpEnabled = false,
     this.registrationState = RegistrationState.unregistered,
     this.failureReason = '',
   });
@@ -54,6 +60,8 @@ class Account {
     String? transport,
     String? stunServer,
     String? turnServer,
+    bool? tlsEnabled,
+    bool? srtpEnabled,
     RegistrationState? registrationState,
     String? failureReason,
   }) =>
@@ -66,6 +74,8 @@ class Account {
         transport: transport ?? this.transport,
         stunServer: stunServer ?? this.stunServer,
         turnServer: turnServer ?? this.turnServer,
+        tlsEnabled: tlsEnabled ?? this.tlsEnabled,
+        srtpEnabled: srtpEnabled ?? this.srtpEnabled,
         registrationState: registrationState ?? this.registrationState,
         failureReason: failureReason ?? this.failureReason,
       );

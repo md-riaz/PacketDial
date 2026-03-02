@@ -10,7 +10,7 @@
 /app_flutter/build/
 /app_flutter/.flutter-plugins*
 /app_flutter/.metadata
-/app_flutter/windows/flutter/
+# Note: app_flutter/windows/flutter/ is intentionally tracked (Flutter engine CMake stubs)
 
 # PJSIP builds
 /engine_pjsip/build/

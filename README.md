@@ -91,5 +91,6 @@ See [`docs/architecture.md`](docs/architecture.md) and [`docs/FFI_API.md`](docs/
 | M3 - Diagnostics | ✅ Done |
 | M4 - Packaging | ✅ Done |
 | M5 - Windows Build | ✅ Done |
-| M6 - Hardening & TLS | 🔲 Planned |
+| M6 - Hardening & TLS | ✅ Done |
+| M7 - PJSIP Integration | 🔲 Planned |
 
