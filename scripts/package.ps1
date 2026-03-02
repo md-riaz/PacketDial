@@ -108,7 +108,9 @@ if (-not (Test-Path $DistDir)) { New-Item -ItemType Directory -Path $DistDir | O
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
 
 Write-Host "Compressing to ${ZipPath}…"
-Compress-Archive -Path $StagingDir -DestinationPath $ZipPath -CompressionLevel Optimal
+# Compress the contents of the staging directory, not the directory itself
+# This ensures the ZIP contains PacketDial.exe, data/, etc. at the root level
+Compress-Archive -Path "$StagingDir\*" -DestinationPath $ZipPath -CompressionLevel Optimal
 
 # Clean up staging
 Remove-Item $StagingBase -Recurse -Force
