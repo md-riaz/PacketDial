@@ -44,9 +44,17 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Enable Flutter Windows desktop
+        working-directory: app_flutter
+        run: flutter config --enable-windows-desktop
+
       - name: Flutter pub get
         working-directory: app_flutter
         run: flutter pub get
+
+      - name: Ensure Windows platform files exist
+        working-directory: app_flutter
+        run: flutter create --platforms=windows .
 
       - name: Flutter build Windows (release)
         working-directory: app_flutter
