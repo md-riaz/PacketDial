@@ -78,17 +78,3 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
     COMPONENT Runtime OPTIONAL)
 endif()
-
-# Bundle voip_core.dll from the Rust build output if present.
-# (The DLL is built by: cd core_rust && cargo build --release)
-set(VOIP_CORE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../core_rust/target/release/voip_core.dll")
-install(CODE "
-  if(EXISTS \"${VOIP_CORE_DLL}\")
-    file(INSTALL
-      DESTINATION \"\${CMAKE_INSTALL_PREFIX}\"
-      TYPE FILE
-      FILES \"${VOIP_CORE_DLL}\")
-  else()
-    message(WARNING \"voip_core.dll not found – PJSIP integration pending.\")
-  endif()
-")
