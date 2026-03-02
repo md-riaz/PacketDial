@@ -39,3 +39,14 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# Copy voip_core.dll (Rust core) next to the exe at build time if it exists.
+# Build it first with: cd core_rust && cargo build --release
+set(VOIP_CORE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../core_rust/target/release/voip_core.dll")
+if(EXISTS "${VOIP_CORE_DLL}")
+  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      ${VOIP_CORE_DLL}
+      $<TARGET_FILE_DIR:${BINARY_NAME}>
+  )
+endif()
