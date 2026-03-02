@@ -73,10 +73,6 @@ jobs:
         working-directory: app_flutter
         run: flutter pub get
 
-      - name: Ensure Windows platform files exist
-        working-directory: app_flutter
-        run: flutter create --platforms=windows .
-
       - name: Flutter build Windows (release)
         working-directory: app_flutter
         run: flutter build windows --release
@@ -92,6 +88,10 @@ jobs:
           } else {
             Write-Warning "voip_core.dll not found – PJSIP integration pending."
           }
+
+      - name: Copy Flutter runtime files to output
+        shell: pwsh
+        run: ./scripts/copy-flutter-runtime.ps1
 
       - name: Verify build output contains Flutter runtime
         shell: pwsh

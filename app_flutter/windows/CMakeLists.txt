@@ -64,14 +64,20 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
-  COMPONENT Runtime)
+  COMPONENT Runtime OPTIONAL)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
-  COMPONENT Runtime)
+  COMPONENT Runtime OPTIONAL)
 
 install(DIRECTORY "${PROJECT_BUILD_DIR}/flutter_assets"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
+
+# Install the AOT library on non-Debug builds only.
+if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+  install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+    COMPONENT Runtime OPTIONAL)
+endif()
 
 # Bundle voip_core.dll from the Rust build output if present.
 # (The DLL is built by: cd core_rust && cargo build --release)
