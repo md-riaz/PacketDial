@@ -46,10 +46,23 @@ target_include_directories(flutter INTERFACE
 target_link_libraries(flutter INTERFACE "${FLUTTER_LIBRARY}.lib")
 add_dependencies(flutter flutter_assemble)
 
+# === Flutter C++ wrapper library sources ===
+# These are generated into ephemeral/cpp_client_wrapper/ by flutter_assemble
+# (tool_backend.bat) at build time.  Define the paths before the custom command
+# so they can be listed as OUTPUT, which tells MSBuild that this command
+# produces them and that flutter_wrapper_app should be compiled afterwards.
+set(WRAPPER_ROOT "${EPHEMERAL_DIR}/cpp_client_wrapper")
+set(WRAPPER_SRCS
+  "${WRAPPER_ROOT}/core_implementations.cc"
+  "${WRAPPER_ROOT}/plugin_registrar.cc"
+  "${WRAPPER_ROOT}/standard_codec.cc"
+)
+
 # === Flutter tool backend ===
 # _phony_ is a non-existent file to force this command to always run.
 add_custom_command(
   OUTPUT ${FLUTTER_LIBRARY} ${FLUTTER_LIBRARY_HEADERS}
+    ${WRAPPER_SRCS}
     "${CMAKE_CURRENT_BINARY_DIR}/_phony_"
   COMMAND ${CMAKE_COMMAND} -E env
     ${FLUTTER_TOOL_ENVIRONMENT}
@@ -64,16 +77,9 @@ add_custom_target(flutter_assemble DEPENDS
 
 # === Flutter C++ wrapper library ===
 # Provides the high-level C++ API: dart_project.h, flutter_view_controller.h,
-# plugin_registry.h, etc.  Source files and headers are generated into
-# ephemeral/cpp_client_wrapper/ by the flutter_assemble step above.
-# Mark sources as GENERATED so CMake does not check for their existence at
-# configure time — they are materialised by flutter_assemble at build time.
-set(WRAPPER_ROOT "${EPHEMERAL_DIR}/cpp_client_wrapper")
-set(WRAPPER_SRCS
-  "${WRAPPER_ROOT}/core_implementations.cc"
-  "${WRAPPER_ROOT}/plugin_registrar.cc"
-  "${WRAPPER_ROOT}/standard_codec.cc"
-)
+# plugin_registry.h, etc.  Mark sources as GENERATED so CMake does not look
+# for them at configure time — they appear via the flutter_assemble OUTPUT
+# above once tool_backend.bat has run.
 set_source_files_properties(${WRAPPER_SRCS} PROPERTIES GENERATED TRUE)
 add_library(flutter_wrapper_app STATIC ${WRAPPER_SRCS})
 apply_standard_settings(flutter_wrapper_app)
