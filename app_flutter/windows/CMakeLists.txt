@@ -56,7 +56,17 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 
 # === Installation ===
-# Support files are copied into the correct output directory by the build.
+# Resolve the runner output directory at generation time so that
+# cmake_install.cmake installs into runner/$<CONFIG>/ rather than
+# defaulting to C:\Program Files\… which fails on CI.
+set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
+# Make the "install" step part of the default Visual Studio build so that
+# flutter build windows --release does not need to request it explicitly.
+set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "Install directory for Flutter Windows application bundle" FORCE)
+endif()
+
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
@@ -71,7 +81,7 @@ install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
 
 install(DIRECTORY "${PROJECT_BUILD_DIR}/flutter_assets"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
-  COMPONENT Runtime)
+  COMPONENT Runtime OPTIONAL)
 
 # Install the AOT library on non-Debug builds only.
 if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
