@@ -53,7 +53,7 @@ add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
 
 # Copy voip_core.dll (Rust core) next to the exe at build time if it exists.
 # Build it first with: cd core_rust && cargo build --release --target x86_64-pc-windows-msvc
-set(VOIP_CORE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../core_rust/target/x86_64-pc-windows-msvc/release/voip_core.dll")
+set(VOIP_CORE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../../core_rust/target/x86_64-pc-windows-msvc/release/voip_core.dll")
 if(EXISTS "${VOIP_CORE_DLL}")
   add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
