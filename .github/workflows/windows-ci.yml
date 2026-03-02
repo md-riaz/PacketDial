@@ -57,6 +57,19 @@ jobs:
         working-directory: app_flutter
         run: flutter build windows --release
 
+      - name: Debug - List build output directory structure
+        shell: pwsh
+        run: |
+          Write-Host "=== Contents of app_flutter/build/windows/x64/runner/Release ==="
+          Get-ChildItem -Recurse app_flutter/build/windows/x64/runner/Release | ForEach-Object {
+            $indent = "  " * ($_.FullName.Split([IO.Path]::DirectorySeparatorChar).Count - $PWD.Path.Split([IO.Path]::DirectorySeparatorChar).Count - 5)
+            if ($_.PSIsContainer) {
+              Write-Host "${indent}📁 $($_.Name)/"
+            } else {
+              Write-Host "${indent}📄 $($_.Name) ($([math]::Round($_.Length / 1KB, 1)) KB)"
+            }
+          }
+
       - name: Copy voip_core.dll into Flutter output
         shell: pwsh
         run: |
