@@ -1,0 +1,37 @@
+name: rust-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Rust tests & lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: core_rust
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core_rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('core_rust/Cargo.lock') }}
+
+      - name: cargo test
+        run: cargo test
+
+      - name: cargo clippy
+        run: cargo clippy -- -D warnings

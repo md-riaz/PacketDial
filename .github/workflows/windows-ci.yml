@@ -7,51 +7,79 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            core_rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cargo test (Rust core)
+        working-directory: core_rust
+        run: cargo test
+
+      - name: Build Rust core (cdylib → voip_core.dll)
+        working-directory: core_rust
+        run: cargo build --release
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "stable"
+          flutter-version: '3.41.2'
+          channel: stable
           cache: true
 
-      - name: Flutter bootstrap (generate windows runner)
-        shell: pwsh
-        run: |
-          ./scripts/bootstrap_flutter.ps1
+      - name: Enable Flutter Windows desktop
+        working-directory: app_flutter
+        run: flutter config --enable-windows-desktop
 
-      - name: Build PJSIP (scaffold guidance)
-        shell: pwsh
-        run: |
-          ./scripts/build_pjsip.ps1
-        continue-on-error: true
+      - name: Flutter pub get
+        working-directory: app_flutter
+        run: flutter pub get
 
-      - name: Build Rust core (scaffold)
-        shell: pwsh
-        run: |
-          ./scripts/build_core.ps1
-        continue-on-error: true
+      - name: Ensure Windows platform files exist
+        working-directory: app_flutter
+        run: flutter create --platforms=windows .
 
-      - name: Build Flutter Windows (scaffold)
-        shell: pwsh
-        run: |
-          cd app_flutter
-          flutter pub get
-          flutter build windows
-        continue-on-error: true
+      - name: Flutter build Windows (release)
+        working-directory: app_flutter
+        run: flutter build windows --release
 
-      - name: Notes
+      - name: Copy voip_core.dll into Flutter output
         shell: pwsh
         run: |
-          echo "This CI is scaffold-only until pjproject libs are provided."
-          echo "Once you wire real pjproject build outputs into engine_pjsip/build/out, remove continue-on-error."
+          $dll  = "core_rust\target\release\voip_core.dll"
+          $dest = "app_flutter\build\windows\x64\runner\Release"
+          if (Test-Path $dll) {
+            Copy-Item $dll -Destination $dest
+            Write-Host "Copied $dll -> $dest"
+          } else {
+            Write-Warning "voip_core.dll not found – PJSIP integration pending."
+          }
+
+      - name: Package release artifact
+        shell: pwsh
+        run: ./scripts/package.ps1
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PacketDial-windows-x64
+          path: dist/PacketDial-windows-x64.zip
+          if-no-files-found: warn
