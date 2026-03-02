@@ -41,11 +41,12 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
 # Ensure flutter_assets are present next to the executable for packaging.
+# Note: flutter_assets is created by flutter_assemble in the parent binary directory
 add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory
     "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/flutter_assets"
   COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${PROJECT_BUILD_DIR}/flutter_assets"
+    "${CMAKE_CURRENT_BINARY_DIR}/../flutter_assets"
     "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/flutter_assets"
 )
 
