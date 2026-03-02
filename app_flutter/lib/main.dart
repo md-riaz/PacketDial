@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'core/engine_channel.dart';
 import 'ffi/engine.dart';
+import 'screens/accounts_screen.dart';
+import 'screens/active_call_screen.dart';
+import 'screens/diagnostics_screen.dart';
+import 'screens/dialer_screen.dart';
 
 void main() {
   runApp(const App());
@@ -13,9 +19,17 @@ class App extends StatefulWidget {
 }
 
 class _AppState extends State<App> {
-  String _status = 'Not initialized';
-  String _version = 'unknown';
-  VoipEngine? _engine;
+  int _selectedIndex = 0;
+  String _status = 'Initializing…';
+  String _version = '';
+  bool _ready = false;
+
+  static const _screens = [
+    AccountsScreen(),
+    DialerScreen(),
+    ActiveCallScreen(),
+    DiagnosticsScreen(),
+  ];
 
   @override
   void initState() {
@@ -28,10 +42,11 @@ class _AppState extends State<App> {
       final engine = VoipEngine.load();
       final v = engine.version();
       final rc = engine.init();
+      EngineChannel.instance.attach(engine);
       setState(() {
-        _engine = engine;
         _version = v;
-        _status = rc == 0 ? 'Engine initialized' : 'Engine init error: $rc';
+        _status = rc == 0 ? 'Engine ready  •  $v' : 'Engine error: $rc';
+        _ready = rc == 0;
       });
     } catch (e) {
       setState(() {
@@ -42,34 +57,51 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
-    try {
-      _engine?.shutdown();
-    } catch (_) {}
+    EngineChannel.instance.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VoIP Softphone (Scaffold)',
-      home: Scaffold(
-        appBar: AppBar(title: const Text('VoIP Softphone (Scaffold)')),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Core Version: $_version'),
-              const SizedBox(height: 12),
-              Text('Status: $_status'),
-              const SizedBox(height: 24),
-              const Text(
-                'Next steps: implement command/event channel, then SIP registration & calling.',
-              ),
-            ],
-          ),
-        ),
+      title: 'PacketDial',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
       ),
+      home: _ready
+          ? Scaffold(
+              body: _screens[_selectedIndex],
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: (i) =>
+                    setState(() => _selectedIndex = i),
+                destinations: const [
+                  NavigationDestination(
+                      icon: Icon(Icons.manage_accounts),
+                      label: 'Accounts'),
+                  NavigationDestination(
+                      icon: Icon(Icons.dialpad), label: 'Dialer'),
+                  NavigationDestination(
+                      icon: Icon(Icons.call), label: 'Call'),
+                  NavigationDestination(
+                      icon: Icon(Icons.bug_report), label: 'Diagnostics'),
+                ],
+              ),
+            )
+          : Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(_status),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
+
