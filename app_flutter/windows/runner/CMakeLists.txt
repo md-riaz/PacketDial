@@ -40,19 +40,13 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
 
-# Ensure flutter_assets are present next to the executable for packaging.
-# Note: flutter_assets is created by flutter_assemble in the parent binary directory
-add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E make_directory
-    "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/flutter_assets"
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_BINARY_DIR}/../flutter_assets"
-    "$<TARGET_FILE_DIR:${BINARY_NAME}>/data/flutter_assets"
-)
+# Note: Flutter now handles asset placement internally. Modern Flutter versions
+# assemble assets directly into runner/Release/data/flutter_assets during the
+# flutter_assemble step, so manual copying is no longer needed.
 
 # Copy voip_core.dll (Rust core) next to the exe at build time if it exists.
 # Build it first with: cd core_rust && cargo build --release --target x86_64-pc-windows-msvc
-set(VOIP_CORE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../core_rust/target/x86_64-pc-windows-msvc/release/voip_core.dll")
+set(VOIP_CORE_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../../../core_rust/target/x86_64-pc-windows-msvc/release/voip_core.dll")
 if(EXISTS "${VOIP_CORE_DLL}")
   add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

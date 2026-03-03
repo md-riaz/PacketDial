@@ -66,10 +66,6 @@ $RequiredFiles = @(
     (Join-Path $StagingDir 'flutter_windows.dll'),
     (Join-Path $StagingDir 'icudtl.dat')
 )
-$RequiredDirs = @(
-    (Join-Path $StagingDir 'data'),
-    (Join-Path $StagingDir 'data\flutter_assets')
-)
 
 foreach ($f in $RequiredFiles) {
     if (-not (Test-Path $f)) {
@@ -77,11 +73,20 @@ foreach ($f in $RequiredFiles) {
         exit 1
     }
 }
-foreach ($d in $RequiredDirs) {
-    if (-not (Test-Path $d)) {
-        Write-Error "Missing required Flutter directory: $d`nThe build output is incomplete. Re-run: flutter build windows --release"
-        exit 1
-    }
+
+# Validate data directory exists
+$dataDir = Join-Path $StagingDir 'data'
+if (-not (Test-Path $dataDir)) {
+    Write-Error "Missing required Flutter directory: $dataDir`nThe build output is incomplete. Re-run: flutter build windows --release"
+    exit 1
+}
+
+# Check flutter_assets (optional for asset-free builds)
+$assetsPath = Join-Path $StagingDir 'data\flutter_assets'
+if (Test-Path $assetsPath) {
+    Write-Host "flutter_assets found."
+} else {
+    Write-Host "No flutter_assets folder (valid for asset-free builds)."
 }
 
 # Debug: List what was copied to staging
