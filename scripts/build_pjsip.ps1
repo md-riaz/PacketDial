@@ -11,9 +11,10 @@
     This script:
     1. Verifies the submodule is present.
     2. Locates msbuild from Visual Studio 2022 Build Tools (or any installed VS).
-    3. Builds pjproject-vs14.sln in Release / x64 configuration.
-    4. Copies all resulting *.lib files to engine_pjsip/build/out/lib/.
-    5. Copies all include directories to engine_pjsip/build/out/include/.
+    3. Creates config_site.h if it doesn't exist (required by pjproject).
+    4. Builds pjproject-vs14.sln in Release / x64 configuration.
+    5. Copies all resulting *.lib files to engine_pjsip/build/out/lib/.
+    6. Copies all include directories to engine_pjsip/build/out/include/.
 
     Run from the repository root:
         .\scripts\build_pjsip.ps1
@@ -100,22 +101,56 @@ if (-not $MsBuild) {
 Write-OK "MSBuild: $MsBuild"
 
 # ---------------------------------------------------------------------------
-# Step 3: Locate the pjproject Visual Studio solution
+# Step 3: Create config_site.h if it doesn't exist
+# ---------------------------------------------------------------------------
+Write-Step "Verifying pjproject configuration"
+
+$ConfigSiteFile = Join-Path $PjProjectDir 'pjlib\include\pj\config_site.h'
+
+if (-not (Test-Path $ConfigSiteFile)) {
+    Write-Info "Creating default config_site.h"
+
+    # Create a minimal config_site.h for Windows x64 builds
+    $ConfigContent = @"
+/* Automatically generated config_site.h for Windows x64 builds */
+
+#pragma once
+
+/* Enable floating point support */
+#define PJ_HAS_FLOATING_POINT 1
+
+/* Use Windows WMME audio backend */
+#define PJMEDIA_AUDIO_DEV_HAS_PORTAUDIO 0
+#define PJMEDIA_AUDIO_DEV_HAS_WMME 1
+
+"@
+
+    Set-Content -Path $ConfigSiteFile -Value $ConfigContent -Encoding UTF8
+    Write-OK "Created config_site.h at $ConfigSiteFile"
+} else {
+    Write-OK "config_site.h already exists"
+}
+
+# ---------------------------------------------------------------------------
+# Step 4: Locate the pjproject Visual Studio solution
 # ---------------------------------------------------------------------------
 Write-Step "Locating pjproject Visual Studio solution"
 
-$SlnFile = Get-ChildItem $PjProjectDir -Filter 'pjproject-vs*.sln' | `
-           Sort-Object Name | Select-Object -Last 1
+# Use vs14 solution explicitly - it's compatible with VS 2022 and uses .vcxproj format
+# vs8 is legacy format using .vcproj which won't work with modern MSBuild
+$SlnPath = Join-Path $PjProjectDir 'pjproject-vs14.sln'
 
-if (-not $SlnFile) {
-    Write-Fail "No pjproject-vs*.sln found in $PjProjectDir"
-    Write-Info "Expected: pjproject-vs14.sln (or similar)"
+if (-not (Test-Path $SlnPath)) {
+    Write-Fail "pjproject-vs14.sln not found at $SlnPath"
+    Write-Info "The pjproject submodule may be incomplete or corrupted."
     exit 1
 }
+
+$SlnFile = Get-Item $SlnPath
 Write-OK "Solution: $($SlnFile.FullName)"
 
 # ---------------------------------------------------------------------------
-# Step 4: Build pjproject (Release / x64)
+# Step 5: Build pjproject (Release / x64)
 # ---------------------------------------------------------------------------
 Write-Step "Building pjproject Release x64 with $Jobs parallel job(s)"
 Write-Info "This may take 5-20 minutes on first run…"
@@ -125,6 +160,7 @@ $MsBuildArgs = @(
     '/t:Build',
     '/p:Configuration=Release',
     '/p:Platform=x64',
+    '/p:PlatformToolset=v143',  # Use VS 2022 toolset instead of v140 (VS 2015)
     "/m:$Jobs",
     '/nologo',
     '/verbosity:minimal',
@@ -144,7 +180,7 @@ try {
 Write-OK "pjproject build complete"
 
 # ---------------------------------------------------------------------------
-# Step 5: Collect output libs
+# Step 6: Collect output libs
 # ---------------------------------------------------------------------------
 Write-Step "Collecting build outputs → $OutDir"
 
@@ -174,7 +210,7 @@ foreach ($lib in $LibFiles) {
 Write-OK "Copied $($LibFiles.Count) lib files → $OutLib"
 
 # ---------------------------------------------------------------------------
-# Step 6: Collect include directories
+# Step 7: Collect include directories
 # ---------------------------------------------------------------------------
 # Standard pjproject include layout:
 #   pjlib/include/         → pj/, pj.h
