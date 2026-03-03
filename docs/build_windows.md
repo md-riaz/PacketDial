@@ -32,19 +32,25 @@ git config --system core.longpaths true
 subst X: "$PWD"
 X:
 
-# 3. Build Rust core
+# 3. Fetch and build PJSIP (one-time, ~10-20 min on first run)
+.\scripts\fetch_pjsip.ps1
+.\scripts\build_pjsip.ps1 -SkipFetch
+
+# 4. Build Rust core (links against built PJSIP)
+$env:PJSIP_LIB_DIR     = "$PWD\engine_pjsip\build\out\lib"
+$env:PJSIP_INCLUDE_DIR = "$PWD\engine_pjsip\build\out\include"
 cd core_rust
 cargo build --release --target x86_64-pc-windows-msvc
 cd ..
 
-# 4. Build Flutter app
+# 5. Build Flutter app
 cd app_flutter
 flutter pub get
 flutter clean
 flutter build windows --release
 cd ..
 
-# 5. Copy DLL and package
+# 6. Copy DLL and package
 Copy-Item core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll `
           app_flutter\build\windows\x64\runner\Release\
 .\scripts\package.ps1

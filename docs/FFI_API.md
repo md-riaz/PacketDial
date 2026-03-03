@@ -54,6 +54,11 @@ void engine_free_string(char* ptr);
 | `CallHistoryQuery`   | _(none)_                                                                 |
 | `SipCaptureMessage`  | `direction` (send/recv), `raw` (SIP message text)                        |
 | `DiagExportBundle`   | `anonymize` (bool, default true)                                         |
+| `CredStore`          | `key`, `value`                                                           |
+| `CredRetrieve`       | `key`                                                                    |
+| `EnginePing`         | _(none)_                                                                 |
+| `SetLogLevel`        | `level` (one of: `"Error"`, `"Warn"`, `"Info"`, `"Debug"`)              |
+| `GetLogBuffer`       | _(none)_ — returns all buffered log entries as `LogBufferResult`         |
 
 ## Events Emitted
 
@@ -68,4 +73,10 @@ void engine_free_string(char* ptr);
 | `CallHistoryResult`        | `entries[]` (call_id, account_id, uri, direction, started_at, ended_at, duration_secs, end_state) |
 | `SipMessageCaptured`       | `direction`, `raw` (masked)                                         |
 | `DiagBundleReady`          | `anonymize`, `call_history_count`, `account_count`, `note`          |
+| `CredStored`               | `key`                                                               |
+| `CredRetrieved`            | `key`, `value`                                                      |
+| `EnginePong`               | _(empty)_                                                           |
+| `LogLevelSet`              | `level`                                                             |
+| `EngineLog`                | `level` (Error/Warn/Info/Debug), `message`, `ts` (Unix seconds)     |
+| `LogBufferResult`          | `entries[]` (level, message, ts) — response to `GetLogBuffer`       |
 

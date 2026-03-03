@@ -6,7 +6,11 @@ import '../models/account.dart';
 import '../models/audio_device.dart';
 import '../models/call.dart';
 import '../models/call_history.dart';
+import '../models/log_entry.dart';
 import '../models/media_stats.dart';
+
+/// Maximum number of structured log entries retained in memory.
+const _kLogBufferMax = 500;
 
 /// Bridges the Dart UI to the Rust core via the command/event channel.
 ///
@@ -49,8 +53,11 @@ class EngineChannel {
   int selectedInputId = 0;
   int selectedOutputId = 1;
 
-  /// Raw event JSON strings for the Diagnostics screen.
+  /// Raw event JSON strings for the Diagnostics screen (event log tab).
   final List<String> eventLog = [];
+
+  /// Structured log entries emitted by the engine (log tab).
+  final List<LogEntry> logBuffer = [];
 
   // --- Lifecycle --------------------------------------------------------------
 
@@ -75,6 +82,13 @@ class EngineChannel {
     final json = jsonEncode({'type': type, 'payload': payload ?? {}});
     return _engine?.sendCommand(json) ?? -1;
   }
+
+  /// Set the active log level filter in the engine core.
+  /// [level] must be one of: "Error", "Warn", "Info", "Debug".
+  int setLogLevel(String level) => sendCommand('SetLogLevel', {'level': level});
+
+  /// Request all buffered log entries from the engine (emits LogBufferResult).
+  int getLogBuffer() => sendCommand('GetLogBuffer');
 
   // --- Private ----------------------------------------------------------------
 
@@ -158,6 +172,20 @@ class EngineChannel {
         final entries = payload['entries'] as List<dynamic>? ?? [];
         for (final e in entries) {
           callHistory.add(CallHistoryEntry.fromMap(e as Map<String, dynamic>));
+        }
+
+      case 'EngineLog':
+        final entry = LogEntry.fromMap(payload);
+        logBuffer.add(entry);
+        if (logBuffer.length > _kLogBufferMax) {
+          logBuffer.removeAt(0);
+        }
+
+      case 'LogBufferResult':
+        logBuffer.clear();
+        final entries = payload['entries'] as List<dynamic>? ?? [];
+        for (final e in entries) {
+          logBuffer.add(LogEntry.fromMap(e as Map<String, dynamic>));
         }
     }
   }

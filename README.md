@@ -115,5 +115,5 @@ See [`docs/architecture.md`](docs/architecture.md) and [`docs/FFI_API.md`](docs/
 | M4 - Packaging | ✅ Done |
 | M5 - Windows Build | ✅ Done |
 | M6 - Hardening & TLS | ✅ Done |
-| M7 - PJSIP Integration | 🔲 Planned |
+| M7 - PJSIP Integration | 🔄 In Progress |
 

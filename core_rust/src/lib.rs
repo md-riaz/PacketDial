@@ -266,6 +266,44 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+// ---------------------------------------------------------------------------
+// Logging
+// ---------------------------------------------------------------------------
+
+/// Append a log entry to the ring buffer and, if the entry's level is at or
+/// above the active threshold, push an `EngineLog` event to the event queue.
+fn log_engine(level: LogLevel, message: &str) {
+    let ts = now_secs();
+    let active = LogLevel::from_u8(ACTIVE_LOG_LEVEL.load(Ordering::Relaxed));
+    let entry = LogEntry {
+        level,
+        message: message.to_owned(),
+        ts,
+    };
+
+    // Always buffer the entry (regardless of active level) so callers of
+    // GetLogBuffer see the full history.
+    if let Ok(mut buf) = LOG_BUFFER.lock().or_else(|e| Ok::<_, ()>(e.into_inner())) {
+        if buf.len() >= LOG_BUFFER_MAX {
+            buf.pop_front();
+        }
+        buf.push_back(entry);
+    }
+
+    // Only emit the event if the level meets the active filter.
+    if level <= active {
+        let msg_escaped = message
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r");
+        push_event(format!(
+            r#"{{"type":"EngineLog","payload":{{"level":"{}","message":"{msg_escaped}","ts":{ts}}}}}"#,
+            level.as_str()
+        ));
+    }
+}
+
 /// Mask sensitive values from a SIP header string.
 /// Replaces the value of Authorization and Proxy-Authorization headers,
 /// and any sip: URI that contains a password (user:pass@host).
@@ -412,6 +450,8 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "CredStore" => cmd_cred_store(payload),
         "CredRetrieve" => cmd_cred_retrieve(payload),
         "EnginePing" => cmd_engine_ping(payload),
+        "SetLogLevel" => cmd_set_log_level(payload),
+        "GetLogBuffer" => cmd_get_log_buffer(payload),
         _ => EngineErrorCode::UnknownCommand,
     }
 }
@@ -460,11 +500,15 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     };
     let mut accts = ACCOUNTS.lock().unwrap();
     match accts.iter_mut().find(|a| a.id == id) {
-        None => EngineErrorCode::NotFound,
+        None => {
+            log_engine(LogLevel::Error, &format!("AccountRegister: account '{id}' not found"));
+            EngineErrorCode::NotFound
+        }
         Some(acct) => {
             acct.reg_state = RegistrationState::Registering;
             drop(accts);
             push_reg_state(&id, &RegistrationState::Registering);
+            log_engine(LogLevel::Debug, &format!("Account '{id}' registering (stub)"));
             // TODO: trigger real PJSIP registration here.
             // Stub: transition immediately to Registered.
             let mut accts2 = ACCOUNTS.lock().unwrap();
@@ -473,6 +517,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             }
             drop(accts2);
             push_reg_state(&id, &RegistrationState::Registered);
+            log_engine(LogLevel::Debug, &format!("Account '{id}' registered (stub)"));
             EngineErrorCode::Ok
         }
     }
@@ -505,6 +550,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let call_id = NEXT_CALL_ID.fetch_add(1, Ordering::SeqCst);
+    log_engine(LogLevel::Debug, &format!("CallStart: call_id={call_id} uri={uri} account={account_id}"));
     let call = Call {
         id: call_id,
         account_id,
@@ -800,6 +846,55 @@ fn cmd_engine_ping(_p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
+/// Set the active log level filter.
+/// `{"type":"SetLogLevel","payload":{"level":"Debug"}}`
+/// Valid levels: "Error", "Warn", "Info", "Debug".
+/// Messages with level ≤ active filter are emitted as EngineLog events.
+fn cmd_set_log_level(p: &serde_json::Value) -> EngineErrorCode {
+    let level_str = match p["level"].as_str() {
+        Some(s) => s,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    match LogLevel::from_str(level_str) {
+        None => EngineErrorCode::InvalidJson,
+        Some(level) => {
+            ACTIVE_LOG_LEVEL.store(level as u8, Ordering::Relaxed);
+            push_event(format!(
+                r#"{{"type":"LogLevelSet","payload":{{"level":"{}"}}}}"#,
+                level.as_str()
+            ));
+            EngineErrorCode::Ok
+        }
+    }
+}
+
+/// Return all buffered log entries as a `LogBufferResult` event.
+/// `{"type":"GetLogBuffer","payload":{}}` → `{"type":"LogBufferResult","payload":{"entries":[...]}}`
+fn cmd_get_log_buffer(_p: &serde_json::Value) -> EngineErrorCode {
+    let buf = LOG_BUFFER.lock().unwrap();
+    let mut items = String::new();
+    for (i, e) in buf.iter().enumerate() {
+        if i > 0 {
+            items.push(',');
+        }
+        let msg_escaped = e.message
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r");
+        items.push_str(&format!(
+            r#"{{"level":"{}","message":"{msg_escaped}","ts":{}}}"#,
+            e.level.as_str(),
+            e.ts
+        ));
+    }
+    drop(buf);
+    push_event(format!(
+        r#"{{"type":"LogBufferResult","payload":{{"entries":[{items}]}}}}"#
+    ));
+    EngineErrorCode::Ok
+}
+
 // ---------------------------------------------------------------------------
 // Version string
 // ---------------------------------------------------------------------------
@@ -818,10 +913,12 @@ fn version_cstr() -> &'static CString {
 pub extern "C" fn engine_init() -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         if INITIALIZED.swap(true, Ordering::SeqCst) {
+            log_engine(LogLevel::Warn, "engine_init called while already initialized");
             return EngineErrorCode::AlreadyInitialized as i32;
         }
         // TODO: initialize PJSIP here (pj_init, pjsua_create, etc.)
         push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
+        log_engine(LogLevel::Info, "Engine initialized (stub — PJSIP not yet linked)");
         EngineErrorCode::Ok as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
@@ -832,9 +929,11 @@ pub extern "C" fn engine_init() -> i32 {
 pub extern "C" fn engine_shutdown() -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         if !INITIALIZED.swap(false, Ordering::SeqCst) {
+            log_engine(LogLevel::Warn, "engine_shutdown called while not initialized");
             return EngineErrorCode::NotInitialized as i32;
         }
         // TODO: shutdown PJSIP here (pjsua_destroy, etc.)
+        log_engine(LogLevel::Info, "Engine shutting down");
         if let Ok(mut q) = EVENT_QUEUE.lock() {
             q.clear();
         }
@@ -940,12 +1039,15 @@ mod tests {
 
     fn reset() {
         INITIALIZED.store(false, Ordering::SeqCst);
-        EVENT_QUEUE.lock().unwrap().clear();
-        ACCOUNTS.lock().unwrap().clear();
-        CALLS.lock().unwrap().clear();
-        CALL_HISTORY.lock().unwrap().clear();
-        MEDIA_STATS.lock().unwrap().clear();
-        CRED_STORE.lock().unwrap().clear();
+        // Use unwrap_or_else to recover from poisoned mutexes caused by prior test panics
+        EVENT_QUEUE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        ACCOUNTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        CALLS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        CALL_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        MEDIA_STATS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        CRED_STORE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        LOG_BUFFER.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        ACTIVE_LOG_LEVEL.store(LogLevel::Info as u8, Ordering::Relaxed);
         SELECTED_INPUT.store(0, Ordering::Relaxed);
         SELECTED_OUTPUT.store(1, Ordering::Relaxed);
     }
@@ -1363,6 +1465,113 @@ mod tests {
         assert_eq!(send(r#"{"type":"EnginePing","payload":{}}"#), 0);
         let ev = next_event();
         assert!(ev.contains("EnginePong"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    // --- M7: Logging system tests -------------------------------------------
+
+    #[test]
+    fn set_log_level_and_engine_log_event() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        // Set level to Debug — all log entries should emit events
+        assert_eq!(
+            send(r#"{"type":"SetLogLevel","payload":{"level":"Debug"}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("LogLevelSet"), "got: {ev}");
+        assert!(ev.contains("\"level\":\"Debug\""), "got: {ev}");
+
+        // Emit an Info message — should appear as EngineLog event (Debug >= Info)
+        log_engine(LogLevel::Info, "test info message");
+        let ev = next_event();
+        assert!(ev.contains("EngineLog"), "got: {ev}");
+        assert!(ev.contains("Info"), "got: {ev}");
+        assert!(ev.contains("test info message"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn log_level_filter_suppresses_lower_severity() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        // Set level to Error — only Error events should pass through
+        assert_eq!(
+            send(r#"{"type":"SetLogLevel","payload":{"level":"Error"}}"#),
+            0
+        );
+        drain_events();
+
+        // A Debug message should be buffered but NOT emit an event
+        log_engine(LogLevel::Debug, "debug noise");
+        // A Warn message should be buffered but NOT emit an event (Warn > Error)
+        log_engine(LogLevel::Warn, "warn noise");
+        // An Error message should emit an event
+        log_engine(LogLevel::Error, "critical failure");
+
+        // Only one EngineLog event (Error level)
+        let ev = next_event();
+        assert!(ev.contains("EngineLog"), "got: {ev}");
+        assert!(ev.contains("\"level\":\"Error\""), "got: {ev}");
+        assert!(ev.contains("critical failure"), "got: {ev}");
+
+        // No more events
+        let ptr = engine_poll_event();
+        assert!(ptr.is_null(), "unexpected extra event in queue");
+
+        // But both entries should still be in the buffer
+        assert_eq!(
+            send(r#"{"type":"GetLogBuffer","payload":{}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("LogBufferResult"), "got: {ev}");
+        assert!(ev.contains("debug noise"), "got: {ev}");
+        assert!(ev.contains("warn noise"), "got: {ev}");
+        assert!(ev.contains("critical failure"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn get_log_buffer_returns_engine_init_log() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        // engine_init logs an Info message; it should be in the buffer
+        assert_eq!(
+            send(r#"{"type":"GetLogBuffer","payload":{}}"#),
+            0
+        );
+        let ev = next_event();
+        assert!(ev.contains("LogBufferResult"), "got: {ev}");
+        assert!(ev.contains("Engine initialized"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn set_log_level_invalid_returns_error() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        assert_eq!(
+            send(r#"{"type":"SetLogLevel","payload":{"level":"Verbose"}}"#),
+            EngineErrorCode::InvalidJson as i32
+        );
 
         engine_shutdown();
     }

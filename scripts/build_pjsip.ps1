@@ -1,41 +1,224 @@
-Param(
-  [string]$PjProjectDir = "$(Resolve-Path ./engine_pjsip/pjproject)",
-  [string]$OutDir = "$(Resolve-Path ./engine_pjsip/build/out)"
+<#
+.SYNOPSIS
+    Builds pjproject for Windows x64 (Release) and collects headers + libs
+    into engine_pjsip/build/out/ for the Rust core to link against.
+
+.DESCRIPTION
+    1. Runs scripts/fetch_pjsip.ps1 unless -SkipFetch is specified.
+    2. Locates msbuild from Visual Studio 2022 Build Tools (or any installed VS).
+    3. Builds pjproject-vs14.sln in Release / x64 configuration.
+    4. Copies all resulting *.lib files to engine_pjsip/build/out/lib/.
+    5. Copies all include directories to engine_pjsip/build/out/include/.
+
+    Run from the repository root:
+        .\scripts\build_pjsip.ps1
+
+.PARAMETER PjVersion
+    pjproject version to fetch and build. Default: 2.14.1
+
+.PARAMETER SkipFetch
+    Skip running fetch_pjsip.ps1 (pjproject source already present).
+
+.PARAMETER Jobs
+    Number of parallel MSBuild jobs. Default: number of logical processors.
+#>
+
+[CmdletBinding()]
+param(
+    [string]$PjVersion  = '2.14.1',
+    [switch]$SkipFetch,
+    [int]$Jobs          = [Environment]::ProcessorCount
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
-if (-not (Test-Path $PjProjectDir)) {
-  Write-Host "ERROR: pjproject not found at $PjProjectDir"
-  Write-Host "Place pjproject source at engine_pjsip/pjproject/"
-  exit 1
+$RepoRoot     = Split-Path -Parent $PSScriptRoot
+$PjProjectDir = Join-Path $RepoRoot 'engine_pjsip\pjproject'
+$OutDir       = Join-Path $RepoRoot 'engine_pjsip\build\out'
+$OutLib       = Join-Path $OutDir 'lib'
+$OutInclude   = Join-Path $OutDir 'include'
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+function Write-Step { param($m) Write-Host "`n>>> $m" -ForegroundColor Cyan }
+function Write-OK   { param($m) Write-Host "    [OK]   $m" -ForegroundColor Green }
+function Write-Info { param($m) Write-Host "    [INFO] $m" -ForegroundColor Yellow }
+function Write-Fail { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red }
+
+# ---------------------------------------------------------------------------
+# Step 1: Fetch pjproject source if needed
+# ---------------------------------------------------------------------------
+if (-not $SkipFetch) {
+    Write-Step "Fetching pjproject $PjVersion source"
+    & "$PSScriptRoot\fetch_pjsip.ps1" -PjVersion $PjVersion
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+if (-not (Test-Path $PjProjectDir)) {
+    Write-Fail "pjproject source not found at $PjProjectDir"
+    Write-Info "Run: .\scripts\fetch_pjsip.ps1"
+    exit 1
+}
 
-Write-Host "NOTE: This script is a practical scaffold."
-Write-Host "PJSIP can be built on Windows via Visual Studio projects or via its build scripts."
-Write-Host "You may need to adjust these commands depending on your pjproject version."
+# ---------------------------------------------------------------------------
+# Step 2: Locate msbuild
+# ---------------------------------------------------------------------------
+Write-Step "Locating MSBuild"
 
-# Typical approach:
-# 1) Generate/prepare config_site.h (optional)
-# 2) Build pjproject using Visual Studio solution
-#
-# For maximum compatibility, we provide guidance rather than assuming exact paths.
+$VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$MsBuild  = $null
 
+if (Test-Path $VsWhere) {
+    $vsInstallPath = & $VsWhere -latest -requires 'Microsoft.Component.MSBuild' `
+                                -property installationPath 2>$null
+    if ($vsInstallPath) {
+        $candidate = Join-Path $vsInstallPath 'MSBuild\Current\Bin\MSBuild.exe'
+        if (Test-Path $candidate) { $MsBuild = $candidate }
+    }
+}
+
+# Fallback: search common VS 2022 paths
+if (-not $MsBuild) {
+    $candidates = @(
+        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe'
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) { $MsBuild = $c; break }
+    }
+}
+
+# Last resort: PATH
+if (-not $MsBuild -and (Get-Command 'msbuild' -ErrorAction SilentlyContinue)) {
+    $MsBuild = 'msbuild'
+}
+
+if (-not $MsBuild) {
+    Write-Fail "MSBuild not found. Install Visual Studio 2022 Build Tools with C++ Desktop workload."
+    exit 1
+}
+Write-OK "MSBuild: $MsBuild"
+
+# ---------------------------------------------------------------------------
+# Step 3: Locate the pjproject Visual Studio solution
+# ---------------------------------------------------------------------------
+Write-Step "Locating pjproject Visual Studio solution"
+
+$SlnFile = Get-ChildItem $PjProjectDir -Filter 'pjproject-vs*.sln' | `
+           Sort-Object Name | Select-Object -Last 1
+
+if (-not $SlnFile) {
+    Write-Fail "No pjproject-vs*.sln found in $PjProjectDir"
+    Write-Info "Expected: pjproject-vs14.sln (or similar)"
+    exit 1
+}
+Write-OK "Solution: $($SlnFile.FullName)"
+
+# ---------------------------------------------------------------------------
+# Step 4: Build pjproject (Release / x64)
+# ---------------------------------------------------------------------------
+Write-Step "Building pjproject Release x64 with $Jobs parallel job(s)"
+Write-Info "This may take 5-20 minutes on first run…"
+
+$MsBuildArgs = @(
+    $SlnFile.FullName,
+    '/t:Build',
+    '/p:Configuration=Release',
+    '/p:Platform=x64',
+    "/m:$Jobs",
+    '/nologo',
+    '/verbosity:minimal',
+    '/clp:Summary'
+)
+
+Push-Location $PjProjectDir
+try {
+    & $MsBuild @MsBuildArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "MSBuild failed with exit code $LASTEXITCODE"
+        exit $LASTEXITCODE
+    }
+} finally {
+    Pop-Location
+}
+Write-OK "pjproject build complete"
+
+# ---------------------------------------------------------------------------
+# Step 5: Collect output libs
+# ---------------------------------------------------------------------------
+Write-Step "Collecting build outputs → $OutDir"
+
+New-Item -ItemType Directory -Force -Path $OutLib    | Out-Null
+New-Item -ItemType Directory -Force -Path $OutInclude | Out-Null
+
+# Collect all *.lib files produced by the build (Release x64 only)
+# pjproject names them like: pjlib-x86_64-x64-vc14-Release.lib
+$LibFiles = Get-ChildItem $PjProjectDir -Recurse -Filter '*Release*.lib' |
+            Where-Object { $_.FullName -notlike '*Debug*' -and
+                           $_.FullName -notlike '*obj*'   -and
+                           $_.FullName -notlike '*\CMakeFiles\*' }
+
+if ($LibFiles.Count -eq 0) {
+    Write-Fail "No Release *.lib files found under $PjProjectDir"
+    Write-Info "Check the MSBuild output above for errors."
+    exit 1
+}
+
+Write-Info "Found $($LibFiles.Count) lib file(s):"
+foreach ($lib in $LibFiles) {
+    $destPath = Join-Path $OutLib $lib.Name
+    Copy-Item $lib.FullName $destPath -Force
+    $sizeKB = [math]::Round($lib.Length / 1KB, 0)
+    Write-Host "    $($lib.Name)  ($sizeKB KB)" -ForegroundColor Gray
+}
+Write-OK "Copied $($LibFiles.Count) lib files → $OutLib"
+
+# ---------------------------------------------------------------------------
+# Step 6: Collect include directories
+# ---------------------------------------------------------------------------
+# Standard pjproject include layout:
+#   pjlib/include/         → pj/, pj.h
+#   pjlib-util/include/    → pjlib-util/
+#   pjnath/include/        → pjnath/
+#   pjmedia/include/       → pjmedia/
+#   pjsip/include/         → pjsip/, pjsip-ua/, pjsip-simple/, pjsua/, pjsua2/
+$IncludeDirs = @(
+    'pjlib\include',
+    'pjlib-util\include',
+    'pjnath\include',
+    'pjmedia\include',
+    'pjsip\include'
+)
+
+foreach ($rel in $IncludeDirs) {
+    $src = Join-Path $PjProjectDir $rel
+    if (Test-Path $src) {
+        Copy-Item $src -Destination $OutInclude -Recurse -Force
+        Write-Host "    Copied $rel" -ForegroundColor Gray
+    } else {
+        Write-Info "Include dir not found (skipping): $src"
+    }
+}
+Write-OK "Include headers → $OutInclude"
+
+# ---------------------------------------------------------------------------
+# Write a build-stamp so downstream scripts can detect a fresh build
+# ---------------------------------------------------------------------------
+$StampFile = Join-Path $OutDir 'pjsip_build_stamp.txt'
+Set-Content $StampFile "pjproject=$PjVersion built on $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ') UTC"
+
+# ---------------------------------------------------------------------------
+# Done
+# ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "Next steps (manual, recommended):"
-Write-Host "1) Open $PjProjectDir/pjproject-vs14.sln (or similar) in Visual Studio."
-Write-Host "2) Build 'pjlib', 'pjlib-util', 'pjnath', 'pjmedia', 'pjsip' in Release x64."
-Write-Host "3) Copy resulting .lib files and includes into:"
-Write-Host "   $OutDir/lib and $OutDir/include"
-Write-Host ""
-
-New-Item -ItemType Directory -Force -Path (Join-Path $OutDir "lib") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $OutDir "include") | Out-Null
-
-Write-Host "Created output folders:"
-Write-Host " - $OutDir/lib"
-Write-Host " - $OutDir/include"
-Write-Host ""
-Write-Host "When done, run: ./scripts/build_core.ps1"
+Write-Host "============================================================" -ForegroundColor Green
+Write-Host " PJSIP BUILD COMPLETE" -ForegroundColor Green
+Write-Host " Libs:     $OutLib" -ForegroundColor Green
+Write-Host " Headers:  $OutInclude" -ForegroundColor Green
+Write-Host " Set PJSIP_LIB_DIR=$OutLib" -ForegroundColor Green
+Write-Host " Set PJSIP_INCLUDE_DIR=$OutInclude" -ForegroundColor Green
+Write-Host "============================================================" -ForegroundColor Green
