@@ -86,6 +86,33 @@ flutter run -d windows
 
 ---
 
+## Integration & Automation (Built-in)
+
+PacketDial is designed for business-grade integration. It includes a built-in controller and event broadcasting system.
+
+### 1. CLI Controller (`pd.exe`)
+Control the running softphone from any terminal, script, or CRM.
+```powershell
+pd dial 100                 # Intelligently picks an account and dials
+pd answer                   # Answers first ringing call
+pd hangup                   # Ends active call
+pd events                   # Streams real-time VoIP events (JSON)
+```
+
+### 2. Protocol Handlers (`tel:` and `sip:`)
+PacketDial registers as the system default for standard VoIP links.
+- Click a phone number in Chrome, Outlook, or your CRM.
+- Instant dial via the running PacketDial instance (powered by the CLI bridge).
+- Run `.\scripts\register_protocols.ps1` to enable.
+
+### 3. Event Broadcasting (Named Pipes)
+Subscribe to real-time events via `\\.\pipe\PacketDial.API`.
+- **Multiple Subscribers:** Multiple external tools can listen simultaneously.
+- **Zero Latency:** Direct IPC access to SIP registration and call-state changes.
+- See [Integration Guide](docs/integration.md) for full JSON API details.
+
+---
+
 ## How to Build (Release)
 
 ### Prerequisites

@@ -2,11 +2,11 @@
 
 ## 1. System Overview
 
-UI (Flutter Desktop)
-  ↕ Commands/Events
-Core (Rust Wrapper)
-  ↕ FFI
-PJSIP Engine (C)
+UI (Flutter Desktop)  <-- FFI callback
+  ↕
+Core (Rust Wrapper)  <-- IPC API Server (\\\\.\\pipe\\PacketDial.API)
+  ↕                       ↕
+PJSIP Engine (C)      External Controllers (pd.exe, CRM, etc.)
 
 ---
 
@@ -14,6 +14,8 @@ PJSIP Engine (C)
 
 - State machines
 - Thread isolation
+- **IPC API Server**: Manages Named Pipe connections and JSON command dispatch.
+- **Event Broadcasting**: Fans out VoIP events to all connected IPC subscribers.
 - Event bus
 - Secure storage orchestration
 - Diagnostics aggregation
@@ -23,6 +25,7 @@ PJSIP Engine (C)
 ## 3. Threading Model
 
 - Dedicated engine thread for all PJSIP operations
+- **IPC Worker Threads**: Each connected pipe client gets a dedicated worker for handling bidirectional I/O without blocking the engine.
 - Event queue for UI communication
 - No direct UI-PJSIP calls
 
@@ -39,7 +42,10 @@ All updates are structured events:
 - MediaStatsUpdated
 - SipMessageCaptured
 
-Events serialized as JSON (v1), future protobuf support.
+The Rust core operates a **multi-subscriber broadcast** system:
+1. Event is generated (e.g., from PJSIP callback).
+2. Event is pushed to the UI via the FFI callback.
+3. Event is simultaneously broadcast to all active IPC clients via Named Pipes.
 
 ---
 
@@ -53,7 +59,7 @@ Events serialized as JSON (v1), future protobuf support.
 
 ## 6. Scalability Considerations
 
-Though single-user app, architecture supports:
+Architecture supports:
 - Plugin system
-- Future macOS/Linux port
+- **Programmability**: External tools can control the phone via IPC.
 - Headless CLI mode

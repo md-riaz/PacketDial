@@ -97,3 +97,20 @@ target_include_directories(flutter_wrapper_app PUBLIC
   "${WRAPPER_ROOT}/include"
 )
 add_dependencies(flutter_wrapper_app flutter_assemble)
+
+# === Flutter C++ wrapper library (plugin variant) ===
+# Plugins link against flutter_wrapper_plugin to get access to the
+# C++ wrapper headers (flutter/method_channel.h, etc.).  It is identical
+# to flutter_wrapper_app but kept as a separate target so that plugins
+# compile as SHARED libraries while the app compiles its own copy STATIC.
+add_library(flutter_wrapper_plugin STATIC ${WRAPPER_SRCS})
+apply_standard_settings(flutter_wrapper_plugin)
+set_target_properties(flutter_wrapper_plugin PROPERTIES
+  POSITION_INDEPENDENT_CODE ON)
+set_target_properties(flutter_wrapper_plugin PROPERTIES
+  CXX_VISIBILITY_PRESET hidden)
+target_link_libraries(flutter_wrapper_plugin PUBLIC flutter)
+target_include_directories(flutter_wrapper_plugin PUBLIC
+  "${WRAPPER_ROOT}/include"
+)
+add_dependencies(flutter_wrapper_plugin flutter_assemble)

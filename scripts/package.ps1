@@ -83,9 +83,22 @@ Copy-Item -Path "$FlutterBuild\*" -Destination $StagingDir -Recurse -Force
 # Validate that essential Flutter runtime files were copied
 # ---------------------------------------------------------------------------
 $RequiredFiles = @(
-    (Join-Path $StagingDir 'flutter_windows.dll'),
-    (Join-Path $StagingDir 'icudtl.dat')
+    (Join-Path $StagingDir 'flutter_windows.dll')
 )
+
+# icudtl.dat may be at root or inside data/ depending on Flutter version
+$icuPaths = @(
+    (Join-Path $StagingDir 'icudtl.dat'),
+    (Join-Path $StagingDir 'data\icudtl.dat')
+)
+$icuFound = $false
+foreach ($p in $icuPaths) {
+    if (Test-Path $p) { $icuFound = $true; break }
+}
+if (-not $icuFound) {
+    Write-Error "Missing required Flutter file: icudtl.dat (checked root and data/)`nThe build output is incomplete. Re-run: flutter build windows --release"
+    exit 1
+}
 
 foreach ($f in $RequiredFiles) {
     if (-not (Test-Path $f)) {

@@ -49,6 +49,19 @@ This:
 
 ---
 
+## Try the CLI Controller
+
+While the app is running, open another terminal and try controlling it via `pd.exe`:
+
+```powershell
+.\tools\pd\target\debug\pd.exe dial 100
+.\tools\pd\target\debug\pd.exe hangup
+```
+
+See [Integration Guide](integration.md) for more.
+
+---
+
 ## Next Steps
 
 | Goal | Command |

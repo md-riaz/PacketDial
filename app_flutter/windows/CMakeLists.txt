@@ -80,6 +80,12 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime OPTIONAL)
 
+foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
+  install(FILES "${bundled_library}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endforeach()
+
 # Fully re-copy the assets directory on each build to avoid stale files.
 set(FLUTTER_ASSET_DIR_NAME "flutter_assets")
 install(CODE "

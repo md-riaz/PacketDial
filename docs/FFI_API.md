@@ -86,3 +86,37 @@ Events are delivered to the registered callback. Each event has an `event_id` an
 | 15| `LogBufferResult` | `entries[]` (level, message, ts) |
 | 16| `EngineLog` | `level`, `message`, `ts` |
 
+---
+
+## Remote API (IPC / JSON)
+
+PacketDial exposes its functionality via a Windows Named Pipe, allowing non-FFI clients (like `pd.exe` or external scripts) to control the engine.
+
+**Pipe Name:** `\\.\pipe\PacketDial.API`  
+**Protocol:** Line-based JSON (each message must end with `\n`).
+
+### Command Schema
+Clients send a JSON object with `type` and `payload`.
+
+| IPC Type | DLL Command Mapping |
+|----------|----------------------|
+| `CallStart` | `cmd_call_start` |
+| `CallAnswer`| `cmd_call_answer`|
+| `CallHangup`| `cmd_call_hangup`|
+| `CallMute`  | `cmd_call_mute`  |
+| `CallHold`  | `cmd_call_hold`  |
+| `DiagBundle`| `cmd_diag_bundle`|
+
+**Example Command:**
+```json
+{"type": "CallStart", "payload": {"uri": "sip:100@domain"}}
+```
+
+### Event Broadcasting
+The IPC server broadcasts all engine events to **all connected pipe clients**. The JSON format matches the `payload` delivered to the C callback, but wrapped in a top-level `type` field.
+
+**Example Event:**
+```json
+{"type": "CallStateChanged", "payload": {"call_id": 1, "state": "Confirmed"}}
+```
+
