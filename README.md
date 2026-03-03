@@ -115,8 +115,10 @@ See [`docs/architecture.md`](docs/architecture.md) and [`docs/FFI_API.md`](docs/
 | M4 - Packaging | ✅ Done | `scripts/package.ps1`, GitHub Release workflow |
 | M5 - Windows Build | ✅ Done | CI build with PJSIP cache, `subst X:` workaround |
 | M6 - Hardening & TLS | ✅ Done | TLS/SRTP flags, credential store, `cargo clippy -D warnings` |
-| M7 - PJSIP Integration | 🔄 In Progress | Real SIP registration, calling, and media via PJSIP |
+| M7 - PJSIP Integration | ✅ Done | C shim + Rust FFI: real SIP registration, outgoing/incoming calls, audio, SIP capture |
 
-> **Note:** M1–M6 implement the full architecture and UI with a stub engine.
-> Real SIP communication (registration, audio, TLS transport) requires M7 (PJSIP integration).
+> **Note:** M1–M6 deliver the full architecture and UI with a stub engine (no PJSIP libs needed).
+> M7 wires real SIP by compiling a thin C shim against pjsua when PJSIP static libs are present
+> (built by `scripts/build_pjsip.ps1`).  Without PJSIP, the DLL falls back to the stub behaviour,
+> keeping the app functional for development and testing without a full PJSIP build.
 

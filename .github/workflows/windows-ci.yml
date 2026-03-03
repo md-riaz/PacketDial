@@ -58,7 +58,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: engine_pjsip/build/out
-          key: pjsip-windows-v2141-${{ hashFiles('engine_pjsip/pjproject_config_site.h') }}
+          key: pjsip-windows-v2142-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1') }}
 
       - name: Build pjproject (Release x64)
         if: steps.cache-pjsip.outputs.cache-hit != 'true'

@@ -94,6 +94,10 @@ fn main() {
         println!("cargo:rustc-link-lib=winmm");
         println!("cargo:rustc-link-lib=Avrt");
 
+        // Signal to the rest of the crate that PJSIP is available so that
+        // real SIP code paths are compiled in (M7 integration).
+        println!("cargo:rustc-cfg=pjsip_available");
+
         println!(
             "cargo:warning=PJSIP integration: linking against libs in {}",
             lib.display()
@@ -116,9 +120,13 @@ fn main() {
     if shim_src.exists() {
         if let Some(inc) = &include_dir {
             println!("cargo:rerun-if-changed=src/shim/pjsip_shim.c");
+            println!("cargo:rerun-if-changed=src/shim/pjsip_shim.h");
             cc::Build::new()
                 .file(&shim_src)
+                // PJSIP public headers (e.g. pjsua-lib/pjsua.h, pj/config.h)
                 .include(inc)
+                // shim's own header directory
+                .include(manifest_dir.join("src").join("shim"))
                 .opt_level(2)
                 .compile("pjsip_shim");
         }
