@@ -88,7 +88,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 
 if (-not $isAdmin) {
     Write-Fail "This script must be run as Administrator."
-    Write-Host "  Right-click PowerShell → 'Run as administrator', then re-run:" -ForegroundColor Yellow
+    Write-Host "  Right-click PowerShell -> 'Run as administrator', then re-run:" -ForegroundColor Yellow
     Write-Host "    Set-ExecutionPolicy Bypass -Scope Process -Force" -ForegroundColor White
     Write-Host "    .\scripts\setup_windows.ps1" -ForegroundColor White
     exit 1
@@ -96,7 +96,7 @@ if (-not $isAdmin) {
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "   PacketDial  –  Windows Setup & Build Script" -ForegroundColor Cyan
+Write-Host "   PacketDial  -  Windows Setup & Build Script" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ if (-not $SkipInstall) {
     if (Test-Cmd 'git') {
         Write-OK "Already installed: $(git --version)"
     } else {
-        Write-Info "Not found – installing via winget…"
+        Write-Info "Not found - installing via winget..."
         Invoke-Winget 'Git.Git'
         Refresh-Path
         Write-OK "Git installed: $(git --version 2>$null)"
@@ -155,7 +155,7 @@ if (-not $SkipInstall) {
     if ($hasCpp) {
         Write-OK "Visual Studio C++ Build Tools already present"
     } else {
-        Write-Info "Not found – installing via winget (this can take 10-20 minutes)…"
+        Write-Info "Not found - installing via winget (this can take 10-20 minutes)..."
         $vsOverride = '--quiet --wait --norestart ' +
                       '--add Microsoft.VisualStudio.Workload.VCTools ' +
                       '--includeRecommended'
@@ -168,7 +168,7 @@ if (-not $SkipInstall) {
     if (Test-Cmd 'cargo') {
         Write-OK "Already installed: $(rustc --version 2>$null)"
     } else {
-        Write-Info "Not found – downloading rustup-init.exe…"
+        Write-Info "Not found - downloading rustup-init.exe..."
         $rustupExe = "$env:TEMP\rustup-init.exe"
         Invoke-WebRequest `
             -Uri 'https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe' `
@@ -182,7 +182,7 @@ if (-not $SkipInstall) {
     }
 
     # Ensure the MSVC Windows target is present
-    Write-Info "Ensuring Rust target x86_64-pc-windows-msvc is registered…"
+    Write-Info "Ensuring Rust target x86_64-pc-windows-msvc is registered..."
     rustup target add x86_64-pc-windows-msvc
     Write-OK "Rust target x86_64-pc-windows-msvc ready"
 
@@ -193,7 +193,7 @@ if (-not $SkipInstall) {
         Write-OK "Already installed: $(flutter --version --machine 2>$null | ConvertFrom-Json | Select-Object -ExpandProperty frameworkVersion 2>$null)"
     } else {
         # Try winget first (easiest)
-        Write-Info "Trying winget install for Flutter…"
+        Write-Info "Trying winget install for Flutter..."
         $wingetOk = $false
         try {
             Invoke-Winget 'Google.FlutterSDK'
@@ -203,13 +203,13 @@ if (-not $SkipInstall) {
 
         if (-not $wingetOk) {
             # Fallback: direct download of the exact CI version
-            Write-Info "winget Flutter not available – downloading Flutter $FlutterVersion directly…"
+            Write-Info "winget Flutter not available - downloading Flutter $FlutterVersion directly..."
             $zipUrl = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/" +
                       "flutter_windows_${FlutterVersion}-stable.zip"
             $zipFile = "$env:TEMP\flutter.zip"
             Write-Info "Downloading: $zipUrl"
             Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
-            Write-Info "Extracting to $env:USERPROFILE…"
+            Write-Info "Extracting to $env:USERPROFILE..."
             Expand-Archive -Path $zipFile -DestinationPath $env:USERPROFILE -Force
             Remove-Item $zipFile -Force
 
@@ -230,7 +230,7 @@ if (-not $SkipInstall) {
     Write-OK "flutter config --enable-windows-desktop done"
 
 } else {
-    Write-Info "-SkipInstall specified – skipping prerequisite installation."
+    Write-Info "-SkipInstall specified - skipping prerequisite installation."
 }
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ if ($missing.Count -gt 0) {
 
 if ($SkipBuild) {
     Write-Host ""
-    Write-OK "Setup complete. -SkipBuild specified – not building."
+    Write-OK "Setup complete. -SkipBuild specified - not building."
     exit 0
 }
 
@@ -270,9 +270,9 @@ subst X: /d 2>$null | Out-Null
 subst X: $RepoRoot 2>$null
 if (Test-Path 'X:\') {
     Set-Location X:\
-    Write-OK "Mapped $RepoRoot → X:"
+    Write-OK "Mapped $RepoRoot -> X:"
 } else {
-    Write-Info "subst failed – continuing from $RepoRoot"
+    Write-Info "subst failed - continuing from $RepoRoot"
     Set-Location $RepoRoot
 }
 
@@ -289,7 +289,7 @@ if (-not (Test-Path $dll)) {
     Write-Fail "voip_core.dll not found after cargo build."
     exit 1
 }
-Write-OK "voip_core.dll built → $dll"
+Write-OK "voip_core.dll built -> $dll"
 
 # ---------------------------------------------------------------------------
 # 6. Flutter: fetch packages
@@ -317,9 +317,9 @@ Write-Step "Copying voip_core.dll into Flutter output folder"
 $flutterRelease = "app_flutter\build\windows\x64\runner\Release"
 if (Test-Path $dll) {
     Copy-Item $dll -Destination $flutterRelease -Force
-    Write-OK "Copied voip_core.dll → $flutterRelease"
+    Write-OK "Copied voip_core.dll -> $flutterRelease"
 } else {
-    Write-Info "voip_core.dll not found – PJSIP integration pending, skipping copy."
+    Write-Info "voip_core.dll not found - PJSIP integration pending, skipping copy."
 }
 
 # ---------------------------------------------------------------------------
