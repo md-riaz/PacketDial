@@ -2128,6 +2128,49 @@ pub extern "C" fn engine_query_call_history() -> i32 {
 // Tests
 // ---------------------------------------------------------------------------
 
+/// Set the active log level filter.
+///
+/// `level` must be one of: "Error", "Warn", "Info", "Debug".
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_set_log_level(level: *const c_char) -> i32 {
+    if level.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let level_s = match unsafe { CStr::from_ptr(level) }.to_str() {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let level_json = serde_json::json!({ "level": level_s });
+        dispatch_command("SetLogLevel", &level_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Request all buffered log entries.
+///
+/// This will trigger a LogBufferResult event via the callback.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_get_log_buffer() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let empty = serde_json::json!({});
+        dispatch_command("GetLogBuffer", &empty) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

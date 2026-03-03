@@ -15,7 +15,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     with SingleTickerProviderStateMixin {
   final _channel = EngineChannel.instance;
   final _scrollEvent = ScrollController();
-  final _scrollLog   = ScrollController();
+  final _scrollLog = ScrollController();
 
   late final TabController _tabs;
 
@@ -72,18 +72,16 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
   }
 
   void _clearEvents() => setState(() => _channel.eventLog.clear());
-  void _clearLogs()   => setState(() => _channel.logBuffer.clear());
+  void _clearLogs() => setState(() => _channel.logBuffer.clear());
 
   void _setEngineLevel(String level) {
     setState(() => _engineLevel = level);
-    // TODO: Implement with new C ABI - needs engine_set_log_level() function
-    _showSnack('Log level control coming soon');
+    _channel.setLogLevel(level);
   }
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   List<LogEntry> get _filteredLogs {
@@ -94,8 +92,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
 
   Color _levelColor(LogLevel level) => switch (level) {
         LogLevel.error => Colors.red.shade700,
-        LogLevel.warn  => Colors.orange.shade700,
-        LogLevel.info  => Colors.blue.shade700,
+        LogLevel.warn => Colors.orange.shade700,
+        LogLevel.info => Colors.blue.shade700,
         LogLevel.debug => Colors.grey.shade600,
       };
 
@@ -137,7 +135,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                   itemCount: log.length,
                   itemBuilder: (_, i) => SelectableText(
                     log[i],
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    style:
+                        const TextStyle(fontFamily: 'monospace', fontSize: 12),
                   ),
                 ),
         ),
@@ -190,7 +189,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                 items: _engineLevels
                     .map((l) => DropdownMenuItem(value: l, child: Text(l)))
                     .toList(),
-                onChanged: (v) { if (v != null) _setEngineLevel(v); },
+                onChanged: (v) {
+                  if (v != null) _setEngineLevel(v);
+                },
               ),
               const SizedBox(width: 16),
               const Text('Show:', style: TextStyle(fontSize: 12)),
@@ -201,15 +202,16 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                 items: _levels
                     .map((l) => DropdownMenuItem(value: l, child: Text(l)))
                     .toList(),
-                onChanged: (v) { if (v != null) setState(() => _filterLevel = v); },
+                onChanged: (v) {
+                  if (v != null) setState(() => _filterLevel = v);
+                },
               ),
               const Spacer(),
-              // TODO: Re-enable when engine_get_log_buffer() is added to C ABI
-              // IconButton(
-              //   icon: const Icon(Icons.refresh, size: 20),
-              //   tooltip: 'Fetch from engine',
-              //   onPressed: () => _channel.getLogBuffer(),
-              // ),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                tooltip: 'Fetch from engine',
+                onPressed: () => _channel.getLogBuffer(),
+              ),
               IconButton(
                 icon: const Icon(Icons.copy, size: 20),
                 tooltip: 'Copy all',
@@ -229,7 +231,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
               ? const Center(child: Text('No log entries.'))
               : ListView.builder(
                   controller: _scrollLog,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   itemCount: logs.length,
                   itemBuilder: (_, i) {
                     final e = logs[i];

@@ -25,10 +25,10 @@ class EngineChannel {
   static final EngineChannel instance = EngineChannel._();
 
   VoipEngine? _engine;
-  ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>? _callbackPtr;
+  ffi.NativeCallable<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>?
+      _nativeCallable;
 
-  final _eventController =
-      StreamController<Map<String, dynamic>>.broadcast();
+  final _eventController = StreamController<Map<String, dynamic>>.broadcast();
 
   /// Broadcast stream of raw event maps from the engine.
   Stream<Map<String, dynamic>> get events => _eventController.stream;
@@ -66,27 +66,30 @@ class EngineChannel {
   void attach(VoipEngine engine) {
     _engine = engine;
 
-    // Create a Dart callback that will be called from native code
-    _callbackPtr = ffi.Pointer.fromFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>(
+    // Use NativeCallable.listener for thread-safe callbacks from PJSIP worker threads.
+    _nativeCallable = ffi.NativeCallable<
+        ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>.listener(
       _eventCallbackStatic,
     );
 
-    // Register the callback with the engine
-    engine.setEventCallback(_callbackPtr!);
+    // Register the native function pointer with the engine.
+    engine.setEventCallback(_nativeCallable!.nativeFunction);
 
     // Request audio device list on startup
     engine.listAudioDevices();
   }
 
   void dispose() {
-    // Clear the callback
+    // Clear the callback and close the NativeCallable
     _engine?.setEventCallback(ffi.nullptr);
+    _nativeCallable?.close();
     _engine?.shutdown();
     _eventController.close();
   }
 
   // Native callback handler (must be static and top-level compatible)
-  static void _eventCallbackStatic(int eventId, ffi.Pointer<ffi.Int8> jsonDataPtr) {
+  static void _eventCallbackStatic(
+      int eventId, ffi.Pointer<ffi.Int8> jsonDataPtr) {
     instance._handleNativeEvent(eventId, jsonDataPtr);
   }
 
@@ -180,6 +183,16 @@ class EngineChannel {
 
   VoipEngine get engine => _engine!;
 
+  /// Set the active log level filter in the engine.
+  void setLogLevel(String level) {
+    _engine?.setLogLevel(level);
+  }
+
+  /// Request all buffered log entries from the engine.
+  void getLogBuffer() {
+    _engine?.getLogBuffer();
+  }
+
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     final payload =
@@ -191,8 +204,8 @@ class EngineChannel {
 
       case 'RegistrationStateChanged':
         final id = payload['account_id'] as String? ?? '';
-        final state = RegistrationState.fromString(
-            payload['state'] as String? ?? '');
+        final state =
+            RegistrationState.fromString(payload['state'] as String? ?? '');
         final reason = payload['reason'] as String? ?? '';
         if (accounts.containsKey(id)) {
           accounts[id] = accounts[id]!
@@ -201,8 +214,7 @@ class EngineChannel {
 
       case 'CallStateChanged':
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
-        final state =
-            CallState.fromString(payload['state'] as String? ?? '');
+        final state = CallState.fromString(payload['state'] as String? ?? '');
         if (state == CallState.ended) {
           if (activeCall?.callId == callId) activeCall = null;
           mediaStats.remove(callId);
@@ -213,8 +225,8 @@ class EngineChannel {
             callId: callId,
             accountId: payload['account_id'] as String? ?? '',
             uri: payload['uri'] as String? ?? '',
-            direction: CallDirection.fromString(
-                payload['direction'] as String? ?? ''),
+            direction:
+                CallDirection.fromString(payload['direction'] as String? ?? ''),
             state: state,
             muted: payload['muted'] as bool? ?? false,
             onHold: payload['on_hold'] as bool? ?? false,

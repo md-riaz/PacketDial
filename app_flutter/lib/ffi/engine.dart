@@ -8,10 +8,11 @@ typedef _EngineShutdownC = ffi.Int32 Function();
 typedef _EngineVersionC = ffi.Pointer<ffi.Int8> Function();
 
 // Structured C ABI functions
-typedef _EngineRegisterC = ffi.Int32 Function(
-    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
+typedef _EngineRegisterC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>,
+    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineUnregisterC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
-typedef _EngineMakeCallC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
+typedef _EngineMakeCallC = ffi.Int32 Function(
+    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineAnswerCallC = ffi.Int32 Function();
 typedef _EngineHangupC = ffi.Int32 Function();
 typedef _EngineSetMuteC = ffi.Int32 Function(ffi.Int32);
@@ -19,8 +20,12 @@ typedef _EngineSetHoldC = ffi.Int32 Function(ffi.Int32);
 typedef _EngineListAudioDevicesC = ffi.Int32 Function();
 typedef _EngineSetAudioDevicesC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineQueryCallHistoryC = ffi.Int32 Function();
+typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineGetLogBufferC = ffi.Int32 Function();
 typedef _EngineSetEventCallbackC = ffi.Void Function(
-    ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>);
+    ffi.Pointer<
+        ffi
+        .NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>);
 
 /// Event IDs matching Rust EngineEventId enum.
 abstract class EngineEventId {
@@ -49,31 +54,33 @@ class VoipEngine {
       _lib.lookupFunction<_EngineInitC, int Function()>('engine_init');
   late final int Function() _shutdown =
       _lib.lookupFunction<_EngineShutdownC, int Function()>('engine_shutdown');
-  late final ffi.Pointer<ffi.Int8> Function() _version = _lib
-      .lookupFunction<_EngineVersionC, ffi.Pointer<ffi.Int8> Function()>(
+  late final ffi.Pointer<ffi.Int8> Function() _version =
+      _lib.lookupFunction<_EngineVersionC, ffi.Pointer<ffi.Int8> Function()>(
           'engine_version');
 
   // Structured C ABI function lookups
-  late final int Function(
-          ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
-      _register = _lib.lookupFunction<
+  late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>,
+          ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>) _register =
+      _lib.lookupFunction<
           _EngineRegisterC,
           int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>,
               ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)>('engine_register');
   late final int Function(ffi.Pointer<ffi.Int8>) _unregister = _lib
       .lookupFunction<_EngineUnregisterC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_unregister');
-  late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>) _makeCall = _lib
-      .lookupFunction<_EngineMakeCallC, int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)>(
-          'engine_make_call');
-  late final int Function() _answerCall =
-      _lib.lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
+  late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
+      _makeCall = _lib.lookupFunction<
+          _EngineMakeCallC,
+          int Function(ffi.Pointer<ffi.Int8>,
+              ffi.Pointer<ffi.Int8>)>('engine_make_call');
+  late final int Function() _answerCall = _lib
+      .lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
   late final int Function() _hangup =
       _lib.lookupFunction<_EngineHangupC, int Function()>('engine_hangup');
-  late final int Function(int) _setMute =
-      _lib.lookupFunction<_EngineSetMuteC, int Function(int)>('engine_set_mute');
-  late final int Function(int) _setHold =
-      _lib.lookupFunction<_EngineSetHoldC, int Function(int)>('engine_set_hold');
+  late final int Function(int) _setMute = _lib
+      .lookupFunction<_EngineSetMuteC, int Function(int)>('engine_set_mute');
+  late final int Function(int) _setHold = _lib
+      .lookupFunction<_EngineSetHoldC, int Function(int)>('engine_set_hold');
   late final int Function() _listAudioDevices =
       _lib.lookupFunction<_EngineListAudioDevicesC, int Function()>(
           'engine_list_audio_devices');
@@ -83,24 +90,29 @@ class VoipEngine {
   late final int Function() _queryCallHistory =
       _lib.lookupFunction<_EngineQueryCallHistoryC, int Function()>(
           'engine_query_call_history');
+  late final int Function(ffi.Pointer<ffi.Int8>) _setLogLevel = _lib
+      .lookupFunction<_EngineSetLogLevelC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_set_log_level');
+  late final int Function() _getLogBuffer =
+      _lib.lookupFunction<_EngineGetLogBufferC, int Function()>(
+          'engine_get_log_buffer');
   late final void Function(
-          ffi.Pointer<
-              ffi.NativeFunction<
-                  ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>)
+          ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>)
       _setEventCallback = _lib.lookupFunction<
-          _EngineSetEventCallbackC,
-          void Function(
-              ffi.Pointer<
-                  ffi.NativeFunction<
-                      ffi.Void Function(
-                          ffi.Int32, ffi.Pointer<ffi.Int8>)>>)>(
+              _EngineSetEventCallbackC,
+              void Function(
+                  ffi.Pointer<
+                      ffi.NativeFunction<
+                          ffi.Void Function(
+                              ffi.Int32, ffi.Pointer<ffi.Int8>)>>)>(
           'engine_set_event_callback');
 
   VoipEngine._(this._lib);
 
   static VoipEngine load() {
     if (!Platform.isWindows) {
-      throw UnsupportedError('This scaffold currently targets Windows desktop.');
+      throw UnsupportedError(
+          'This scaffold currently targets Windows desktop.');
     }
     final lib = ffi.DynamicLibrary.open('voip_core.dll');
     return VoipEngine._(lib);
@@ -193,6 +205,19 @@ class VoipEngine {
   /// Returns 0 on success, non-zero on error.
   int queryCallHistory() => _queryCallHistory();
 
+  /// Set the active log level filter.
+  int setLogLevel(String level) {
+    final ptr = _allocCString(level);
+    try {
+      return _setLogLevel(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Request all buffered log entries.
+  int getLogBuffer() => _getLogBuffer();
+
   /// Set a native event callback function.
   ///
   /// Pass a [ffi.Pointer] to a native function with signature:
@@ -241,8 +266,7 @@ class VoipEngine {
       if (codePoint >= 0xD800 && codePoint <= 0xDBFF && i + 1 < units.length) {
         final low = units[i + 1];
         if (low >= 0xDC00 && low <= 0xDFFF) {
-          codePoint =
-              0x10000 + (codePoint - 0xD800) * 0x400 + (low - 0xDC00);
+          codePoint = 0x10000 + (codePoint - 0xD800) * 0x400 + (low - 0xDC00);
           i += 2;
         } else {
           i++;
@@ -273,8 +297,8 @@ class VoipEngine {
 
   /// Allocate a native Int8 array from [bytes] using the Dart FFI allocator.
   ffi.Pointer<ffi.Int8> _allocBytes(List<int> bytes) {
-    final ptr =
-        ffi_alloc.calloc.allocate<ffi.Int8>(ffi.sizeOf<ffi.Int8>() * bytes.length);
+    final ptr = ffi_alloc.calloc
+        .allocate<ffi.Int8>(ffi.sizeOf<ffi.Int8>() * bytes.length);
     for (int i = 0; i < bytes.length; i++) {
       (ptr + i).value = bytes[i];
     }
