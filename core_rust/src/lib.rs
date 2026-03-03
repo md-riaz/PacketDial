@@ -1,12 +1,17 @@
+use interprocess::local_socket::{LocalSocketListener, LocalSocketStream};
 use once_cell::sync::Lazy;
 use once_cell::sync::OnceCell;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString};
+use std::io::{BufRead, BufReader, Write};
 use std::os::raw::c_char;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use crossbeam_channel::{unbounded, Sender};
 
 // ---------------------------------------------------------------------------
 // Global state
@@ -785,7 +790,11 @@ fn push_event(json: String) {
                 "LogLevelSet" => EngineEventId::LogLevelSet,
                 "LogBufferResult" => EngineEventId::LogBufferResult,
                 "EngineLog" => EngineEventId::EngineLog,
-                _ => return, // Unknown event type, ignore
+                _ => {
+                    // Even if unknown to the internal enum, we still broadcast to IPC
+                    broadcast_ipc(json);
+                    return;
+                }
             };
             // Extract payload and pass as JSON string
             if let Some(payload) = v.get("payload") {
@@ -795,6 +804,13 @@ fn push_event(json: String) {
             }
         }
     }
+    // Broadcast original JSON to all IPC listeners (CLI, PD, etc)
+    broadcast_ipc(json);
+}
+
+fn broadcast_ipc(json: String) {
+    let mut senders = CLIENT_SENDERS.lock().unwrap();
+    senders.retain(|s| s.send(json.clone()).is_ok());
 }
 
 fn push_reg_state(account_id: &str, state: &RegistrationState) {
@@ -1097,7 +1113,20 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
 fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
-        None => return EngineErrorCode::InvalidJson,
+        None => {
+            // Pick first registered account if none specified
+            let accts = ACCOUNTS.lock().unwrap();
+            match accts.iter().find(|a| a.pjsip_acc_id.is_some()) {
+                Some(a) => a.uuid.clone(),
+                None => {
+                    log_engine(
+                        LogLevel::Warn,
+                        "CallStart: No account specified and no registered accounts found",
+                    );
+                    return EngineErrorCode::NotFound;
+                }
+            }
+        }
     };
     let uri = match p["uri"].as_str() {
         Some(s) => s.to_owned(),
@@ -1169,11 +1198,24 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => n as u32,
-        None => return EngineErrorCode::InvalidJson,
-    };
     let mut calls_guard = CALLS.lock().unwrap();
+    let call_id = match p["call_id"].as_u64() {
+        Some(n) => Some(n as u32),
+        None => {
+            // Find first ringing incoming call
+            calls_guard
+                .iter()
+                .find(|c| {
+                    c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming)
+                })
+                .map(|c| c.id)
+        }
+    };
+    let call_id = match call_id {
+        Some(id) => id,
+        None => return EngineErrorCode::NotFound,
+    };
+
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
@@ -1203,11 +1245,22 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_call_hangup(p: &serde_json::Value) -> EngineErrorCode {
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => n as u32,
-        None => return EngineErrorCode::InvalidJson,
-    };
     let mut calls_guard = CALLS.lock().unwrap();
+    let call_id = match p["call_id"].as_u64() {
+        Some(n) => Some(n as u32),
+        None => {
+            // Find first active call
+            calls_guard
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        }
+    };
+    let call_id = match call_id {
+        Some(id) => id,
+        None => return EngineErrorCode::NotFound,
+    };
+
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
@@ -1237,12 +1290,23 @@ fn cmd_call_hangup(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_call_mute(p: &serde_json::Value) -> EngineErrorCode {
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => n as u32,
-        None => return EngineErrorCode::InvalidJson,
-    };
     let muted = p["muted"].as_bool().unwrap_or(true);
     let mut calls_guard = CALLS.lock().unwrap();
+    let call_id = match p["call_id"].as_u64() {
+        Some(n) => Some(n as u32),
+        None => {
+            // Use first active call
+            calls_guard
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        }
+    };
+    let call_id = match call_id {
+        Some(id) => id,
+        None => return EngineErrorCode::NotFound,
+    };
+
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
@@ -1258,12 +1322,23 @@ fn cmd_call_mute(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_call_hold(p: &serde_json::Value) -> EngineErrorCode {
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => n as u32,
-        None => return EngineErrorCode::InvalidJson,
-    };
     let hold = p["hold"].as_bool().unwrap_or(true);
     let mut calls_guard = CALLS.lock().unwrap();
+    let call_id = match p["call_id"].as_u64() {
+        Some(n) => Some(n as u32),
+        None => {
+            // Use first active call
+            calls_guard
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        }
+    };
+    let call_id = match call_id {
+        Some(id) => id,
+        None => return EngineErrorCode::NotFound,
+    };
+
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
@@ -1681,6 +1756,10 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
         }
         push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
         log_engine(LogLevel::Info, "Engine initialized (PJSIP active)");
+
+        // Start IPC API Server for external integrations (pd.exe, local scripts)
+        api_server_start();
+
         EngineErrorCode::Ok as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
@@ -1711,6 +1790,85 @@ pub extern "C" fn engine_shutdown() -> i32 {
         EngineErrorCode::Ok as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+fn api_server_start() {
+    let _ = thread::Builder::new()
+        .name("api-server".to_owned())
+        .spawn(|| {
+            let name = "PacketDial.API";
+            // On Windows, LocalSocketListener::bind("name") creates \\.\pipe\name
+            let listener = match LocalSocketListener::bind(name) {
+                Ok(l) => l,
+                Err(e) => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("API Server: Failed to bind {name}: {e}"),
+                    );
+                    return;
+                }
+            };
+            log_engine(
+                LogLevel::Info,
+                "API Server: Listening on \\\\.\\pipe\\PacketDial.API",
+            );
+
+            for stream in listener.incoming().flatten() {
+                thread::spawn(move || {
+                    handle_api_client(stream);
+                });
+            }
+        });
+}
+
+fn handle_api_client(stream: LocalSocketStream) {
+    let _ = stream.set_nonblocking(true);
+    let (tx, rx) = unbounded::<String>();
+
+    // Register this client for events
+    {
+        CLIENT_SENDERS.lock().unwrap().push(tx);
+    }
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+
+    loop {
+        // 1. Check for events from the DLL to broadcast to this client
+        while let Ok(msg) = rx.try_recv() {
+            let s = reader.get_mut();
+            if s.write_all(msg.as_bytes()).is_err() || s.write_all(b"\n").is_err() {
+                return;
+            }
+            let _ = s.flush();
+        }
+
+        // 2. Check for commands from the client to the DLL
+        match reader.read_line(&mut line) {
+            Ok(0) => break, // EOF
+            Ok(_) => {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                    let cmd_type = v["type"].as_str().unwrap_or("");
+                    let payload = v.get("payload").unwrap_or(&serde_json::Value::Null);
+                    let rc = dispatch_command(cmd_type, payload);
+
+                    let response = format!(
+                        "{{\"type\":\"CommandResponse\",\"payload\":{{\"rc\":{}}}}}\n",
+                        rc as i32
+                    );
+                    let s = reader.get_mut();
+                    let _ = s.write_all(response.as_bytes());
+                    let _ = s.flush();
+                }
+                line.clear();
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // No command data yet, wait a bit to avoid high CPU usage
+                thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => break, // Connection closed or error
+        }
+    }
 }
 
 /// Returns a pointer to a static, null-terminated UTF-8 string.
@@ -1750,15 +1908,18 @@ type EngineEventCallback = Option<extern "C" fn(event_id: i32, message: *const c
 
 static EVENT_CALLBACK: Lazy<Mutex<EngineEventCallback>> = Lazy::new(|| Mutex::new(None));
 
+/// All active IPC client senders for event broadcasting.
+static CLIENT_SENDERS: Lazy<Mutex<Vec<Sender<String>>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
 fn invoke_event_callback(event_id: EngineEventId, message: &str) {
-    let cb = EVENT_CALLBACK.lock().ok().and_then(|g| *g);
-    if let Some(cb) = cb {
-        if let Ok(cs) = CString::new(message) {
-            cb(event_id as i32, cs.as_ptr());
+    if let Ok(g) = EVENT_CALLBACK.lock() {
+        if let Some(cb) = *g {
+            if let Ok(cs) = CString::new(message) {
+                cb(event_id as i32, cs.as_ptr());
+            }
         }
     }
 }
-
 // ---------------------------------------------------------------------------
 // C ABI — direct structured API (no JSON parsing needed)
 // ---------------------------------------------------------------------------
