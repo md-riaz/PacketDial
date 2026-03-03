@@ -18,6 +18,28 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Enable git long paths
+        run: git config --system core.longpaths true
+
+      - name: Show repo structure (baseline)
+        shell: cmd
+        run: |
+          echo ===== REPO ROOT =====
+          tree /A /F /L 3
+
+      - name: Map workspace to short path
+        shell: pwsh
+        run: |
+          subst X: "$env:GITHUB_WORKSPACE"
+          Write-Host "Mapped workspace to X:"
+
+      - name: Show short path structure
+        shell: cmd
+        run: |
+          X:
+          echo ===== SHORT PATH ROOT =====
+          tree /A /F /L 2
+
       - name: Validate version format
         shell: bash
         run: |
@@ -29,6 +51,7 @@ jobs:
       - name: Update version.json
         shell: pwsh
         run: |
+          X:
           $vj = Get-Content version.json -Raw | ConvertFrom-Json
           $vj.version = "${{ inputs.release_version }}"
           $vj | ConvertTo-Json -Depth 5 | Set-Content version.json
@@ -51,21 +74,31 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Cargo test (Rust core)
-        working-directory: core_rust
-        run: cargo test
+        shell: pwsh
+        run: |
+          X:
+          cd core_rust
+          cargo test
 
       - name: Build Rust core (cdylib → voip_core.dll)
-        working-directory: core_rust
-        run: cargo build --release --target x86_64-pc-windows-msvc
+        shell: pwsh
+        run: |
+          X:
+          cd core_rust
+          cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Verify DLL exists
-        run: dir core_rust\target\x86_64-pc-windows-msvc\release
-
-      - name: Show Rust build directory tree
         shell: cmd
         run: |
-          echo === Rust target directory structure ===
-          tree /F /A core_rust\target\x86_64-pc-windows-msvc\release
+          X:
+          dir core_rust\target\x86_64-pc-windows-msvc\release
+
+      - name: Show Rust target structure
+        shell: cmd
+        run: |
+          X:
+          echo ===== RUST TARGET RELEASE =====
+          tree /A /F core_rust\target\x86_64-pc-windows-msvc\release
         continue-on-error: true
 
       - name: Install Flutter
@@ -76,27 +109,71 @@ jobs:
           cache: true
 
       - name: Enable Flutter Windows desktop
-        working-directory: app_flutter
-        run: flutter config --enable-windows-desktop
+        shell: pwsh
+        run: |
+          X:
+          cd app_flutter
+          flutter config --enable-windows-desktop
 
       - name: Flutter pub get
-        working-directory: app_flutter
-        run: flutter pub get
+        shell: pwsh
+        run: |
+          X:
+          cd app_flutter
+          flutter pub get
 
-      - name: Flutter build Windows (release)
-        working-directory: app_flutter
-        run: flutter build windows --release
-
-      - name: Show Flutter build directory tree
+      - name: Show Flutter project structure
         shell: cmd
         run: |
-          echo === Flutter build directory structure ===
-          tree /F /A app_flutter\build\windows
+          X:
+          echo ===== FLUTTER PROJECT =====
+          tree /A /F /L 2 app_flutter
+        continue-on-error: true
+
+      - name: Show Windows build folder before build
+        shell: cmd
+        run: |
+          X:
+          echo ===== BUILD WINDOWS FOLDER (PRE) =====
+          if exist app_flutter\build\windows (
+              tree /A /F app_flutter\build\windows
+          ) else (
+              echo No windows build folder yet.
+          )
+        continue-on-error: true
+
+      - name: Flutter build Windows (release)
+        shell: pwsh
+        run: |
+          X:
+          cd app_flutter
+          flutter clean
+          flutter build windows --release
+
+      - name: Inspect flutter_assets and runner folders
+        if: always()
+        shell: cmd
+        run: |
+          X:
+          echo ===== WINDOWS BUILD STRUCTURE (POST) =====
+          if exist app_flutter\build\windows\x64 (
+              tree /A /F app_flutter\build\windows\x64
+          ) else (
+              echo x64 folder missing.
+          )
+          echo.
+          echo ===== FLUTTER ASSETS CHECK =====
+          if exist app_flutter\build\windows\x64\flutter_assets (
+              tree /A /F app_flutter\build\windows\x64\flutter_assets
+          ) else (
+              echo flutter_assets folder MISSING
+          )
         continue-on-error: true
 
       - name: Copy voip_core.dll into Flutter output
         shell: pwsh
         run: |
+          X:
           $dll  = "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
           $dest = "app_flutter\build\windows\x64\runner\Release"
           if (Test-Path $dll) {
@@ -107,15 +184,23 @@ jobs:
           }
 
       - name: Show final Release directory tree before packaging
+        if: always()
         shell: cmd
         run: |
-          echo === Final Release directory structure ===
-          tree /F /A app_flutter\build\windows\x64\runner\Release
+          X:
+          echo ===== FINAL RELEASE DIRECTORY STRUCTURE =====
+          if exist app_flutter\build\windows\x64\runner\Release (
+              tree /A /F app_flutter\build\windows\x64\runner\Release
+          ) else (
+              echo Release folder does not exist
+          )
         continue-on-error: true
 
       - name: Package release artifact
         shell: pwsh
-        run: .\scripts\package.ps1
+        run: |
+          X:
+          .\scripts\package.ps1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
