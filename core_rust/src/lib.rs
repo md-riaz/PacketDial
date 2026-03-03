@@ -1813,18 +1813,26 @@ pub extern "C" fn engine_set_event_callback(
 /// This is a convenience wrapper around the JSON `AccountUpsert` +
 /// `AccountRegister` commands.  All strings must be null-terminated UTF-8.
 ///
+/// `account_id` is the user-provided identifier for the account (can be any string).
+/// `user`, `pass`, and `domain` are the SIP credentials.
+///
 /// Returns 0 on success, non-zero on error.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn engine_register(
+    account_id: *const c_char,
     user: *const c_char,
     pass: *const c_char,
     domain: *const c_char,
 ) -> i32 {
-    if user.is_null() || pass.is_null() || domain.is_null() {
+    if account_id.is_null() || user.is_null() || pass.is_null() || domain.is_null() {
         return EngineErrorCode::InvalidUtf8 as i32;
     }
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let acct_id = match unsafe { CStr::from_ptr(account_id) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
         let user_s = match unsafe { CStr::from_ptr(user) }.to_str() {
             Ok(s) => s.to_owned(),
             Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
@@ -1842,10 +1850,7 @@ pub extern "C" fn engine_register(
             return EngineErrorCode::NotInitialized as i32;
         }
 
-        // Use a deterministic account id derived from user@domain
-        let acct_id = format!("{user_s}@{domain_s}");
-
-        // Upsert account
+        // Upsert account with user-provided account_id
         let upsert_json = serde_json::json!({
             "id": acct_id,
             "display_name": &user_s,
@@ -1867,17 +1872,21 @@ pub extern "C" fn engine_register(
 
 /// Make an outgoing call.
 ///
+/// `account_id` is the account to use for the call (null-terminated UTF-8).
 /// `number` is the destination SIP URI or phone number (null-terminated UTF-8).
-/// Uses the first registered account.
 ///
 /// Returns 0 on success, non-zero on error.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
-    if number.is_null() {
+pub extern "C" fn engine_make_call(account_id: *const c_char, number: *const c_char) -> i32 {
+    if account_id.is_null() || number.is_null() {
         return EngineErrorCode::InvalidUtf8 as i32;
     }
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let account_id_s = match unsafe { CStr::from_ptr(account_id) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
         let number_s = match unsafe { CStr::from_ptr(number) }.to_str() {
             Ok(s) => s.to_owned(),
             Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
@@ -1887,29 +1896,12 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
             return EngineErrorCode::NotInitialized as i32;
         }
 
-        // Find the first registered account, or first account if none registered
-        let account_id = {
-            let accts = ACCOUNTS.lock().unwrap();
-            accts
-                .iter()
-                .find(|a| a.reg_state == RegistrationState::Registered)
-                .or_else(|| accts.first())
-                .map(|a| a.id.clone())
-        };
-        let account_id = match account_id {
-            Some(id) => id,
-            None => {
-                log_engine(LogLevel::Error, "No account available for call");
-                return EngineErrorCode::NotFound as i32;
-            }
-        };
-
         // Format as SIP URI if not already
         let uri = if number_s.starts_with("sip:") || number_s.starts_with("sips:") {
             number_s
         } else {
             // Extract domain from account_id (user@domain)
-            let domain = match account_id.split('@').nth(1) {
+            let domain = match account_id_s.split('@').nth(1) {
                 Some(d) => d,
                 None => {
                     log_engine(
@@ -1923,7 +1915,7 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
         };
 
         let call_json = serde_json::json!({
-            "account_id": account_id,
+            "account_id": account_id_s,
             "uri": uri,
         });
         dispatch_command("CallStart", &call_json) as i32
@@ -2074,7 +2066,7 @@ pub extern "C" fn engine_set_hold(on_hold: i32) -> i32 {
             None => return EngineErrorCode::NotFound as i32,
         };
 
-        let hold_json = serde_json::json!({ "call_id": call_id, "on_hold": on_hold != 0 });
+        let hold_json = serde_json::json!({ "call_id": call_id, "hold": on_hold != 0 });
         dispatch_command("CallHold", &hold_json) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)

@@ -37,7 +37,7 @@ class _DialerScreenState extends State<DialerScreen> {
       return;
     }
     // Use structured C ABI to make call
-    _channel.engine.makeCall(uri);
+    _channel.engine.makeCall(accountId, uri);
   }
 
   Widget _dialButton(String label) => Expanded(

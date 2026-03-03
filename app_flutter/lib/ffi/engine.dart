@@ -9,9 +9,9 @@ typedef _EngineVersionC = ffi.Pointer<ffi.Int8> Function();
 
 // Structured C ABI functions
 typedef _EngineRegisterC = ffi.Int32 Function(
-    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
+    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineUnregisterC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
-typedef _EngineMakeCallC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineMakeCallC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineAnswerCallC = ffi.Int32 Function();
 typedef _EngineHangupC = ffi.Int32 Function();
 typedef _EngineSetMuteC = ffi.Int32 Function(ffi.Int32);
@@ -55,16 +55,16 @@ class VoipEngine {
 
   // Structured C ABI function lookups
   late final int Function(
-          ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
+          ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
       _register = _lib.lookupFunction<
           _EngineRegisterC,
           int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>,
-              ffi.Pointer<ffi.Int8>)>('engine_register');
+              ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)>('engine_register');
   late final int Function(ffi.Pointer<ffi.Int8>) _unregister = _lib
       .lookupFunction<_EngineUnregisterC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_unregister');
-  late final int Function(ffi.Pointer<ffi.Int8>) _makeCall = _lib
-      .lookupFunction<_EngineMakeCallC, int Function(ffi.Pointer<ffi.Int8>)>(
+  late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>) _makeCall = _lib
+      .lookupFunction<_EngineMakeCallC, int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)>(
           'engine_make_call');
   late final int Function() _answerCall =
       _lib.lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
@@ -119,13 +119,15 @@ class VoipEngine {
 
   /// Register a SIP account directly.
   /// Returns 0 on success, non-zero on error.
-  int register(String user, String pass, String domain) {
+  int register(String accountId, String user, String pass, String domain) {
+    final accountIdPtr = _allocCString(accountId);
     final userPtr = _allocCString(user);
     final passPtr = _allocCString(pass);
     final domainPtr = _allocCString(domain);
     try {
-      return _register(userPtr, passPtr, domainPtr);
+      return _register(accountIdPtr, userPtr, passPtr, domainPtr);
     } finally {
+      _freeNative(accountIdPtr);
       _freeNative(userPtr);
       _freeNative(passPtr);
       _freeNative(domainPtr);
@@ -144,14 +146,17 @@ class VoipEngine {
   }
 
   /// Make an outgoing call.
+  /// [accountId] is the account ID to use for the call.
   /// [number] is a SIP URI or phone number.
   /// Returns 0 on success, non-zero on error.
-  int makeCall(String number) {
-    final ptr = _allocCString(number);
+  int makeCall(String accountId, String number) {
+    final accountIdPtr = _allocCString(accountId);
+    final numberPtr = _allocCString(number);
     try {
-      return _makeCall(ptr);
+      return _makeCall(accountIdPtr, numberPtr);
     } finally {
-      _freeNative(ptr);
+      _freeNative(accountIdPtr);
+      _freeNative(numberPtr);
     }
   }
 

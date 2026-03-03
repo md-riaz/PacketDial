@@ -178,6 +178,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           onPressed: () {
                             // Use structured C ABI to register
                             _channel.engine.register(
+                              a.id,
                               a.username,
                               a.password,
                               a.server,
