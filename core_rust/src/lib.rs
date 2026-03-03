@@ -1877,6 +1877,7 @@ pub extern "C" fn engine_set_event_callback(
 ///
 /// Returns 0 on success, non-zero on error.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn engine_register(
     user: *const c_char,
     pass: *const c_char,
@@ -1933,6 +1934,7 @@ pub extern "C" fn engine_register(
 ///
 /// Returns 0 on success, non-zero on error.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
     if number.is_null() {
         return EngineErrorCode::InvalidUtf8 as i32;
@@ -1972,10 +1974,7 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
             number_s
         } else {
             // Extract domain from account_id (user@domain)
-            let domain = account_id
-                .split('@')
-                .nth(1)
-                .unwrap_or("localhost");
+            let domain = account_id.split('@').nth(1).unwrap_or("localhost");
             format!("sip:{number_s}@{domain}")
         };
 
