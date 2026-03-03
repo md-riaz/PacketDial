@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ffi/engine.dart';
 import '../core/engine_channel.dart';
-import 'dart:convert';
 
 /// Provider for the raw VoipEngine instance.
 final engineProvider = Provider<VoipEngine>((ref) {
@@ -10,13 +9,7 @@ final engineProvider = Provider<VoipEngine>((ref) {
 
 /// Provider for the stream of events coming from the native SIP engine.
 final engineEventsProvider = StreamProvider<Map<String, dynamic>>((ref) {
-  return EngineChannel.instance.eventStream.map((event) {
-    try {
-      return jsonDecode(event.data) as Map<String, dynamic>;
-    } catch (e) {
-      return {'type': 'error', 'error': e.toString(), 'raw': event.data};
-    }
-  });
+  return EngineChannel.instance.eventStream;
 });
 
 /// Specialized provider for registration state.

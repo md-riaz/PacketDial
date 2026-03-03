@@ -1,28 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/account_service.dart';
+import '../models/account_schema.dart';
+import '../providers/engine_provider.dart';
 
-import '../core/engine_channel.dart';
-import '../models/account.dart';
+final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
+  return ref.read(accountServiceProvider).getAllAccounts();
+});
 
-class AccountsScreen extends StatefulWidget {
+class AccountsScreen extends ConsumerStatefulWidget {
   const AccountsScreen({super.key});
 
   @override
-  State<AccountsScreen> createState() => _AccountsScreenState();
+  ConsumerState<AccountsScreen> createState() => _AccountsScreenState();
 }
 
-class _AccountsScreenState extends State<AccountsScreen> {
-  final _channel = EngineChannel.instance;
-
-  @override
-  void initState() {
-    super.initState();
-    _channel.events.listen((_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  void _showAccountDialog({Account? existing}) {
-    final idCtrl = TextEditingController(text: existing?.id ?? '');
+class _AccountsScreenState extends ConsumerState<AccountsScreen> {
+  void _showAccountDialog({AccountSchema? existing}) {
+    final idCtrl = TextEditingController(text: existing?.accountId ?? '');
     final nameCtrl = TextEditingController(text: existing?.displayName ?? '');
     final serverCtrl = TextEditingController(
         text: existing?.server ?? 'cpx.alphapbx.net:8090');
@@ -33,6 +28,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     String transport = existing?.transport ?? 'udp';
     bool tlsEnabled = existing?.tlsEnabled ?? false;
     bool srtpEnabled = existing?.srtpEnabled ?? false;
+    bool autoRegister = existing?.autoRegister ?? true;
     final isNew = existing == null;
 
     showDialog<void>(
@@ -65,39 +61,24 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     decoration: const InputDecoration(labelText: 'Password')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  initialValue: transport,
+                  value: transport,
                   decoration: const InputDecoration(labelText: 'Transport'),
                   items: const [
                     DropdownMenuItem(value: 'udp', child: Text('UDP')),
                     DropdownMenuItem(value: 'tcp', child: Text('TCP')),
+                    DropdownMenuItem(value: 'tls', child: Text('TLS')),
                   ],
                   onChanged: (v) => setDlgState(() => transport = v ?? 'udp'),
                 ),
-                const SizedBox(height: 4),
                 TextField(
                     controller: stunCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'STUN Server (optional)',
-                        hintText: 'stun.example.com:3478')),
-                TextField(
-                    controller: turnCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'TURN Server (optional)',
-                        hintText: 'turn.example.com:3478')),
-                const SizedBox(height: 8),
+                        labelText: 'STUN Server (optional)')),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Enable TLS (SIPS)'),
-                  subtitle: const Text('Encrypts SIP signalling'),
-                  value: tlsEnabled,
-                  onChanged: (v) => setDlgState(() => tlsEnabled = v ?? false),
-                ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Enable SRTP'),
-                  subtitle: const Text('Encrypts audio media'),
-                  value: srtpEnabled,
-                  onChanged: (v) => setDlgState(() => srtpEnabled = v ?? false),
+                  title: const Text('Auto-register on startup'),
+                  value: autoRegister,
+                  onChanged: (v) => setDlgState(() => autoRegister = v ?? true),
                 ),
               ],
             ),
@@ -107,25 +88,27 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel')),
             FilledButton(
-              onPressed: () {
-                final id = isNew ? idCtrl.text.trim() : existing.id;
+              onPressed: () async {
+                final id = isNew ? idCtrl.text.trim() : existing.accountId;
                 if (id.isEmpty) return;
-                final acct = Account(
-                  id: id,
-                  displayName: nameCtrl.text.trim(),
-                  server: serverCtrl.text.trim(),
-                  username: userCtrl.text.trim(),
-                  password: passCtrl.text,
-                  transport: transport,
-                  stunServer: stunCtrl.text.trim(),
-                  turnServer: turnCtrl.text.trim(),
-                  tlsEnabled: tlsEnabled,
-                  srtpEnabled: srtpEnabled,
-                );
-                // Store account locally in Dart
-                _channel.accounts[id] = acct;
-                Navigator.pop(ctx);
-                setState(() {});
+
+                final schema = AccountSchema()
+                  ..id = existing?.id
+                  ..accountId = id
+                  ..displayName = nameCtrl.text.trim()
+                  ..server = serverCtrl.text.trim()
+                  ..username = userCtrl.text.trim()
+                  ..password = passCtrl.text
+                  ..transport = transport
+                  ..stunServer = stunCtrl.text.trim()
+                  ..turnServer = turnCtrl.text.trim()
+                  ..tlsEnabled = tlsEnabled
+                  ..srtpEnabled = srtpEnabled
+                  ..autoRegister = autoRegister;
+
+                await ref.read(accountServiceProvider).saveAccount(schema);
+                ref.invalidate(accountsListProvider);
+                if (mounted) Navigator.pop(ctx);
               },
               child: const Text('Save'),
             ),
@@ -137,66 +120,67 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accounts = _channel.accounts.values.toList();
+    final accountsAsync = ref.watch(accountsListProvider);
+
+    // Simple way to listen to global reg updates and refresh local UI list
+    ref.listen(engineEventsProvider, (prev, next) {
+      if (next.value?['type'] == 'RegistrationStateChanged') {
+        ref.invalidate(accountsListProvider);
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(title: const Text('Accounts')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAccountDialog(),
-        tooltip: 'Add Account',
+        mini: true,
         child: const Icon(Icons.add),
       ),
-      body: accounts.isEmpty
-          ? const Center(
-              child: Text('No accounts configured.\nTap + to add one.'))
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: accounts.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (_, i) {
-                final a = accounts[i];
-                final registered =
-                    a.registrationState == RegistrationState.registered;
-                return ListTile(
-                  leading: Icon(
-                    Icons.person,
-                    color: registered ? Colors.green : Colors.grey,
-                  ),
-                  title: Text(a.displayName.isEmpty ? a.id : a.displayName),
-                  subtitle: Text(
-                      '${a.username}@${a.server}  •  ${a.transport.toUpperCase()}${a.tlsEnabled ? ' + TLS' : ''}${a.srtpEnabled ? ' + SRTP' : ''}  •  ${a.registrationState.label}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!registered)
+      body: accountsAsync.when(
+        data: (accounts) => accounts.isEmpty
+            ? const Center(child: Text('No accounts. Add one using +.'))
+            : ListView.separated(
+                padding: const EdgeInsets.all(8),
+                itemCount: accounts.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final a = accounts[i];
+                  // Registration state is handled in-memory by EngineChannel for now,
+                  // but we display it here.
+                  return ListTile(
+                    dense: true,
+                    title: Text(a.displayName),
+                    subtitle: Text('${a.username}@${a.server}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         TextButton(
                           onPressed: () {
-                            // Use structured C ABI to register
-                            _channel.engine.register(
-                              a.id,
-                              a.username,
-                              a.password,
-                              a.server,
-                            );
+                            ref.read(accountServiceProvider).register(a);
                           },
                           child: const Text('Register'),
-                        )
-                      else
-                        TextButton(
-                          onPressed: () {
-                            // Use structured C ABI to unregister
-                            _channel.engine.unregister(a.id);
-                          },
-                          child: const Text('Unregister'),
                         ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _showAccountDialog(existing: a),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 18),
+                          onPressed: () => _showAccountDialog(existing: a),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, size: 18),
+                          onPressed: () async {
+                            await ref
+                                .read(accountServiceProvider)
+                                .deleteAccount(a.accountId);
+                            ref.invalidate(accountsListProvider);
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+      ),
     );
   }
 }

@@ -48,7 +48,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<int>(
                 groupValue: selIn,
-                onChanged: (v) { if (v != null) setDlgState(() => selIn = v); },
+                onChanged: (v) {
+                  if (v != null) setDlgState(() => selIn = v);
+                },
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: inputs
@@ -65,7 +67,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<int>(
                 groupValue: selOut,
-                onChanged: (v) { if (v != null) setDlgState(() => selOut = v); },
+                onChanged: (v) {
+                  if (v != null) setDlgState(() => selOut = v);
+                },
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: outputs
@@ -105,65 +109,98 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Active Call'),
+        title: const Text('Call'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.speaker),
-            tooltip: 'Audio Devices',
+            icon: const Icon(Icons.settings_input_component, size: 20),
+            tooltip: 'Audio Output',
             onPressed: _showDevicePicker,
           ),
         ],
       ),
       body: call == null
-          ? const Center(child: Text('No active call.'))
+          ? const Center(child: Text('Idle'))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  const Icon(Icons.call, size: 64, color: Colors.green),
-                  const SizedBox(height: 16),
-                  Text(
-                    call.uri,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
-                  ),
+                  const Icon(Icons.account_circle,
+                      size: 48, color: Colors.indigo),
                   const SizedBox(height: 8),
                   Text(
-                    call.state.label,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    call.uri,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                            color: Colors.green, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        call.state.label,
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
                   ),
                   if (call.direction == CallDirection.incoming)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Chip(label: Text('Incoming call')),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4)),
+                        child: const Text('INCOMING',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange)),
+                      ),
                     ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _controlButton(
+                      _compactButton(
                         icon: call.muted ? Icons.mic_off : Icons.mic,
                         label: call.muted ? 'Unmute' : 'Mute',
-                        color: call.muted ? Colors.red : null,
+                        active: call.muted,
                         onTap: () => _toggleMute(call),
                       ),
-                      _controlButton(
-                        icon:
-                            call.onHold ? Icons.play_arrow : Icons.pause,
+                      _compactButton(
+                        icon: call.onHold ? Icons.play_arrow : Icons.pause,
                         label: call.onHold ? 'Resume' : 'Hold',
+                        active: call.onHold,
                         onTap: () => _toggleHold(call),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32),
-                  FloatingActionButton.extended(
-                    onPressed: () => _hangup(call.callId),
-                    backgroundColor: Colors.red,
-                    icon: const Icon(Icons.call_end),
-                    label: const Text('Hang Up'),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _hangup(call.callId),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      icon: const Icon(Icons.call_end, size: 18),
+                      label: const Text('Hang Up'),
+                    ),
                   ),
                   if (stats != null) ...[
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
                     _MediaStatsCard(stats: stats),
                   ],
                 ],
@@ -172,22 +209,30 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     );
   }
 
-  Widget _controlButton({
+  Widget _compactButton({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
-    Color? color,
+    bool active = false,
   }) =>
       InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 64,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: active
+              ? BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8))
+              : null,
           child: Column(
             children: [
-              Icon(icon, size: 36, color: color),
+              Icon(icon, size: 24, color: active ? Colors.red : Colors.indigo),
               const SizedBox(height: 4),
-              Text(label),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11, color: active ? Colors.red : null)),
             ],
           ),
         ),
@@ -212,8 +257,8 @@ class _MediaStatsCard extends StatelessWidget {
             _StatRow('Codec', stats.codec),
             _StatRow('Bitrate', '${stats.bitrateKbps} kbps'),
             _StatRow('Jitter', '${stats.jitterMs.toStringAsFixed(1)} ms'),
-            _StatRow('Packet Loss',
-                '${stats.packetLossPct.toStringAsFixed(1)} %'),
+            _StatRow(
+                'Packet Loss', '${stats.packetLossPct.toStringAsFixed(1)} %'),
           ],
         ),
       ),
@@ -232,8 +277,7 @@ class _StatRow extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label,
-                style: const TextStyle(color: Colors.grey)),
+            Text(label, style: const TextStyle(color: Colors.grey)),
             Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
           ],
         ),

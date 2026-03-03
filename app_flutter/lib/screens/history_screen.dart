@@ -1,81 +1,95 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:isar/isar.dart';
+import '../core/account_service.dart';
+import '../models/call_history_schema.dart';
+import '../providers/engine_provider.dart';
 
-import '../core/engine_channel.dart';
-import '../models/call_history.dart';
+final historyListProvider = FutureProvider<List<CallHistorySchema>>((ref) {
+  final isar = ref.read(accountServiceProvider).isar;
+  if (isar == null) return [];
+  return isar.callHistorySchemas.where().sortByTimestampDesc().findAll();
+});
 
-class HistoryScreen extends StatefulWidget {
+class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(historyListProvider);
 
-class _HistoryScreenState extends State<HistoryScreen> {
-  final _channel = EngineChannel.instance;
-
-  @override
-  void initState() {
-    super.initState();
-    // Refresh on first load and whenever events arrive
-    _channel.engine.queryCallHistory();
-    _channel.events.listen((_) {
-      if (mounted) setState(() {});
+    // Refresh when engine events indicate a change
+    ref.listen(engineEventsProvider, (prev, next) {
+      final type = next.value?['type'];
+      if (type == 'CallHistoryResult' || type == 'CallStateChanged') {
+        ref.invalidate(historyListProvider);
+      }
     });
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    // Show newest calls first
-    final history = _channel.callHistory.reversed.toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Call History'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-            onPressed: () => _channel.engine.queryCallHistory(),
+            icon: const Icon(Icons.delete_sweep, size: 20),
+            tooltip: 'Clear History',
+            onPressed: () async {
+              final isar = ref.read(accountServiceProvider).isar;
+              if (isar != null) {
+                await isar.writeTxn(() => isar.callHistorySchemas.clear());
+                ref.invalidate(historyListProvider);
+              }
+            },
           ),
         ],
       ),
-      body: history.isEmpty
-          ? const Center(child: Text('No call history yet.'))
-          : ListView.separated(
-              padding: const EdgeInsets.all(8),
-              itemCount: history.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) => _HistoryTile(entry: history[i]),
-            ),
+      body: historyAsync.when(
+        data: (history) => history.isEmpty
+            ? const Center(child: Text('No call history yet.'))
+            : ListView.separated(
+                padding: const EdgeInsets.all(8),
+                itemCount: history.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) => _HistoryTile(entry: history[i]),
+              ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+      ),
     );
   }
 }
 
 class _HistoryTile extends StatelessWidget {
-  final CallHistoryEntry entry;
+  final CallHistorySchema entry;
   const _HistoryTile({required this.entry});
 
   @override
   Widget build(BuildContext context) {
-    final isOutgoing = entry.direction == 'Outgoing';
+    final isOutgoing = entry.direction.toLowerCase() == 'outgoing';
     final dirIcon = isOutgoing ? Icons.call_made : Icons.call_received;
     final dirColor = isOutgoing ? Colors.blue : Colors.green;
 
     return ListTile(
+      dense: true,
       leading: CircleAvatar(
-        backgroundColor: dirColor.withAlpha(30),
-        child: Icon(dirIcon, color: dirColor, size: 20),
+        radius: 16,
+        backgroundColor: dirColor.withOpacity(0.1),
+        child: Icon(dirIcon, color: dirColor, size: 16),
       ),
       title: Text(
         entry.uri,
+        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-          '${entry.accountId}  •  ${entry.direction}  •  ${entry.durationLabel}'),
+        '${entry.accountId}  •  ${entry.timestamp.toString().substring(0, 16)}',
+        style: const TextStyle(fontSize: 11),
+      ),
       trailing: Text(
-        entry.endState,
+        entry.status,
         style: TextStyle(
-          color: entry.endState == 'Ended' ? Colors.grey : Colors.red,
-          fontSize: 12,
+          color: entry.status == 'completed' ? Colors.grey : Colors.red,
+          fontSize: 11,
         ),
       ),
     );

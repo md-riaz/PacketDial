@@ -3,16 +3,35 @@
     Package the PacketDial Windows release build into a distributable ZIP.
 
 .DESCRIPTION
-    Reads the version from version.json, copies the Flutter Windows build
-    output and the Rust core DLL into a staging directory, then compresses
-    it to dist/PacketDial-windows-x64.zip.
+    Prepares the final release artifact by:
 
-    Run from the repository root:
+    1. Reading version from version.json
+    2. Collecting Flutter Windows release build output
+    3. Adding the Rust core DLL (voip_core.dll)
+    4. Validating required Flutter runtime files (flutter_windows.dll, icudtl.dat, data/)
+    5. Compressing everything into dist/PacketDial-windows-x64.zip
+
+    Run from the 
+
+ root:
         .\scripts\package.ps1
 
     Prerequisites:
-        - flutter build windows --release has completed inside app_flutter/
-        - cargo build --release has completed inside core_rust/
+        - flutter build windows --release has completed
+        - cargo build --release has completed (optional; app works without PJSIP DLL)
+        - version.json exists in the repository root
+
+.OUTPUTS
+    dist\PacketDial-windows-x64.zip  (distributable package)
+
+.NOTES
+    - If voip_core.dll is missing, the package is created without it
+      (app runs with stub SIP engine)
+    - Flutter build output is validated before packaging
+    - Staging directory is cleaned up after compression
+
+.LINK
+    See docs/release-process.md for full release workflow
 #>
 
 $ErrorActionPreference = 'Stop'

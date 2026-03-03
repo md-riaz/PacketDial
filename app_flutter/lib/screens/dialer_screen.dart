@@ -56,50 +56,51 @@ class _DialerScreenState extends State<DialerScreen> {
     );
   }
 
-  Widget _dialButton(String label) => Expanded(
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: ElevatedButton(
-            onPressed: () => _dialKey(label),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-            ),
-            child: Text(label, style: const TextStyle(fontSize: 20)),
-          ),
-        ),
-      );
-
   @override
   Widget build(BuildContext context) {
     final accountIds = _channel.accounts.keys.toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Dialer')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Column(
           children: [
             if (accountIds.isNotEmpty)
-              DropdownButtonFormField<String>(
-                initialValue: _selectedAccountId ?? accountIds.first,
-                decoration: const InputDecoration(labelText: 'Account'),
-                items: accountIds
-                    .map((id) => DropdownMenuItem(value: id, child: Text(id)))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedAccountId = v),
+              SizedBox(
+                height: 48,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedAccountId ?? accountIds.first,
+                  decoration: const InputDecoration(
+                    labelText: 'Account',
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                  ),
+                  items: accountIds
+                      .map((id) => DropdownMenuItem(
+                          value: id,
+                          child:
+                              Text(id, style: const TextStyle(fontSize: 13))))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedAccountId = v),
+                ),
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             TextField(
               controller: _uriCtrl,
+              style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                 labelText: 'SIP URI / Number',
-                hintText: 'sip:alice@example.com',
+                isDense: true,
+                hintText: '100 or sip:alice@server',
                 suffixIcon: IconButton(
-                    icon: const Icon(Icons.backspace), onPressed: _backspace),
+                  icon: const Icon(Icons.backspace, size: 18),
+                  onPressed: _backspace,
+                ),
               ),
               keyboardType: TextInputType.url,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             // Numpad
             for (final row in [
               ['1', '2', '3'],
@@ -107,14 +108,38 @@ class _DialerScreenState extends State<DialerScreen> {
               ['7', '8', '9'],
               ['*', '0', '#'],
             ])
-              Row(children: row.map(_dialButton).toList()),
+              Row(
+                children: row
+                    .map((label) => Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: OutlinedButton(
+                              onPressed: () => _dialKey(label),
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4)),
+                              ),
+                              child: Text(label,
+                                  style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.normal)),
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _call,
-              icon: const Icon(Icons.call),
+              icon: const Icon(Icons.call, size: 20),
               label: const Text('Call'),
               style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52)),
+                minimumSize: const Size.fromHeight(44),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+              ),
             ),
           ],
         ),

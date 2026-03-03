@@ -9,6 +9,8 @@ import '../models/call.dart';
 import '../models/call_history.dart';
 import '../models/log_entry.dart';
 import '../models/media_stats.dart';
+import '../models/call_history_schema.dart';
+import 'package:isar/isar.dart';
 
 /// Maximum number of structured log entries retained in memory.
 const _kLogBufferMax = 500;
@@ -25,6 +27,7 @@ class EngineChannel {
   static final EngineChannel instance = EngineChannel._();
 
   VoipEngine? _engine;
+  Isar? _isar;
   ffi.NativeCallable<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>?
       _nativeCallable;
 
@@ -32,6 +35,9 @@ class EngineChannel {
 
   /// Broadcast stream of raw event maps from the engine.
   Stream<Map<String, dynamic>> get events => _eventController.stream;
+
+  /// Compatibility getter for engine_provider.dart
+  Stream<Map<String, dynamic>> get eventStream => _eventController.stream;
 
   // --- Public state -----------------------------------------------------------
 
@@ -63,8 +69,9 @@ class EngineChannel {
   // --- Lifecycle --------------------------------------------------------------
 
   /// Attach the channel to a loaded [VoipEngine] and register callback.
-  void attach(VoipEngine engine) {
+  void attach(VoipEngine engine, Isar isar) {
     _engine = engine;
+    _isar = isar;
 
     // Use NativeCallable.listener for thread-safe callbacks from PJSIP worker threads.
     _nativeCallable = ffi.NativeCallable<
@@ -216,7 +223,20 @@ class EngineChannel {
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
         final state = CallState.fromString(payload['state'] as String? ?? '');
         if (state == CallState.ended) {
-          if (activeCall?.callId == callId) activeCall = null;
+          if (activeCall?.callId == callId) {
+            // Save to Isar
+            if (_isar != null) {
+              final entry = CallHistorySchema()
+                ..accountId = activeCall!.accountId
+                ..uri = activeCall!.uri
+                ..direction = activeCall!.direction.name
+                ..timestamp = DateTime.now()
+                ..durationSeconds = 0 // In a real app, track start time
+                ..status = 'completed';
+              _isar!.writeTxn(() => _isar!.callHistorySchemas.put(entry));
+            }
+            activeCall = null;
+          }
           mediaStats.remove(callId);
           // Refresh call history
           _engine?.queryCallHistory();
