@@ -66,7 +66,7 @@ class _DialerScreenState extends State<DialerScreen> {
           children: [
             if (accountIds.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: _selectedAccountId ?? accountIds.first,
+                initialValue: _selectedAccountId ?? accountIds.first,
                 decoration:
                     const InputDecoration(labelText: 'Account'),
                 items: accountIds

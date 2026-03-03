@@ -168,7 +168,7 @@ class EngineChannel {
     final bytes = <int>[];
     int i = 0;
     while (true) {
-      final v = ptr.elementAt(i).value;
+      final v = (ptr + i).value;
       if (v == 0) break;
       bytes.add(v);
       i++;

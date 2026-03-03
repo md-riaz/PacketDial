@@ -220,7 +220,7 @@ class VoipEngine {
     final bytes = <int>[];
     int i = 0;
     while (true) {
-      final v = ptr.elementAt(i).value;
+      final v = (ptr + i).value;
       if (v == 0) break;
       bytes.add(v);
       i++;
@@ -276,7 +276,7 @@ class VoipEngine {
     final ptr =
         ffi_alloc.calloc.allocate<ffi.Int8>(ffi.sizeOf<ffi.Int8>() * bytes.length);
     for (int i = 0; i < bytes.length; i++) {
-      ptr.elementAt(i).value = bytes[i];
+      (ptr + i).value = bytes[i];
     }
     return ptr;
   }

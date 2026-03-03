@@ -67,7 +67,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         const InputDecoration(labelText: 'Password')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: transport,
+                  initialValue: transport,
                   decoration:
                       const InputDecoration(labelText: 'Transport'),
                   items: const [

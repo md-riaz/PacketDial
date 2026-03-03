@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../core/engine_channel.dart';
 import '../models/call.dart';
 import '../models/media_stats.dart';
-import '../models/audio_device.dart';
 
 class ActiveCallScreen extends StatefulWidget {
   const ActiveCallScreen({super.key});
@@ -47,23 +46,31 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
             children: [
               const Text('Microphone',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              ...inputs.map((d) => RadioListTile<int>(
-                    value: d.id,
-                    groupValue: selIn,
-                    title: Text(d.name),
-                    onChanged: (v) => setDlgState(() => selIn = v!),
-                    dense: true,
-                  )),
+              RadioGroup<int>(
+                value: selIn,
+                onChanged: (v) => setDlgState(() => selIn = v),
+                children: inputs
+                    .map((d) => RadioListTile<int>(
+                          value: d.id,
+                          title: Text(d.name),
+                          dense: true,
+                        ))
+                    .toList(),
+              ),
               const SizedBox(height: 8),
               const Text('Speaker',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              ...outputs.map((d) => RadioListTile<int>(
-                    value: d.id,
-                    groupValue: selOut,
-                    title: Text(d.name),
-                    onChanged: (v) => setDlgState(() => selOut = v!),
-                    dense: true,
-                  )),
+              RadioGroup<int>(
+                value: selOut,
+                onChanged: (v) => setDlgState(() => selOut = v),
+                children: outputs
+                    .map((d) => RadioListTile<int>(
+                          value: d.id,
+                          title: Text(d.name),
+                          dense: true,
+                        ))
+                    .toList(),
+              ),
             ],
           ),
           actions: [
