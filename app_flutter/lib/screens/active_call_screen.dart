@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../core/engine_channel.dart';
 import '../models/call.dart';
 import '../models/media_stats.dart';
-import '../models/audio_device.dart';
 
 class ActiveCallScreen extends StatefulWidget {
   const ActiveCallScreen({super.key});
@@ -23,14 +22,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     });
   }
 
-  void _hangup(int callId) =>
-      _channel.sendCommand('CallHangup', {'call_id': callId});
+  void _hangup(int callId) => _channel.engine.hangup();
 
-  void _toggleMute(ActiveCall call) => _channel
-      .sendCommand('CallMute', {'call_id': call.callId, 'muted': !call.muted});
+  void _toggleMute(ActiveCall call) => _channel.engine.setMute(!call.muted);
 
-  void _toggleHold(ActiveCall call) => _channel
-      .sendCommand('CallHold', {'call_id': call.callId, 'hold': !call.onHold});
+  void _toggleHold(ActiveCall call) => _channel.engine.setHold(!call.onHold);
 
   void _showDevicePicker() {
     final devices = _channel.audioDevices;
@@ -50,23 +46,37 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
             children: [
               const Text('Microphone',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              ...inputs.map((d) => RadioListTile<int>(
-                    value: d.id,
-                    groupValue: selIn,
-                    title: Text(d.name),
-                    onChanged: (v) => setDlgState(() => selIn = v!),
-                    dense: true,
-                  )),
+              RadioGroup<int>(
+                groupValue: selIn,
+                onChanged: (v) { if (v != null) setDlgState(() => selIn = v); },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: inputs
+                      .map((d) => RadioListTile<int>(
+                            value: d.id,
+                            title: Text(d.name),
+                            dense: true,
+                          ))
+                      .toList(),
+                ),
+              ),
               const SizedBox(height: 8),
               const Text('Speaker',
                   style: TextStyle(fontWeight: FontWeight.bold)),
-              ...outputs.map((d) => RadioListTile<int>(
-                    value: d.id,
-                    groupValue: selOut,
-                    title: Text(d.name),
-                    onChanged: (v) => setDlgState(() => selOut = v!),
-                    dense: true,
-                  )),
+              RadioGroup<int>(
+                groupValue: selOut,
+                onChanged: (v) { if (v != null) setDlgState(() => selOut = v); },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: outputs
+                      .map((d) => RadioListTile<int>(
+                            value: d.id,
+                            title: Text(d.name),
+                            dense: true,
+                          ))
+                      .toList(),
+                ),
+              ),
             ],
           ),
           actions: [
@@ -75,8 +85,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                _channel.sendCommand('AudioSetDevices',
-                    {'input_id': selIn, 'output_id': selOut});
+                // Use structured C ABI to set audio devices
+                _channel.engine.setAudioDevices(selIn, selOut);
                 Navigator.pop(ctx);
               },
               child: const Text('Apply'),

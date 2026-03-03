@@ -156,6 +156,22 @@ jobs:
           cd app_flutter
           flutter pub get
 
+      - name: Flutter analyze
+        shell: pwsh
+        run: |
+          X:
+          cd app_flutter
+          flutter analyze
+        continue-on-error: true
+
+      - name: Flutter test
+        shell: pwsh
+        run: |
+          X:
+          cd app_flutter
+          flutter test
+        continue-on-error: true
+
       - name: Show Flutter project structure
         shell: cmd
         run: |

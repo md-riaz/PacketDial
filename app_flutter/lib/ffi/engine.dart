@@ -6,9 +6,41 @@ import 'package:ffi/ffi.dart' as ffi_alloc;
 typedef _EngineInitC = ffi.Int32 Function();
 typedef _EngineShutdownC = ffi.Int32 Function();
 typedef _EngineVersionC = ffi.Pointer<ffi.Int8> Function();
-typedef _EngineSendCommandC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
-typedef _EnginePollEventC = ffi.Pointer<ffi.Int8> Function();
-typedef _EngineFreeStringC = ffi.Void Function(ffi.Pointer<ffi.Int8>);
+
+// Structured C ABI functions
+typedef _EngineRegisterC = ffi.Int32 Function(
+    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
+typedef _EngineUnregisterC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineMakeCallC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
+typedef _EngineAnswerCallC = ffi.Int32 Function();
+typedef _EngineHangupC = ffi.Int32 Function();
+typedef _EngineSetMuteC = ffi.Int32 Function(ffi.Int32);
+typedef _EngineSetHoldC = ffi.Int32 Function(ffi.Int32);
+typedef _EngineListAudioDevicesC = ffi.Int32 Function();
+typedef _EngineSetAudioDevicesC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _EngineQueryCallHistoryC = ffi.Int32 Function();
+typedef _EngineSetEventCallbackC = ffi.Void Function(
+    ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>);
+
+/// Event IDs matching Rust EngineEventId enum.
+abstract class EngineEventId {
+  static const int engineReady = 1;
+  static const int registrationStateChanged = 2;
+  static const int callStateChanged = 3;
+  static const int mediaStatsUpdated = 4;
+  static const int audioDeviceList = 5;
+  static const int audioDevicesSet = 6;
+  static const int callHistoryResult = 7;
+  static const int sipMessageCaptured = 8;
+  static const int diagBundleReady = 9;
+  static const int accountSecurityUpdated = 10;
+  static const int credStored = 11;
+  static const int credRetrieved = 12;
+  static const int enginePong = 13;
+  static const int logLevelSet = 14;
+  static const int logBufferResult = 15;
+  static const int engineLog = 16;
+}
 
 class VoipEngine {
   final ffi.DynamicLibrary _lib;
@@ -20,15 +52,49 @@ class VoipEngine {
   late final ffi.Pointer<ffi.Int8> Function() _version = _lib
       .lookupFunction<_EngineVersionC, ffi.Pointer<ffi.Int8> Function()>(
           'engine_version');
-  late final int Function(ffi.Pointer<ffi.Int8>) _sendCommand = _lib
-      .lookupFunction<_EngineSendCommandC,
-          int Function(ffi.Pointer<ffi.Int8>)>('engine_send_command');
-  late final ffi.Pointer<ffi.Int8> Function() _pollEvent = _lib
-      .lookupFunction<_EnginePollEventC, ffi.Pointer<ffi.Int8> Function()>(
-          'engine_poll_event');
-  late final void Function(ffi.Pointer<ffi.Int8>) _freeString = _lib
-      .lookupFunction<_EngineFreeStringC,
-          void Function(ffi.Pointer<ffi.Int8>)>('engine_free_string');
+
+  // Structured C ABI function lookups
+  late final int Function(
+          ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
+      _register = _lib.lookupFunction<
+          _EngineRegisterC,
+          int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>,
+              ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)>('engine_register');
+  late final int Function(ffi.Pointer<ffi.Int8>) _unregister = _lib
+      .lookupFunction<_EngineUnregisterC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_unregister');
+  late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>) _makeCall = _lib
+      .lookupFunction<_EngineMakeCallC, int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)>(
+          'engine_make_call');
+  late final int Function() _answerCall =
+      _lib.lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
+  late final int Function() _hangup =
+      _lib.lookupFunction<_EngineHangupC, int Function()>('engine_hangup');
+  late final int Function(int) _setMute =
+      _lib.lookupFunction<_EngineSetMuteC, int Function(int)>('engine_set_mute');
+  late final int Function(int) _setHold =
+      _lib.lookupFunction<_EngineSetHoldC, int Function(int)>('engine_set_hold');
+  late final int Function() _listAudioDevices =
+      _lib.lookupFunction<_EngineListAudioDevicesC, int Function()>(
+          'engine_list_audio_devices');
+  late final int Function(int, int) _setAudioDevices =
+      _lib.lookupFunction<_EngineSetAudioDevicesC, int Function(int, int)>(
+          'engine_set_audio_devices');
+  late final int Function() _queryCallHistory =
+      _lib.lookupFunction<_EngineQueryCallHistoryC, int Function()>(
+          'engine_query_call_history');
+  late final void Function(
+          ffi.Pointer<
+              ffi.NativeFunction<
+                  ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>)
+      _setEventCallback = _lib.lookupFunction<
+          _EngineSetEventCallbackC,
+          void Function(
+              ffi.Pointer<
+                  ffi.NativeFunction<
+                      ffi.Void Function(
+                          ffi.Int32, ffi.Pointer<ffi.Int8>)>>)>(
+          'engine_set_event_callback');
 
   VoipEngine._(this._lib);
 
@@ -49,33 +115,112 @@ class VoipEngine {
     return _ptrToString(ptr);
   }
 
-  /// Send a JSON command string to the engine core.
+  // ---- Structured C ABI methods ----------------------------------------
+
+  /// Register a SIP account directly.
   /// Returns 0 on success, non-zero on error.
-  int sendCommand(String cmdJson) {
-    final bytes = _stringToBytes(cmdJson);
-    final ptr = _allocBytes(bytes);
-    final rc = _sendCommand(ptr);
-    _freeNative(ptr);
-    return rc;
+  int register(String accountId, String user, String pass, String domain) {
+    final accountIdPtr = _allocCString(accountId);
+    final userPtr = _allocCString(user);
+    final passPtr = _allocCString(pass);
+    final domainPtr = _allocCString(domain);
+    try {
+      return _register(accountIdPtr, userPtr, passPtr, domainPtr);
+    } finally {
+      _freeNative(accountIdPtr);
+      _freeNative(userPtr);
+      _freeNative(passPtr);
+      _freeNative(domainPtr);
+    }
   }
 
-  /// Poll for the next event JSON string, or null if none queued.
-  String? pollEvent() {
-    final ptr = _pollEvent();
-    if (ptr == ffi.nullptr) return null;
-    final s = _ptrToString(ptr);
-    _freeString(ptr);
-    return s;
+  /// Unregister a SIP account.
+  /// Returns 0 on success, non-zero on error.
+  int unregister(String accountId) {
+    final ptr = _allocCString(accountId);
+    try {
+      return _unregister(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Make an outgoing call.
+  /// [accountId] is the account ID to use for the call.
+  /// [number] is a SIP URI or phone number.
+  /// Returns 0 on success, non-zero on error.
+  int makeCall(String accountId, String number) {
+    final accountIdPtr = _allocCString(accountId);
+    final numberPtr = _allocCString(number);
+    try {
+      return _makeCall(accountIdPtr, numberPtr);
+    } finally {
+      _freeNative(accountIdPtr);
+      _freeNative(numberPtr);
+    }
+  }
+
+  /// Answer an incoming call.
+  /// Returns 0 on success, non-zero on error.
+  int answerCall() => _answerCall();
+
+  /// Hang up the current active call.
+  /// Returns 0 on success, non-zero on error.
+  int hangup() => _hangup();
+
+  /// Toggle mute on the active call.
+  /// [muted] should be true to mute, false to unmute.
+  /// Returns 0 on success, non-zero on error.
+  int setMute(bool muted) => _setMute(muted ? 1 : 0);
+
+  /// Toggle hold on the active call.
+  /// [onHold] should be true to hold, false to resume.
+  /// Returns 0 on success, non-zero on error.
+  int setHold(bool onHold) => _setHold(onHold ? 1 : 0);
+
+  /// Request audio device list.
+  /// This will trigger an AudioDeviceList event via the callback.
+  /// Returns 0 on success, non-zero on error.
+  int listAudioDevices() => _listAudioDevices();
+
+  /// Set active audio devices.
+  /// Returns 0 on success, non-zero on error.
+  int setAudioDevices(int inputId, int outputId) =>
+      _setAudioDevices(inputId, outputId);
+
+  /// Request call history.
+  /// This will trigger a CallHistoryResult event via the callback.
+  /// Returns 0 on success, non-zero on error.
+  int queryCallHistory() => _queryCallHistory();
+
+  /// Set a native event callback function.
+  ///
+  /// Pass a [ffi.Pointer] to a native function with signature:
+  ///   `void callback(int event_id, const char* json_data)`
+  ///
+  /// Pass [ffi.nullptr] to clear the callback.
+  void setEventCallback(
+      ffi.Pointer<
+              ffi.NativeFunction<
+                  ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>
+          cb) {
+    _setEventCallback(cb);
   }
 
   // ---- helpers ---------------------------------------------------------------
+
+  /// Allocate a null-terminated UTF-8 C string from a Dart [String].
+  /// The caller is responsible for freeing the returned pointer via [_freeNative].
+  ffi.Pointer<ffi.Int8> _allocCString(String s) {
+    return _allocBytes(_stringToBytes(s));
+  }
 
   /// Read a null-terminated UTF-8 C string from [ptr] into a Dart [String].
   String _ptrToString(ffi.Pointer<ffi.Int8> ptr) {
     final bytes = <int>[];
     int i = 0;
     while (true) {
-      final v = ptr.elementAt(i).value;
+      final v = (ptr + i).value;
       if (v == 0) break;
       bytes.add(v);
       i++;
@@ -131,7 +276,7 @@ class VoipEngine {
     final ptr =
         ffi_alloc.calloc.allocate<ffi.Int8>(ffi.sizeOf<ffi.Int8>() * bytes.length);
     for (int i = 0; i < bytes.length; i++) {
-      ptr.elementAt(i).value = bytes[i];
+      (ptr + i).value = bytes[i];
     }
     return ptr;
   }

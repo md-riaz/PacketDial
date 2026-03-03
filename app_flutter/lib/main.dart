@@ -22,7 +22,6 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   int _selectedIndex = 0;
   String _status = 'Initializing…';
-  String _version = '';
   bool _ready = false;
 
   static const _screens = [
@@ -46,7 +45,6 @@ class _AppState extends State<App> {
       final rc = engine.init();
       EngineChannel.instance.attach(engine);
       setState(() {
-        _version = v;
         _status = rc == 0 ? 'Engine ready  •  $v' : 'Engine error: $rc';
         _ready = rc == 0;
       });

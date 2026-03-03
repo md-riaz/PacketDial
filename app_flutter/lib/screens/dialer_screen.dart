@@ -36,7 +36,8 @@ class _DialerScreenState extends State<DialerScreen> {
       );
       return;
     }
-    _channel.sendCommand('CallStart', {'account_id': accountId, 'uri': uri});
+    // Use structured C ABI to make call
+    _channel.engine.makeCall(accountId, uri);
   }
 
   Widget _dialButton(String label) => Expanded(
@@ -65,7 +66,7 @@ class _DialerScreenState extends State<DialerScreen> {
           children: [
             if (accountIds.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: _selectedAccountId ?? accountIds.first,
+                initialValue: _selectedAccountId ?? accountIds.first,
                 decoration:
                     const InputDecoration(labelText: 'Account'),
                 items: accountIds
