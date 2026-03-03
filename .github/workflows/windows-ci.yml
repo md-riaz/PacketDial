@@ -21,7 +21,7 @@ jobs:
         shell: cmd
         run: |
           echo ===== REPO ROOT =====
-          tree /A /F /L 3
+          tree /A /F
 
       - name: Map workspace to short path
         shell: pwsh
@@ -34,7 +34,7 @@ jobs:
         run: |
           X:
           echo ===== SHORT PATH ROOT =====
-          tree /A /F /L 2
+          tree /A /F
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -106,7 +106,7 @@ jobs:
         run: |
           X:
           echo ===== FLUTTER PROJECT =====
-          tree /A /F /L 2 app_flutter
+          tree /A /F app_flutter
         continue-on-error: true
 
       - name: Show Windows build folder before build
