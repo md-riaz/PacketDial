@@ -19,6 +19,7 @@ class AccountSchema {
   late bool tlsEnabled;
   late bool srtpEnabled;
   late bool autoRegister;
+  late bool isSelected;
 
   // We don't persist registrationState as it's runtime-only
 }

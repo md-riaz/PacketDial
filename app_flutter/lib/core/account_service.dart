@@ -20,8 +20,49 @@ class AccountService {
     return isar!.accountSchemas.where().findAll();
   }
 
+  Future<AccountSchema?> getSelectedAccount() async {
+    return isar!.accountSchemas.filter().isSelectedEqualTo(true).findFirst();
+  }
+
+  Future<void> setSelectedAccount(String accountId) async {
+    await isar!.writeTxn(() async {
+      // Unselect all
+      final accounts = await isar!.accountSchemas.where().findAll();
+      for (final a in accounts) {
+        a.isSelected = false;
+        await isar!.accountSchemas.put(a);
+      }
+      // Select the new one
+      final selected = await isar!.accountSchemas
+          .filter()
+          .accountIdEqualTo(accountId)
+          .findFirst();
+      if (selected != null) {
+        selected.isSelected = true;
+        await isar!.accountSchemas.put(selected);
+      }
+    });
+
+    // Handle registration change immediately
+    final accounts = await getAllAccounts();
+    for (final a in accounts) {
+      if (a.accountId == accountId) {
+        register(a);
+      } else {
+        unregister(a.accountId);
+      }
+    }
+  }
+
   Future<void> saveAccount(AccountSchema account) async {
     await isar!.writeTxn(() async {
+      final count = await isar!.accountSchemas.count();
+      if (count == 0) {
+        account.isSelected = true;
+      } else if (account.isSelected == false && account.id == null) {
+        // New account, but not the first, ensure isSelected is false
+        account.isSelected = false;
+      }
       await isar!.accountSchemas.put(account);
     });
   }
@@ -52,11 +93,9 @@ class AccountService {
   }
 
   Future<void> autoRegisterAll() async {
-    final accounts = await getAllAccounts();
-    for (final a in accounts) {
-      if (a.autoRegister) {
-        register(a);
-      }
+    final selected = await getSelectedAccount();
+    if (selected != null && selected.autoRegister) {
+      register(selected);
     }
   }
 

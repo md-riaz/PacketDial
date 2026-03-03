@@ -7,75 +7,81 @@ PacketDial is a modern, developer-grade Windows SIP softphone built with:
 
 ---
 
-## Repo layout
+## Quick Links
 
-| Directory | Contents |
-|-----------|----------|
-| `engine_pjsip/` | PJSIP source (add as submodule or extract pjproject here) |
-| `core_rust/` | Rust cdylib — command/event channel, state machines |
-| `app_flutter/` | Flutter Windows app (5-screen UI) |
-| `scripts/` | Build & packaging scripts |
-| `docs/` | Architecture, FFI API reference, product spec |
-| `dist/` | Packaging output (`PacketDial-windows-x64.zip`) |
+**New to PacketDial?**
+- [Quick Start](docs/quickstart.md) — Get running in 5 minutes (one-click setup)
+- [Windows Setup Guide](docs/windows_setup_guide.md) — Detailed installation walkthrough
+- [Troubleshooting](docs/troubleshooting.md) — Solutions to common issues
+
+**Active Development?**
+- [Developer Workflow](docs/dev-workflow.md) — Hot-reload setup and daily workflows
+- [Rust Core Guide](docs/rust-core.md) — Building and FFI integration
+- [PJSIP Build Guide](docs/pjsip-build.md) — PJSIP compilation details
+- [Flutter App Guide](docs/flutter-app.md) — Windows desktop setup
+
+**Release & Distribution?**
+- [Release Process](docs/release-process.md) — Versioning and artifact creation
+
+**Architecture & Design?**
+- [Architecture](docs/architecture.md) — System overview and component interaction
+- [FFI API](docs/FFI_API.md) — Complete C interface reference
+- [Design Decisions](docs/adr/) — Architecture decision records
 
 ---
 
-## Windows setup & build
+## Quick Start
 
-> **New to this repo?** See the [Windows Setup Guide](docs/windows_setup_guide.md) for a
-> full walkthrough with the one-click setup script.
-
-### One-click build (fresh Windows 10/11 VM)
+### One-click build (fresh Windows 10/11)
 
 ```powershell
-# 1. Clone
 git clone --recurse-submodules https://github.com/md-riaz/PacketDial
 cd PacketDial
-
-# 2. Run the setup script (elevated PowerShell)
 Set-ExecutionPolicy Bypass -Scope Process -Force
 .\scripts\setup_windows.ps1
-# → installs Git, VS Build Tools, Rust, Flutter, then builds & packages the app
-# → output: dist\PacketDial-windows-x64.zip
 ```
 
-### Prerequisites (if installing tools manually)
+**Duration:** 20–40 minutes (first run)  
+**Output:** `dist\PacketDial-windows-x64.zip`
 
-- [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) — Desktop development with C++ workload
-- [Rust stable](https://rustup.rs) — `rustup target add x86_64-pc-windows-msvc`
-- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows/desktop) (stable, 3.41.2) — `flutter config --enable-windows-desktop`
-- Git
-
-### Quick start (tools already installed)
-
-```powershell
-# Skip tool installation, just build
-.\scripts\setup_windows.ps1 -SkipInstall
-```
+See [Quick Start](docs/quickstart.md) for more details and options.
 
 ### Hot-reload development
-
-The `run_app.ps1` script automatically builds the Rust core in debug mode and launches Flutter with hot-reload:
 
 ```powershell
 .\scripts\run_app.ps1
 ```
 
-**Manual workflow:**
-```powershell
-# Build Rust core in debug mode (faster compilation)
-cd core_rust
-cargo build --target x86_64-pc-windows-msvc
+Builds Rust core in debug mode and launches Flutter with live reload.  
+See [Developer Workflow](docs/dev-workflow.md) for workflows and tips.
 
-# Or use the helper script
-.\scripts\build_core_debug.ps1
+---
 
-# Run Flutter with hot-reload
-cd app_flutter
-flutter run -d windows
-```
+## Directory Structure
 
-The CMake build system automatically copies `voip_core.dll` from the correct location (debug or release) based on your build configuration.
+| Directory | Contents |
+|-----------|----------|
+| `engine_pjsip/` | PJSIP source (vendored pjproject 2.14.1) |
+| `core_rust/` | Rust FFI wrapper → `voip_core.dll` |
+| `app_flutter/` | Flutter Windows desktop UI (5 screens) |
+| `scripts/` | Build & deployment automation |
+| `docs/` | Architecture, API reference, guides |
+| `dist/` | Release artifacts (ZIP files) |
+
+---
+
+## Detailed Build & Setup
+
+For complete build instructions, see:
+- [Quick Start](docs/quickstart.md) — Faster (5 min)
+- [Windows Setup Guide](docs/windows_setup_guide.md) — Detailed (20-40 min)
+
+Prerequisites:
+- Windows 10 (build 1809+) or Windows 11, 64-bit
+- Visual Studio Build Tools 2022 (Desktop development with C++)
+- Rust stable (auto-installed by setup script)
+- Flutter SDK 3.41.2 (auto-installed by setup script)
+- 10+ GB free disk space
 
 ---
 

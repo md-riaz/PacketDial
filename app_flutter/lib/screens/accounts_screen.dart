@@ -104,7 +104,8 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                   ..turnServer = turnCtrl.text.trim()
                   ..tlsEnabled = tlsEnabled
                   ..srtpEnabled = srtpEnabled
-                  ..autoRegister = autoRegister;
+                  ..autoRegister = autoRegister
+                  ..isSelected = existing?.isSelected ?? false;
 
                 await ref.read(accountServiceProvider).saveAccount(schema);
                 ref.invalidate(accountsListProvider);
@@ -147,19 +148,43 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                   final a = accounts[i];
                   // Registration state is handled in-memory by EngineChannel for now,
                   // but we display it here.
+                  final isSelected = a.isSelected;
                   return ListTile(
                     dense: true,
-                    title: Text(a.displayName),
+                    selected: isSelected,
+                    selectedTileColor: Colors.indigo.withOpacity(0.05),
+                    leading: Icon(
+                      isSelected ? Icons.check_circle : Icons.circle_outlined,
+                      color: isSelected ? Colors.green : Colors.grey,
+                    ),
+                    title: Text(a.displayName,
+                        style: TextStyle(
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal)),
                     subtitle: Text('${a.username}@${a.server}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextButton(
-                          onPressed: () {
-                            ref.read(accountServiceProvider).register(a);
-                          },
-                          child: const Text('Register'),
-                        ),
+                        if (!isSelected)
+                          TextButton(
+                            onPressed: () async {
+                              await ref
+                                  .read(accountServiceProvider)
+                                  .setSelectedAccount(a.accountId);
+                              ref.invalidate(accountsListProvider);
+                            },
+                            child: const Text('Select'),
+                          )
+                        else
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Text('Active',
+                                style: TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12)),
+                          ),
                         IconButton(
                           icon: const Icon(Icons.edit, size: 18),
                           onPressed: () => _showAccountDialog(existing: a),

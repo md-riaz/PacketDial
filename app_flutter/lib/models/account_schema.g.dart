@@ -32,43 +32,48 @@ const AccountSchemaSchema = CollectionSchema(
       name: r'displayName',
       type: IsarType.string,
     ),
-    r'password': PropertySchema(
+    r'isSelected': PropertySchema(
       id: 3,
+      name: r'isSelected',
+      type: IsarType.bool,
+    ),
+    r'password': PropertySchema(
+      id: 4,
       name: r'password',
       type: IsarType.string,
     ),
     r'server': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'server',
       type: IsarType.string,
     ),
     r'srtpEnabled': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'srtpEnabled',
       type: IsarType.bool,
     ),
     r'stunServer': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'stunServer',
       type: IsarType.string,
     ),
     r'tlsEnabled': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'tlsEnabled',
       type: IsarType.bool,
     ),
     r'transport': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'transport',
       type: IsarType.string,
     ),
     r'turnServer': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'turnServer',
       type: IsarType.string,
     ),
     r'username': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'username',
       type: IsarType.string,
     )
@@ -127,14 +132,15 @@ void _accountSchemaSerialize(
   writer.writeString(offsets[0], object.accountId);
   writer.writeBool(offsets[1], object.autoRegister);
   writer.writeString(offsets[2], object.displayName);
-  writer.writeString(offsets[3], object.password);
-  writer.writeString(offsets[4], object.server);
-  writer.writeBool(offsets[5], object.srtpEnabled);
-  writer.writeString(offsets[6], object.stunServer);
-  writer.writeBool(offsets[7], object.tlsEnabled);
-  writer.writeString(offsets[8], object.transport);
-  writer.writeString(offsets[9], object.turnServer);
-  writer.writeString(offsets[10], object.username);
+  writer.writeBool(offsets[3], object.isSelected);
+  writer.writeString(offsets[4], object.password);
+  writer.writeString(offsets[5], object.server);
+  writer.writeBool(offsets[6], object.srtpEnabled);
+  writer.writeString(offsets[7], object.stunServer);
+  writer.writeBool(offsets[8], object.tlsEnabled);
+  writer.writeString(offsets[9], object.transport);
+  writer.writeString(offsets[10], object.turnServer);
+  writer.writeString(offsets[11], object.username);
 }
 
 AccountSchema _accountSchemaDeserialize(
@@ -148,14 +154,15 @@ AccountSchema _accountSchemaDeserialize(
   object.autoRegister = reader.readBool(offsets[1]);
   object.displayName = reader.readString(offsets[2]);
   object.id = id;
-  object.password = reader.readString(offsets[3]);
-  object.server = reader.readString(offsets[4]);
-  object.srtpEnabled = reader.readBool(offsets[5]);
-  object.stunServer = reader.readString(offsets[6]);
-  object.tlsEnabled = reader.readBool(offsets[7]);
-  object.transport = reader.readString(offsets[8]);
-  object.turnServer = reader.readString(offsets[9]);
-  object.username = reader.readString(offsets[10]);
+  object.isSelected = reader.readBool(offsets[3]);
+  object.password = reader.readString(offsets[4]);
+  object.server = reader.readString(offsets[5]);
+  object.srtpEnabled = reader.readBool(offsets[6]);
+  object.stunServer = reader.readString(offsets[7]);
+  object.tlsEnabled = reader.readBool(offsets[8]);
+  object.transport = reader.readString(offsets[9]);
+  object.turnServer = reader.readString(offsets[10]);
+  object.username = reader.readString(offsets[11]);
   return object;
 }
 
@@ -173,20 +180,22 @@ P _accountSchemaDeserializeProp<P>(
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
-      return (reader.readBool(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readString(offset)) as P;
-    case 7:
       return (reader.readBool(offset)) as P;
-    case 8:
+    case 7:
       return (reader.readString(offset)) as P;
+    case 8:
+      return (reader.readBool(offset)) as P;
     case 9:
       return (reader.readString(offset)) as P;
     case 10:
+      return (reader.readString(offset)) as P;
+    case 11:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -738,6 +747,16 @@ extension AccountSchemaQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<AccountSchema, AccountSchema, QAfterFilterCondition>
+      isSelectedEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isSelected',
+        value: value,
       ));
     });
   }
@@ -1627,6 +1646,19 @@ extension AccountSchemaQuerySortBy
     });
   }
 
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> sortByIsSelected() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSelected', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy>
+      sortByIsSelectedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSelected', Sort.desc);
+    });
+  }
+
   QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> sortByPassword() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'password', Sort.asc);
@@ -1785,6 +1817,19 @@ extension AccountSchemaQuerySortThenBy
     });
   }
 
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> thenByIsSelected() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSelected', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy>
+      thenByIsSelectedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isSelected', Sort.desc);
+    });
+  }
+
   QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> thenByPassword() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'password', Sort.asc);
@@ -1912,6 +1957,12 @@ extension AccountSchemaQueryWhereDistinct
     });
   }
 
+  QueryBuilder<AccountSchema, AccountSchema, QDistinct> distinctByIsSelected() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isSelected');
+    });
+  }
+
   QueryBuilder<AccountSchema, AccountSchema, QDistinct> distinctByPassword(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1991,6 +2042,12 @@ extension AccountSchemaQueryProperty
   QueryBuilder<AccountSchema, String, QQueryOperations> displayNameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'displayName');
+    });
+  }
+
+  QueryBuilder<AccountSchema, bool, QQueryOperations> isSelectedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isSelected');
     });
   }
 

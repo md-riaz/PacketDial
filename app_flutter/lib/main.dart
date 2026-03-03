@@ -15,7 +15,6 @@ import 'models/account_schema.dart';
 import 'models/call_history_schema.dart';
 import 'ffi/engine.dart';
 import 'screens/accounts_screen.dart';
-import 'screens/active_call_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/history_screen.dart';
@@ -105,12 +104,11 @@ class _AppState extends State<App> {
   String _status = 'Initializing…';
   bool _ready = false;
 
-  static const _screens = [
-    AccountsScreen(),
-    DialerScreen(),
-    ActiveCallScreen(),
-    HistoryScreen(),
-    DiagnosticsScreen(),
+  static final _screens = [
+    const AccountsScreen(),
+    const DialerScreen(),
+    const HistoryScreen(),
+    const DiagnosticsScreen(),
   ];
 
   @override
@@ -190,8 +188,6 @@ class _AppState extends State<App> {
                       label: 'Accounts'),
                   NavigationDestination(
                       icon: Icon(Icons.dialpad, size: 20), label: 'Dialer'),
-                  NavigationDestination(
-                      icon: Icon(Icons.call, size: 20), label: 'Call'),
                   NavigationDestination(
                       icon: Icon(Icons.history, size: 20), label: 'History'),
                   NavigationDestination(
