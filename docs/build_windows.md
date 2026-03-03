@@ -1,31 +1,65 @@
 # Windows Build & CI
 
+> **For a complete step-by-step guide and the one-click setup script, see
+> [docs/windows_setup_guide.md](windows_setup_guide.md).**
+
 ## Requirements
 
-- Visual Studio Build Tools
-- Rust stable toolchain
-- Flutter SDK
+- Visual Studio Build Tools 2022 (Desktop development with C++ workload)
+- Rust stable toolchain (`rustup target add x86_64-pc-windows-msvc`)
+- Flutter SDK 3.41.2 stable (`flutter config --enable-windows-desktop`)
 - Git
 
 ---
 
-## Build Steps
+## Quick build (automated)
 
-1. Build PJSIP static libraries
-2. cargo build --release
-3. flutter build windows
+```powershell
+# From an elevated PowerShell at the repo root:
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\scripts\setup_windows.ps1
+```
+
+---
+
+## Manual build steps
+
+```powershell
+# 1. Enable long paths
+git config --system core.longpaths true
+
+# 2. Map to short path (avoids MAX_PATH)
+subst X: "$PWD"
+X:
+
+# 3. Build Rust core
+cd core_rust
+cargo build --release --target x86_64-pc-windows-msvc
+cd ..
+
+# 4. Build Flutter app
+cd app_flutter
+flutter pub get
+flutter clean
+flutter build windows --release
+cd ..
+
+# 5. Copy DLL and package
+Copy-Item core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll `
+          app_flutter\build\windows\x64\runner\Release\
+.\scripts\package.ps1
+```
+
+Output: `dist\PacketDial-windows-x64.zip`
 
 ---
 
 ## GitHub Actions Pipeline
 
 Jobs:
-- Build PJSIP
-- Rust tests + clippy
-- Flutter build
-- Package artifacts
+- Rust tests + `cargo build --release --target x86_64-pc-windows-msvc`
+- Flutter build (`flutter build windows --release`)
+- Package artifact (`scripts\package.ps1`)
 
 Artifacts:
-- Executable
-- Debug symbols
-- Version file
+- `dist\PacketDial-windows-x64.zip` (executable + Flutter runtime + DLL)
