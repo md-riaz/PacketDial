@@ -47,29 +47,35 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
               const Text('Microphone',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<int>(
-                value: selIn,
+                groupValue: selIn,
                 onChanged: (v) => setDlgState(() => selIn = v),
-                children: inputs
-                    .map((d) => RadioListTile<int>(
-                          value: d.id,
-                          title: Text(d.name),
-                          dense: true,
-                        ))
-                    .toList(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: inputs
+                      .map((d) => RadioListTile<int>(
+                            value: d.id,
+                            title: Text(d.name),
+                            dense: true,
+                          ))
+                      .toList(),
+                ),
               ),
               const SizedBox(height: 8),
               const Text('Speaker',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<int>(
-                value: selOut,
+                groupValue: selOut,
                 onChanged: (v) => setDlgState(() => selOut = v),
-                children: outputs
-                    .map((d) => RadioListTile<int>(
-                          value: d.id,
-                          title: Text(d.name),
-                          dense: true,
-                        ))
-                    .toList(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: outputs
+                      .map((d) => RadioListTile<int>(
+                            value: d.id,
+                            title: Text(d.name),
+                            dense: true,
+                          ))
+                      .toList(),
+                ),
               ),
             ],
           ),
