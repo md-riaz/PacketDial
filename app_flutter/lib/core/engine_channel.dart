@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' as ffi;
 
 import '../ffi/engine.dart';
 import '../models/account.dart';
@@ -12,10 +13,10 @@ import '../models/media_stats.dart';
 /// Maximum number of structured log entries retained in memory.
 const _kLogBufferMax = 500;
 
-/// Bridges the Dart UI to the Rust core via the command/event channel.
+/// Bridges the Dart UI to the Rust core via structured C ABI and callbacks.
 ///
-/// * Commands are sent synchronously via [sendCommand].
-/// * Events are polled every 50 ms and broadcast on [events].
+/// * Commands are sent via structured C functions (register, makeCall, etc.).
+/// * Events are received via native callbacks and broadcast on [events].
 /// * Higher-level state ([accounts], [activeCall], [callHistory], etc.) is
 ///   maintained here so individual screens can read it without each managing
 ///   their own subscriptions.
@@ -24,7 +25,7 @@ class EngineChannel {
   static final EngineChannel instance = EngineChannel._();
 
   VoipEngine? _engine;
-  Timer? _pollTimer;
+  ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>? _callbackPtr;
 
   final _eventController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -61,51 +62,123 @@ class EngineChannel {
 
   // --- Lifecycle --------------------------------------------------------------
 
-  /// Attach the channel to a loaded [VoipEngine] and start polling.
+  /// Attach the channel to a loaded [VoipEngine] and register callback.
   void attach(VoipEngine engine) {
     _engine = engine;
-    _pollTimer =
-        Timer.periodic(const Duration(milliseconds: 50), (_) => _poll());
+
+    // Create a Dart callback that will be called from native code
+    _callbackPtr = ffi.Pointer.fromFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>(
+      _eventCallbackStatic,
+    );
+
+    // Register the callback with the engine
+    engine.setEventCallback(_callbackPtr!);
+
+    // Request audio device list on startup
+    engine.listAudioDevices();
   }
 
   void dispose() {
-    _pollTimer?.cancel();
+    // Clear the callback
+    _engine?.setEventCallback(ffi.nullptr);
     _engine?.shutdown();
     _eventController.close();
   }
 
-  // --- Command helpers --------------------------------------------------------
-
-  /// Send a typed command with [payload] to the Rust core.
-  /// Returns 0 on success.
-  int sendCommand(String type, [Map<String, dynamic>? payload]) {
-    final json = jsonEncode({'type': type, 'payload': payload ?? {}});
-    return _engine?.sendCommand(json) ?? -1;
+  // Native callback handler (must be static and top-level compatible)
+  static void _eventCallbackStatic(int eventId, ffi.Pointer<ffi.Int8> jsonDataPtr) {
+    instance._handleNativeEvent(eventId, jsonDataPtr);
   }
 
-  /// Set the active log level filter in the engine core.
-  /// [level] must be one of: "Error", "Warn", "Info", "Debug".
-  int setLogLevel(String level) => sendCommand('SetLogLevel', {'level': level});
+  // Instance method to handle events from native callback
+  void _handleNativeEvent(int eventId, ffi.Pointer<ffi.Int8> jsonDataPtr) {
+    try {
+      // Read JSON payload from C string
+      final jsonData = _ptrToString(jsonDataPtr);
 
-  /// Request all buffered log entries from the engine (emits LogBufferResult).
-  int getLogBuffer() => sendCommand('GetLogBuffer');
+      // Parse JSON payload
+      final payload = jsonDecode(jsonData) as Map<String, dynamic>;
 
-  // --- Private ----------------------------------------------------------------
+      // Map event ID to event type string
+      final eventType = _eventIdToType(eventId);
 
-  void _poll() {
-    String? json;
-    // Drain all queued events in one poll tick to avoid lag.
-    while ((json = _engine?.pollEvent()) != null) {
-      eventLog.add(json!);
-      try {
-        final event = jsonDecode(json) as Map<String, dynamic>;
-        _handleEvent(event);
-        if (!_eventController.isClosed) {
-          _eventController.add(event);
-        }
-      } catch (_) {}
+      // Create event map
+      final event = {
+        'type': eventType,
+        'payload': payload,
+      };
+
+      // Store in event log
+      eventLog.add(jsonEncode(event));
+
+      // Handle the event
+      _handleEvent(event);
+
+      // Broadcast to listeners
+      if (!_eventController.isClosed) {
+        _eventController.add(event);
+      }
+    } catch (e) {
+      // Ignore parsing errors
     }
   }
+
+  /// Convert event ID to event type string
+  String _eventIdToType(int eventId) {
+    switch (eventId) {
+      case EngineEventId.engineReady:
+        return 'EngineReady';
+      case EngineEventId.registrationStateChanged:
+        return 'RegistrationStateChanged';
+      case EngineEventId.callStateChanged:
+        return 'CallStateChanged';
+      case EngineEventId.mediaStatsUpdated:
+        return 'MediaStatsUpdated';
+      case EngineEventId.audioDeviceList:
+        return 'AudioDeviceList';
+      case EngineEventId.audioDevicesSet:
+        return 'AudioDevicesSet';
+      case EngineEventId.callHistoryResult:
+        return 'CallHistoryResult';
+      case EngineEventId.sipMessageCaptured:
+        return 'SipMessageCaptured';
+      case EngineEventId.diagBundleReady:
+        return 'DiagBundleReady';
+      case EngineEventId.accountSecurityUpdated:
+        return 'AccountSecurityUpdated';
+      case EngineEventId.credStored:
+        return 'CredStored';
+      case EngineEventId.credRetrieved:
+        return 'CredRetrieved';
+      case EngineEventId.enginePong:
+        return 'EnginePong';
+      case EngineEventId.logLevelSet:
+        return 'LogLevelSet';
+      case EngineEventId.logBufferResult:
+        return 'LogBufferResult';
+      case EngineEventId.engineLog:
+        return 'EngineLog';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  /// Helper to read C string
+  String _ptrToString(ffi.Pointer<ffi.Int8> ptr) {
+    final bytes = <int>[];
+    int i = 0;
+    while (true) {
+      final v = ptr.elementAt(i).value;
+      if (v == 0) break;
+      bytes.add(v);
+      i++;
+    }
+    return String.fromCharCodes(bytes);
+  }
+
+  // --- Command helpers (now using structured C ABI) ---------------------------
+
+  VoipEngine get engine => _engine!;
 
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
@@ -115,8 +188,6 @@ class EngineChannel {
     switch (type) {
       case 'EngineReady':
         engineReady = true;
-        // Request audio device list on startup
-        sendCommand('AudioListDevices');
 
       case 'RegistrationStateChanged':
         final id = payload['account_id'] as String? ?? '';
@@ -136,7 +207,7 @@ class EngineChannel {
           if (activeCall?.callId == callId) activeCall = null;
           mediaStats.remove(callId);
           // Refresh call history
-          sendCommand('CallHistoryQuery');
+          _engine?.queryCallHistory();
         } else {
           activeCall = ActiveCall(
             callId: callId,

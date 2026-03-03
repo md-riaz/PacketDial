@@ -128,19 +128,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   tlsEnabled: tlsEnabled,
                   srtpEnabled: srtpEnabled,
                 );
+                // Store account locally in Dart
                 _channel.accounts[id] = acct;
-                _channel.sendCommand('AccountUpsert', {
-                  'id': acct.id,
-                  'display_name': acct.displayName,
-                  'server': acct.server,
-                  'username': acct.username,
-                  'password': acct.password,
-                  'transport': acct.transport,
-                  'stun_server': acct.stunServer,
-                  'turn_server': acct.turnServer,
-                  'tls_enabled': acct.tlsEnabled,
-                  'srtp_enabled': acct.srtpEnabled,
-                });
                 Navigator.pop(ctx);
                 setState(() {});
               },
@@ -186,14 +175,22 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     children: [
                       if (!registered)
                         TextButton(
-                          onPressed: () => _channel
-                              .sendCommand('AccountRegister', {'id': a.id}),
+                          onPressed: () {
+                            // Use structured C ABI to register
+                            _channel.engine.register(
+                              a.username,
+                              a.password,
+                              a.server,
+                            );
+                          },
                           child: const Text('Register'),
                         )
                       else
                         TextButton(
-                          onPressed: () => _channel.sendCommand(
-                              'AccountUnregister', {'id': a.id}),
+                          onPressed: () {
+                            // Use structured C ABI to unregister
+                            _channel.engine.unregister(a.id);
+                          },
                           child: const Text('Unregister'),
                         ),
                       IconButton(

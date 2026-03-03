@@ -23,14 +23,11 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     });
   }
 
-  void _hangup(int callId) =>
-      _channel.sendCommand('CallHangup', {'call_id': callId});
+  void _hangup(int callId) => _channel.engine.hangup();
 
-  void _toggleMute(ActiveCall call) => _channel
-      .sendCommand('CallMute', {'call_id': call.callId, 'muted': !call.muted});
+  void _toggleMute(ActiveCall call) => _channel.engine.setMute(!call.muted);
 
-  void _toggleHold(ActiveCall call) => _channel
-      .sendCommand('CallHold', {'call_id': call.callId, 'hold': !call.onHold});
+  void _toggleHold(ActiveCall call) => _channel.engine.setHold(!call.onHold);
 
   void _showDevicePicker() {
     final devices = _channel.audioDevices;
@@ -75,8 +72,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                _channel.sendCommand('AudioSetDevices',
-                    {'input_id': selIn, 'output_id': selOut});
+                // Use structured C ABI to set audio devices
+                _channel.engine.setAudioDevices(selIn, selOut);
                 Navigator.pop(ctx);
               },
               child: const Text('Apply'),
