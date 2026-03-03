@@ -241,9 +241,13 @@ int pd_init(const char *stun_server,
     /* Media config */
     pjsua_media_config med_cfg;
     pjsua_media_config_default(&med_cfg);
+    /* 16 kHz wideband audio: good balance of quality and bandwidth for VOIP.
+     * Set to 8000 for narrowband (G.711) compatibility if needed. */
     med_cfg.clock_rate     = 16000;
     med_cfg.snd_clock_rate = 0;       /* follow clock_rate */
-    med_cfg.ec_tail_len    = 200;     /* 200ms echo canceller */
+    /* 200 ms echo-canceller tail covers typical room acoustics; increase to
+     * 500 ms for far-end echo on speaker-phone setups. */
+    med_cfg.ec_tail_len    = 200;
     med_cfg.no_vad         = PJ_FALSE;
 
     status = pjsua_init(&ua_cfg, &log_cfg, &med_cfg);
@@ -507,15 +511,29 @@ int pd_call_get_stream_stat(int call_id,
         }
     }
 
-    /* Approximate bitrate from payload bytes transferred */
+    /* Approximate bitrate: use RTCP-reported bytes and the session duration.
+     * pjmedia tracks bytes since the start of the session; divide by elapsed
+     * seconds to get bytes/s, then convert to kbps. Fall back to 64 kbps
+     * (G.711 typical) if insufficient data is available. */
     if (bitrate_kbps_out) {
-        /* Use total transmitted bytes over a rough window to estimate kbps.
-         * If no data yet, fall back to a codec-typical value. */
-        unsigned bytes = stat.rtcp.tx.bytes;
-        if (bytes > 1024)
-            *bitrate_kbps_out = (int)(bytes * 8 / 1024); /* very rough */
-        else
-            *bitrate_kbps_out = 64; /* default guess */
+        unsigned tx_bytes = stat.rtcp.tx.bytes;
+        double elapsed = 0.0;
+        /* pjmedia records session start in stat.start */
+        {
+            pj_time_val now;
+            pj_gettimeofday(&now);
+            pj_time_val start = stat.rtcp.start;
+            pj_time_val diff;
+            diff.sec  = now.sec  - start.sec;
+            diff.msec = now.msec - start.msec;
+            pj_time_val_normalize(&diff);
+            elapsed = (double)diff.sec + (double)diff.msec / 1000.0;
+        }
+        if (elapsed > 1.0 && tx_bytes > 0) {
+            *bitrate_kbps_out = (int)((double)tx_bytes * 8.0 / elapsed / 1000.0);
+        } else {
+            *bitrate_kbps_out = 64; /* G.711 typical default */
+        }
     }
 
     return 0;

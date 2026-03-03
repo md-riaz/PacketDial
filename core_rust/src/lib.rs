@@ -152,7 +152,7 @@ struct Account {
     reg_state: RegistrationState,
     /// PJSIP account id assigned by pjsua_acc_add (None when stub mode or
     /// before the account has been registered via PJSIP).
-    #[allow(dead_code)]
+    #[cfg_attr(not(pjsip_available), allow(dead_code))]
     pjsip_acc_id: Option<i32>,
 }
 
@@ -188,7 +188,7 @@ struct Call {
     started_at: u64,
     /// PJSIP call id assigned by pjsua_call_make_call / on_incoming_call
     /// (None when stub mode or before the call is wired to PJSIP).
-    #[allow(dead_code)]
+    #[cfg_attr(not(pjsip_available), allow(dead_code))]
     pjsip_call_id: Option<i32>,
 }
 
@@ -374,7 +374,18 @@ extern "C" fn pjsip_on_reg_state(
     let reason = if reason_ptr.is_null() {
         String::new()
     } else {
-        unsafe { CStr::from_ptr(reason_ptr).to_str().unwrap_or("").to_owned() }
+        unsafe {
+            match CStr::from_ptr(reason_ptr).to_str() {
+                Ok(s) => s.to_owned(),
+                Err(_) => {
+                    log_engine(
+                        LogLevel::Warn,
+                        "pjsip_on_reg_state: reason contains invalid UTF-8",
+                    );
+                    "<invalid UTF-8>".to_owned()
+                }
+            }
+        }
     };
 
     // Look up our account string id from the PJSIP integer id
@@ -922,10 +933,46 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         );
         let registrar_str = format!("sip:{}", acct_snapshot.server);
 
-        let sip_uri = CString::new(sip_uri_str).unwrap_or_default();
-        let registrar = CString::new(registrar_str).unwrap_or_default();
-        let username = CString::new(acct_snapshot.username.clone()).unwrap_or_default();
-        let password = CString::new(acct_snapshot.password.clone()).unwrap_or_default();
+        let sip_uri = match CString::new(sip_uri_str) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': SIP URI contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
+        let registrar = match CString::new(registrar_str) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': registrar URI contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
+        let username = match CString::new(acct_snapshot.username.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': username contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
+        let password = match CString::new(acct_snapshot.password.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': password contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
 
         let pj_acc_id = unsafe {
             pd_acc_add(
@@ -1050,7 +1097,16 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
                 return EngineErrorCode::NotFound;
             }
         };
-        let dst = CString::new(uri.clone()).unwrap_or_default();
+        let dst = match CString::new(uri.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("CallStart: destination URI contains NUL byte: {uri}"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
         let pj_call_id = unsafe { pd_call_make(pj_acc_id, dst.as_ptr()) };
         if pj_call_id < 0 {
             log_engine(
