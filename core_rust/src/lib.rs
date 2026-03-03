@@ -4,7 +4,7 @@ use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -45,6 +45,16 @@ static SELECTED_OUTPUT: AtomicU32 = AtomicU32::new(1);
 static CRED_STORE: Lazy<Mutex<HashMap<String, String>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
+/// Active log level filter. Messages with level ≤ this value are emitted and
+/// buffered. Default: Info (2).  Levels: Error=0, Warn=1, Info=2, Debug=3.
+static ACTIVE_LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
+
+/// Ring-buffer of recent log entries (capped at LOG_BUFFER_MAX).
+static LOG_BUFFER: Lazy<Mutex<VecDeque<LogEntry>>> =
+    Lazy::new(|| Mutex::new(VecDeque::new()));
+
+const LOG_BUFFER_MAX: usize = 200;
+
 // ---------------------------------------------------------------------------
 // Error codes
 // ---------------------------------------------------------------------------
@@ -60,6 +70,58 @@ pub enum EngineErrorCode {
     UnknownCommand = 5,
     NotFound = 6,
     InternalError = 100,
+}
+
+// ---------------------------------------------------------------------------
+// Logging types
+// ---------------------------------------------------------------------------
+
+/// Severity level for engine log messages.
+/// Stored as u8; lower value = higher severity.
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum LogLevel {
+    Error = 0,
+    Warn  = 1,
+    Info  = 2,
+    Debug = 3,
+}
+
+impl LogLevel {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "Error",
+            Self::Warn  => "Warn",
+            Self::Info  => "Info",
+            Self::Debug => "Debug",
+        }
+    }
+
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Error" => Some(Self::Error),
+            "Warn"  => Some(Self::Warn),
+            "Info"  => Some(Self::Info),
+            "Debug" => Some(Self::Debug),
+            _ => None,
+        }
+    }
+
+    fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Self::Error,
+            1 => Self::Warn,
+            2 => Self::Info,
+            _ => Self::Debug,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LogEntry {
+    level: LogLevel,
+    message: String,
+    ts: u64,
 }
 
 // ---------------------------------------------------------------------------
