@@ -55,9 +55,27 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 ### Hot-reload development
 
+The `run_app.ps1` script automatically builds the Rust core in debug mode and launches Flutter with hot-reload:
+
 ```powershell
 .\scripts\run_app.ps1
 ```
+
+**Manual workflow:**
+```powershell
+# Build Rust core in debug mode (faster compilation)
+cd core_rust
+cargo build --target x86_64-pc-windows-msvc
+
+# Or use the helper script
+.\scripts\build_core_debug.ps1
+
+# Run Flutter with hot-reload
+cd app_flutter
+flutter run -d windows
+```
+
+The CMake build system automatically copies `voip_core.dll` from the correct location (debug or release) based on your build configuration.
 
 ---
 
