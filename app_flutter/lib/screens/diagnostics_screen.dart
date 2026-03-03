@@ -178,47 +178,56 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
       children: [
         // Controls row: engine level selector + view filter
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+          padding: const EdgeInsets.fromLTRB(8, 8, 0, 4),
           child: Row(
             children: [
-              const Text('Engine:', style: TextStyle(fontSize: 12)),
-              const SizedBox(width: 6),
-              DropdownButton<String>(
-                value: _engineLevel,
-                isDense: true,
-                items: _engineLevels
-                    .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) _setEngineLevel(v);
-                },
+              const Text('Engine:', style: TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _engineLevel,
+                  isDense: true,
+                  style: const TextStyle(fontSize: 12, color: Colors.indigo),
+                  items: _engineLevels
+                      .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) _setEngineLevel(v);
+                  },
+                ),
               ),
-              const SizedBox(width: 16),
-              const Text('Show:', style: TextStyle(fontSize: 12)),
-              const SizedBox(width: 6),
-              DropdownButton<String>(
-                value: _filterLevel,
-                isDense: true,
-                items: _levels
-                    .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _filterLevel = v);
-                },
+              const SizedBox(width: 8),
+              const Text('Show:', style: TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _filterLevel,
+                  isDense: true,
+                  style: const TextStyle(fontSize: 12, color: Colors.indigo),
+                  items: _levels
+                      .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _filterLevel = v);
+                  },
+                ),
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
+                icon: const Icon(Icons.refresh, size: 18),
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Fetch from engine',
                 onPressed: () => _channel.getLogBuffer(),
               ),
               IconButton(
-                icon: const Icon(Icons.copy, size: 20),
+                icon: const Icon(Icons.copy, size: 18),
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Copy all',
                 onPressed: _copyAllLogs,
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                visualDensity: VisualDensity.compact,
                 tooltip: 'Clear',
                 onPressed: _clearLogs,
               ),
