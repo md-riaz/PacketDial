@@ -12,9 +12,8 @@
 /app_flutter/.metadata
 # Note: app_flutter/windows/flutter/ is intentionally tracked (Flutter engine CMake stubs)
 
-# PJSIP builds
+# PJSIP builds (compiled output only — source is committed under engine_pjsip/pjproject/)
 /engine_pjsip/build/
-/engine_pjsip/pjproject/
 
 # Misc
 .DS_Store

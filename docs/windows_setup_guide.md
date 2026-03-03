@@ -40,7 +40,7 @@ GitHub Actions CI pipeline performs.
 If you already have **Git** installed open a terminal and run:
 
 ```powershell
-git clone --recurse-submodules https://github.com/md-riaz/PacketDial
+git clone https://github.com/md-riaz/PacketDial
 cd PacketDial
 ```
 
@@ -128,9 +128,20 @@ subst X: <repo-root>
 This maps the repository to `X:\` so that nested build paths stay within the 260-character
 limit.  All subsequent build commands run from `X:\`.
 
-### Step 4 — Build Rust core
+### Step 4 — Build PJSIP
+
+pjproject 2.14.1 source is committed directly in the repository under
+`engine_pjsip/pjproject/` — no download required.
 
 ```powershell
+.\scripts\build_pjsip.ps1   # Build with msbuild (~10-20 min)
+```
+
+### Step 5 — Build Rust core
+
+```powershell
+$env:PJSIP_LIB_DIR     = "$PWD\engine_pjsip\build\out\lib"
+$env:PJSIP_INCLUDE_DIR = "$PWD\engine_pjsip\build\out\include"
 cd core_rust
 cargo build --release --target x86_64-pc-windows-msvc
 ```

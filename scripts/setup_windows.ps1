@@ -277,9 +277,33 @@ if (Test-Path 'X:\') {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Build Rust core  (produces voip_core.dll)
+# 5. Build PJSIP (source is vendored under engine_pjsip/pjproject/)
+# ---------------------------------------------------------------------------
+Write-Step "Building pjproject 2.14.1"
+
+$pjOutDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'engine_pjsip\build\out'
+$pjStamp  = Join-Path $pjOutDir 'pjsip_build_stamp.txt'
+
+if (Test-Path $pjStamp) {
+    Write-OK "PJSIP already built: $(Get-Content $pjStamp -Raw)"
+} else {
+    & "$PSScriptRoot\build_pjsip.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "PJSIP build failed (exit $LASTEXITCODE)."
+        exit 1
+    }
+    Write-OK "PJSIP build complete"
+}
+
+# ---------------------------------------------------------------------------
+# 6. Build Rust core  (produces voip_core.dll)
 # ---------------------------------------------------------------------------
 Write-Step "Building Rust core (voip_core.dll)"
+
+# Pass PJSIP paths to cargo so build.rs picks them up
+$env:PJSIP_LIB_DIR     = Join-Path (Resolve-Path .) 'engine_pjsip\build\out\lib'
+$env:PJSIP_INCLUDE_DIR = Join-Path (Resolve-Path .) 'engine_pjsip\build\out\include'
+
 Set-Location core_rust
 cargo build --release --target x86_64-pc-windows-msvc
 Set-Location ..
@@ -292,7 +316,7 @@ if (-not (Test-Path $dll)) {
 Write-OK "voip_core.dll built -> $dll"
 
 # ---------------------------------------------------------------------------
-# 6. Flutter: fetch packages
+# 7. Flutter: fetch packages
 # ---------------------------------------------------------------------------
 Write-Step "Fetching Flutter packages"
 Set-Location app_flutter
@@ -301,7 +325,7 @@ Set-Location ..
 Write-OK "flutter pub get done"
 
 # ---------------------------------------------------------------------------
-# 7. Flutter: build Windows release
+# 8. Flutter: build Windows release
 # ---------------------------------------------------------------------------
 Write-Step "Building Flutter Windows app (release)"
 Set-Location app_flutter
@@ -311,7 +335,7 @@ Set-Location ..
 Write-OK "Flutter build complete"
 
 # ---------------------------------------------------------------------------
-# 8. Copy voip_core.dll into Flutter output (mirrors CI step)
+# 9. Copy voip_core.dll into Flutter output (mirrors CI step)
 # ---------------------------------------------------------------------------
 Write-Step "Copying voip_core.dll into Flutter output folder"
 $flutterRelease = "app_flutter\build\windows\x64\runner\Release"
@@ -323,7 +347,7 @@ if (Test-Path $dll) {
 }
 
 # ---------------------------------------------------------------------------
-# 9. Package → dist\PacketDial-windows-x64.zip
+# 10. Package → dist\PacketDial-windows-x64.zip
 # ---------------------------------------------------------------------------
 Write-Step "Packaging release artifact"
 .\scripts\package.ps1

@@ -11,8 +11,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable git long paths
         run: git config --system core.longpaths true
@@ -52,6 +50,39 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # -----------------------------------------------------------------------
+      # PJSIP: build from submodule source (cached by submodule commit SHA)
+      # -----------------------------------------------------------------------
+      - name: Cache PJSIP build output
+        id: cache-pjsip
+        uses: actions/cache@v4
+        with:
+          path: engine_pjsip/build/out
+          key: pjsip-windows-${{ hashFiles('.gitmodules', 'engine_pjsip/pjproject_config_site.h') }}
+
+      - name: Build pjproject (Release x64)
+        if: steps.cache-pjsip.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          X:
+          .\scripts\build_pjsip.ps1
+
+      - name: Show PJSIP build output
+        if: always()
+        shell: cmd
+        run: |
+          X:
+          echo ===== PJSIP BUILD OUTPUT =====
+          if exist engine_pjsip\build\out (
+              tree /A /F engine_pjsip\build\out
+          ) else (
+              echo PJSIP build output not found
+          )
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Rust core
+      # -----------------------------------------------------------------------
       - name: Cargo test (Rust core)
         shell: pwsh
         run: |
@@ -61,6 +92,9 @@ jobs:
 
       - name: Build Rust core (cdylib → voip_core.dll)
         shell: pwsh
+        env:
+          PJSIP_LIB_DIR: ${{ github.workspace }}\engine_pjsip\build\out\lib
+          PJSIP_INCLUDE_DIR: ${{ github.workspace }}\engine_pjsip\build\out\include
         run: |
           X:
           cd core_rust
@@ -80,6 +114,9 @@ jobs:
           tree /A /F core_rust\target\x86_64-pc-windows-msvc\release
         continue-on-error: true
 
+      # -----------------------------------------------------------------------
+      # Flutter
+      # -----------------------------------------------------------------------
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -206,3 +243,4 @@ jobs:
           name: PacketDial-windows-x64
           path: dist/PacketDial-windows-x64.zip
           if-no-files-found: warn
+

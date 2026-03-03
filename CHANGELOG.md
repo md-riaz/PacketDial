@@ -5,6 +5,99 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased] — M7 PJSIP Integration
+
+### Changed
+
+#### PJSIP source delivery (vendored directly in repo — no download or submodule)
+- **`engine_pjsip/pjproject/`** — pjproject **2.14.1** source committed directly into
+  the repository as plain files (3 075 files, ~64 MB uncompressed).  A plain
+  `git clone https://github.com/md-riaz/PacketDial` is all that is needed; no
+  `--recurse-submodules`, no runtime download, no internet access required at build time.
+- **`.gitignore`** — `engine_pjsip/pjproject/` is no longer ignored; only the compiled
+  output (`engine_pjsip/build/`) remains ignored.
+- **`engine_pjsip/README.md`** — updated to document vendored source.
+- **`scripts/build_pjsip.ps1`** — removed all fetch/submodule logic; now verifies the
+  vendored source directory exists and proceeds directly to the msbuild step.
+- **`scripts/fetch_pjsip.ps1`** — deleted (no longer needed).
+- **`scripts/setup_windows.ps1`** — PJSIP step calls `build_pjsip.ps1` directly with
+  stamp-file idempotency; submodule initialisation logic removed.
+- **CI workflows** (`windows-ci.yml`, `release.yml`) — removed `submodules: recursive`
+  from checkout (no submodules exist); PJSIP build cache key hashes
+  `engine_pjsip/pjproject_config_site.h` so it invalidates when the config changes.
+- **`docs/build_windows.md`**, **`docs/windows_setup_guide.md`** — clone command
+  is plain `git clone` (no `--recurse-submodules`); PJSIP step is just
+  `.\scripts\build_pjsip.ps1`.
+
+### Added
+
+#### PJSIP Build Infrastructure
+- **`scripts/build_pjsip.ps1`** (rewritten) — verifies pjproject submodule, locates
+  MSBuild via `vswhere`, builds `pjproject-vs14.sln` (Release/x64), collects all
+  `*Release*.lib` and include directories into `engine_pjsip/build/out/`.
+- **`engine_pjsip/pjproject_config_site.h`** (committed) — PacketDial-specific pjproject
+  compile-time configuration: IPv6 enabled, WASAPI audio, video disabled, TLS disabled
+  for this milestone, conservative account/call limits.
+
+
+#### Rust core (`core_rust/`)
+- **`build.rs`** (rewritten) — auto-detects built PJSIP output at
+  `engine_pjsip/build/out/` (or via `PJSIP_LIB_DIR` / `PJSIP_INCLUDE_DIR` env vars),
+  links all `.lib` files from that directory, and adds required Windows system libraries
+  (`ws2_32`, `ole32`, `uuid`, `winmm`, `Avrt`).  Builds an optional C shim when
+  `src/shim/pjsip_shim.c` is present (M7 implementation hook).
+  Gracefully falls back to stub build when PJSIP is not present.
+- **Structured logging system** (`LogLevel`, `LogEntry`, `LOG_BUFFER`, `ACTIVE_LOG_LEVEL`):
+  - `LogLevel` enum: `Error=0`, `Warn=1`, `Info=2`, `Debug=3`.
+  - `LOG_BUFFER` ring buffer (max 200 entries) — always populated regardless of active level.
+  - `ACTIVE_LOG_LEVEL` atomic — defaults to `Info`; controls which entries emit events.
+  - `log_engine(level, msg)` internal helper used throughout the engine.
+- **`SetLogLevel` command** — `{"type":"SetLogLevel","payload":{"level":"Debug"}}`.
+  Emits `LogLevelSet` event.
+- **`GetLogBuffer` command** — returns all buffered entries as `LogBufferResult` event.
+- **`EngineLog` event** — `{"type":"EngineLog","payload":{"level":"…","message":"…","ts":…}}`.
+  Emitted for entries at or above the active log level.
+- Engine state transitions now call `log_engine`:
+  - `engine_init` → `Info` after `EngineReady`, `Warn` on double-init.
+  - `engine_shutdown` → `Info` on graceful shutdown, `Warn` on not-initialized.
+  - `AccountRegister` → `Error` on not-found, `Debug` on state transitions.
+  - `CallStart` → `Debug` with call_id/uri/account details.
+- **4 new unit tests** (24 total): `set_log_level_and_engine_log_event`,
+  `log_level_filter_suppresses_lower_severity`, `get_log_buffer_returns_engine_init_log`,
+  `set_log_level_invalid_returns_error`.
+
+#### Flutter app
+- **`lib/models/log_entry.dart`** — `LogLevel` enum + `LogEntry` model (`level`, `message`, `ts`).
+- **`EngineChannel`** — handles `EngineLog` and `LogBufferResult` events; maintains
+  `logBuffer` list (capped at 500 entries); exposes `setLogLevel(level)` and
+  `getLogBuffer()` helpers.
+- **`DiagnosticsScreen`** — redesigned as a two-tab screen:
+  - *Events* tab: raw JSON event log (existing behaviour, unchanged).
+  - *Logs* tab: structured log entries with:
+    - **Engine level selector** — sets the filter level inside the Rust core.
+    - **View filter** — client-side level filter (All / Error / Warn / Info / Debug).
+    - Color-coded level badges (red=Error, orange=Warn, blue=Info, grey=Debug).
+    - Copy-all and Clear buttons per tab.
+    - Fetch button to request the full log buffer from the engine.
+
+#### CI & Deployment (`windows-ci.yml`, `release.yml`)
+- Added PJSIP cache step (`actions/cache@v4`; key hashes `.gitmodules` + `pjproject_config_site.h`).
+- Added **Build pjproject (Release x64)** step (runs `build_pjsip.ps1`; skipped on cache hit).
+- Added **Show PJSIP build output** inspection step (`if: always()`).
+- `cargo build --release` now passes `PJSIP_LIB_DIR` and `PJSIP_INCLUDE_DIR` env vars
+  so `build.rs` auto-links PJSIP libs when built in CI.
+
+#### Development setup (`setup_windows.ps1`)
+- Added PJSIP build step (step 5) with stamp-file idempotency check; initialises submodule if missing.
+- Rust build step now exports `PJSIP_LIB_DIR` / `PJSIP_INCLUDE_DIR` before `cargo build`.
+
+#### Docs
+- `docs/FFI_API.md` — added `SetLogLevel`, `GetLogBuffer` commands and `LogLevelSet`,
+  `EngineLog`, `LogBufferResult` events; added `CredStore`, `CredRetrieve`, `EnginePing`
+  (previously undocumented).
+
+---
+
 ## [Unreleased] — M6 Hardening & TLS
 
 ### Fixed
