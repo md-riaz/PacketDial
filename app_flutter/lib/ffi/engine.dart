@@ -161,6 +161,7 @@ class VoipEngine {
   // ---- helpers ---------------------------------------------------------------
 
   /// Allocate a null-terminated UTF-8 C string from a Dart [String].
+  /// The caller is responsible for freeing the returned pointer via [_freeNative].
   ffi.Pointer<ffi.Int8> _allocCString(String s) {
     return _allocBytes(_stringToBytes(s));
   }

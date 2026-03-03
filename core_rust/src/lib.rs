@@ -1867,6 +1867,7 @@ pub extern "C" fn engine_set_event_callback(
             *g = cb;
         }
     }));
+    // Panic in set_event_callback is non-critical; silently ignore.
     let _ = result;
 }
 
@@ -1974,7 +1975,16 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
             number_s
         } else {
             // Extract domain from account_id (user@domain)
-            let domain = account_id.split('@').nth(1).unwrap_or("localhost");
+            let domain = match account_id.split('@').nth(1) {
+                Some(d) => d,
+                None => {
+                    invoke_event_callback(
+                        EngineEventId::ErrorOccurred,
+                        "Account has no domain for URI construction",
+                    );
+                    return EngineErrorCode::InternalError as i32;
+                }
+            };
             format!("sip:{number_s}@{domain}")
         };
 
