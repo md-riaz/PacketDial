@@ -79,7 +79,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: engine_pjsip/build/out
-          key: pjsip-windows-${{ hashFiles('.gitmodules', 'engine_pjsip/pjproject_config_site.h') }}
+          key: pjsip-windows-v2141-${{ hashFiles('engine_pjsip/pjproject_config_site.h') }}
 
       - name: Build pjproject (Release x64)
         if: steps.cache-pjsip.outputs.cache-hit != 'true'
@@ -182,7 +182,11 @@ jobs:
           X:
           cd app_flutter
           flutter clean
-          flutter build windows --release
+          flutter build windows --release --verbose 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "flutter build windows --release failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
       - name: Inspect flutter_assets and runner folders
         if: always()

@@ -19,8 +19,7 @@ static NEXT_CALL_ID: AtomicU32 = AtomicU32::new(1);
 static EVENT_QUEUE: Lazy<Mutex<VecDeque<String>>> = Lazy::new(|| Mutex::new(VecDeque::new()));
 static ACCOUNTS: Lazy<Mutex<Vec<Account>>> = Lazy::new(|| Mutex::new(Vec::new()));
 static CALLS: Lazy<Mutex<Vec<Call>>> = Lazy::new(|| Mutex::new(Vec::new()));
-static CALL_HISTORY: Lazy<Mutex<Vec<CallHistoryEntry>>> =
-    Lazy::new(|| Mutex::new(Vec::new()));
+static CALL_HISTORY: Lazy<Mutex<Vec<CallHistoryEntry>>> = Lazy::new(|| Mutex::new(Vec::new()));
 static MEDIA_STATS: Lazy<Mutex<HashMap<u32, MediaStats>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static AUDIO_DEVICES: Lazy<Mutex<Vec<AudioDevice>>> = Lazy::new(|| {
@@ -42,16 +41,14 @@ static SELECTED_OUTPUT: AtomicU32 = AtomicU32::new(1);
 
 /// In-memory credential store (key → value).
 /// TODO: persist via Windows Credential Manager (wincred) in a future milestone.
-static CRED_STORE: Lazy<Mutex<HashMap<String, String>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static CRED_STORE: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Active log level filter. Messages with level ≤ this value are emitted and
 /// buffered. Default: Info (2).  Levels: Error=0, Warn=1, Info=2, Debug=3.
 static ACTIVE_LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
 
 /// Ring-buffer of recent log entries (capped at LOG_BUFFER_MAX).
-static LOG_BUFFER: Lazy<Mutex<VecDeque<LogEntry>>> =
-    Lazy::new(|| Mutex::new(VecDeque::new()));
+static LOG_BUFFER: Lazy<Mutex<VecDeque<LogEntry>>> = Lazy::new(|| Mutex::new(VecDeque::new()));
 
 const LOG_BUFFER_MAX: usize = 200;
 
@@ -82,8 +79,8 @@ pub enum EngineErrorCode {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
     Error = 0,
-    Warn  = 1,
-    Info  = 2,
+    Warn = 1,
+    Info = 2,
     Debug = 3,
 }
 
@@ -91,8 +88,8 @@ impl LogLevel {
     fn as_str(self) -> &'static str {
         match self {
             Self::Error => "Error",
-            Self::Warn  => "Warn",
-            Self::Info  => "Info",
+            Self::Warn => "Warn",
+            Self::Info => "Info",
             Self::Debug => "Debug",
         }
     }
@@ -100,8 +97,8 @@ impl LogLevel {
     fn from_str(s: &str) -> Option<Self> {
         match s {
             "Error" => Some(Self::Error),
-            "Warn"  => Some(Self::Warn),
-            "Info"  => Some(Self::Info),
+            "Warn" => Some(Self::Warn),
+            "Info" => Some(Self::Info),
             "Debug" => Some(Self::Debug),
             _ => None,
         }
@@ -311,9 +308,7 @@ pub fn mask_sip_log(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for line in input.lines() {
         let lower = line.to_lowercase();
-        if lower.starts_with("authorization:")
-            || lower.starts_with("proxy-authorization:")
-        {
+        if lower.starts_with("authorization:") || lower.starts_with("proxy-authorization:") {
             // Keep the header name, redact everything after the colon
             if let Some(colon) = line.find(':') {
                 out.push_str(&line[..=colon]);
@@ -418,11 +413,7 @@ fn push_call_state(call: &Call) {
 fn push_media_stats(stats: &MediaStats) {
     push_event(format!(
         r#"{{"type":"MediaStatsUpdated","payload":{{"call_id":{},"jitter_ms":{:.1},"packet_loss_pct":{:.1},"codec":"{}","bitrate_kbps":{}}}}}"#,
-        stats.call_id,
-        stats.jitter_ms,
-        stats.packet_loss_pct,
-        stats.codec,
-        stats.bitrate_kbps
+        stats.call_id, stats.jitter_ms, stats.packet_loss_pct, stats.codec, stats.bitrate_kbps
     ));
 }
 
@@ -501,14 +492,20 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     let mut accts = ACCOUNTS.lock().unwrap();
     match accts.iter_mut().find(|a| a.id == id) {
         None => {
-            log_engine(LogLevel::Error, &format!("AccountRegister: account '{id}' not found"));
+            log_engine(
+                LogLevel::Error,
+                &format!("AccountRegister: account '{id}' not found"),
+            );
             EngineErrorCode::NotFound
         }
         Some(acct) => {
             acct.reg_state = RegistrationState::Registering;
             drop(accts);
             push_reg_state(&id, &RegistrationState::Registering);
-            log_engine(LogLevel::Debug, &format!("Account '{id}' registering (stub)"));
+            log_engine(
+                LogLevel::Debug,
+                &format!("Account '{id}' registering (stub)"),
+            );
             // TODO: trigger real PJSIP registration here.
             // Stub: transition immediately to Registered.
             let mut accts2 = ACCOUNTS.lock().unwrap();
@@ -517,7 +514,10 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             }
             drop(accts2);
             push_reg_state(&id, &RegistrationState::Registered);
-            log_engine(LogLevel::Debug, &format!("Account '{id}' registered (stub)"));
+            log_engine(
+                LogLevel::Debug,
+                &format!("Account '{id}' registered (stub)"),
+            );
             EngineErrorCode::Ok
         }
     }
@@ -550,7 +550,10 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let call_id = NEXT_CALL_ID.fetch_add(1, Ordering::SeqCst);
-    log_engine(LogLevel::Debug, &format!("CallStart: call_id={call_id} uri={uri} account={account_id}"));
+    log_engine(
+        LogLevel::Debug,
+        &format!("CallStart: call_id={call_id} uri={uri} account={account_id}"),
+    );
     let call = Call {
         id: call_id,
         account_id,
@@ -702,8 +705,12 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let devices = AUDIO_DEVICES.lock().unwrap();
-    let has_input = devices.iter().any(|d| d.id == input_id && d.kind == AudioDeviceKind::Input);
-    let has_output = devices.iter().any(|d| d.id == output_id && d.kind == AudioDeviceKind::Output);
+    let has_input = devices
+        .iter()
+        .any(|d| d.id == input_id && d.kind == AudioDeviceKind::Input);
+    let has_output = devices
+        .iter()
+        .any(|d| d.id == output_id && d.kind == AudioDeviceKind::Output);
     drop(devices);
     if !has_input || !has_output {
         return EngineErrorCode::NotFound;
@@ -747,7 +754,11 @@ fn cmd_sip_capture(p: &serde_json::Value) -> EngineErrorCode {
     let raw = p["raw"].as_str().unwrap_or("");
     let masked = mask_sip_log(raw);
     // Escape the masked string for JSON embedding
-    let escaped = masked.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "\\r");
+    let escaped = masked
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
     push_event(format!(
         r#"{{"type":"SipMessageCaptured","payload":{{"direction":"{direction}","raw":"{escaped}"}}}}"#
     ));
@@ -877,7 +888,8 @@ fn cmd_get_log_buffer(_p: &serde_json::Value) -> EngineErrorCode {
         if i > 0 {
             items.push(',');
         }
-        let msg_escaped = e.message
+        let msg_escaped = e
+            .message
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('\n', "\\n")
@@ -913,12 +925,18 @@ fn version_cstr() -> &'static CString {
 pub extern "C" fn engine_init() -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         if INITIALIZED.swap(true, Ordering::SeqCst) {
-            log_engine(LogLevel::Warn, "engine_init called while already initialized");
+            log_engine(
+                LogLevel::Warn,
+                "engine_init called while already initialized",
+            );
             return EngineErrorCode::AlreadyInitialized as i32;
         }
         // TODO: initialize PJSIP here (pj_init, pjsua_create, etc.)
         push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
-        log_engine(LogLevel::Info, "Engine initialized (stub — PJSIP not yet linked)");
+        log_engine(
+            LogLevel::Info,
+            "Engine initialized (stub — PJSIP not yet linked)",
+        );
         EngineErrorCode::Ok as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
@@ -929,7 +947,10 @@ pub extern "C" fn engine_init() -> i32 {
 pub extern "C" fn engine_shutdown() -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         if !INITIALIZED.swap(false, Ordering::SeqCst) {
-            log_engine(LogLevel::Warn, "engine_shutdown called while not initialized");
+            log_engine(
+                LogLevel::Warn,
+                "engine_shutdown called while not initialized",
+            );
             return EngineErrorCode::NotInitialized as i32;
         }
         // TODO: shutdown PJSIP here (pjsua_destroy, etc.)
@@ -1040,11 +1061,20 @@ mod tests {
     fn reset() {
         INITIALIZED.store(false, Ordering::SeqCst);
         // Use unwrap_or_else to recover from poisoned mutexes caused by prior test panics
-        EVENT_QUEUE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        EVENT_QUEUE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         ACCOUNTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
         CALLS.lock().unwrap_or_else(|e| e.into_inner()).clear();
-        CALL_HISTORY.lock().unwrap_or_else(|e| e.into_inner()).clear();
-        MEDIA_STATS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        CALL_HISTORY
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        MEDIA_STATS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         CRED_STORE.lock().unwrap_or_else(|e| e.into_inner()).clear();
         LOG_BUFFER.lock().unwrap_or_else(|e| e.into_inner()).clear();
         ACTIVE_LOG_LEVEL.store(LogLevel::Info as u8, Ordering::Relaxed);
@@ -1135,7 +1165,9 @@ mod tests {
         drain_events();
 
         assert_eq!(
-            send(r#"{"type":"AccountUpsert","payload":{"id":"acc1","display_name":"Test","server":"sip.example.com","username":"user","password":"pass"}}"#),
+            send(
+                r#"{"type":"AccountUpsert","payload":{"id":"acc1","display_name":"Test","server":"sip.example.com","username":"user","password":"pass"}}"#
+            ),
             0
         );
         let ev = next_event();
@@ -1181,7 +1213,9 @@ mod tests {
         drain_events();
 
         assert_eq!(
-            send(r#"{"type":"CallStart","payload":{"account_id":"acc1","uri":"sip:bob@example.com"}}"#),
+            send(
+                r#"{"type":"CallStart","payload":{"account_id":"acc1","uri":"sip:bob@example.com"}}"#
+            ),
             0
         );
         let ev = next_event();
@@ -1200,7 +1234,8 @@ mod tests {
         let ev = next_event();
         assert!(ev.contains("OnHold"), "got: {ev}");
 
-        let cmd = format!(r#"{{"type":"CallMute","payload":{{"call_id":{call_id},"muted":true}}}}"#);
+        let cmd =
+            format!(r#"{{"type":"CallMute","payload":{{"call_id":{call_id},"muted":true}}}}"#);
         assert_eq!(send(&cmd), 0);
         let ev = next_event();
         assert!(ev.contains("OnHold"), "got: {ev}"); // state unchanged, muted=true
@@ -1240,7 +1275,9 @@ mod tests {
         drain_events();
 
         assert_eq!(
-            send(r#"{"type":"AccountUpsert","payload":{"id":"acc2","display_name":"T","server":"sip.test","username":"u","password":"p","transport":"tcp","stun_server":"stun.test:3478","turn_server":""}}"#),
+            send(
+                r#"{"type":"AccountUpsert","payload":{"id":"acc2","display_name":"T","server":"sip.test","username":"u","password":"p","transport":"tcp","stun_server":"stun.test:3478","turn_server":""}}"#
+            ),
             0
         );
         let ev = next_event();
@@ -1261,7 +1298,9 @@ mod tests {
         drain_events();
 
         assert_eq!(
-            send(r#"{"type":"CallStart","payload":{"account_id":"acc1","uri":"sip:alice@example.com"}}"#),
+            send(
+                r#"{"type":"CallStart","payload":{"account_id":"acc1","uri":"sip:alice@example.com"}}"#
+            ),
             0
         );
         let ev = next_event();
@@ -1290,7 +1329,9 @@ mod tests {
         drain_events();
 
         assert_eq!(
-            send(r#"{"type":"MediaStatsUpdate","payload":{"call_id":42,"jitter_ms":12.5,"packet_loss_pct":0.5,"codec":"OPUS","bitrate_kbps":32}}"#),
+            send(
+                r#"{"type":"MediaStatsUpdate","payload":{"call_id":42,"jitter_ms":12.5,"packet_loss_pct":0.5,"codec":"OPUS","bitrate_kbps":32}}"#
+            ),
             0
         );
         let ev = next_event();
@@ -1343,12 +1384,17 @@ mod tests {
         drain_events();
 
         assert_eq!(
-            send(r#"{"type":"SipCaptureMessage","payload":{"direction":"recv","raw":"INVITE sip:bob@example.com SIP/2.0\nAuthorization: Digest username=\"alice\", response=\"abc123\"\n"}}"#),
+            send(
+                r#"{"type":"SipCaptureMessage","payload":{"direction":"recv","raw":"INVITE sip:bob@example.com SIP/2.0\nAuthorization: Digest username=\"alice\", response=\"abc123\"\n"}}"#
+            ),
             0
         );
         let ev = next_event();
         assert!(ev.contains("SipMessageCaptured"), "got: {ev}");
-        assert!(ev.contains("MASKED"), "Authorization should be masked; got: {ev}");
+        assert!(
+            ev.contains("MASKED"),
+            "Authorization should be masked; got: {ev}"
+        );
 
         engine_shutdown();
     }
@@ -1359,7 +1405,10 @@ mod tests {
         let masked = mask_sip_log(input);
         assert!(!masked.contains("secret"), "password leaked: {masked}");
         assert!(!masked.contains("Digest"), "auth details leaked: {masked}");
-        assert!(masked.contains("alice@192.168.1.1"), "non-sensitive data missing: {masked}");
+        assert!(
+            masked.contains("alice@192.168.1.1"),
+            "non-sensitive data missing: {masked}"
+        );
         assert!(masked.contains("MASKED"), "mask marker missing: {masked}");
     }
 
@@ -1374,7 +1423,9 @@ mod tests {
 
         // Create account with TLS + SRTP enabled
         assert_eq!(
-            send(r#"{"type":"AccountUpsert","payload":{"id":"tls1","display_name":"TLS","server":"sips.example.com","username":"u","password":"p","tls_enabled":true,"srtp_enabled":true}}"#),
+            send(
+                r#"{"type":"AccountUpsert","payload":{"id":"tls1","display_name":"TLS","server":"sips.example.com","username":"u","password":"p","tls_enabled":true,"srtp_enabled":true}}"#
+            ),
             0
         );
         drain_events();
@@ -1387,7 +1438,9 @@ mod tests {
 
         // Update via AccountSetSecurity
         assert_eq!(
-            send(r#"{"type":"AccountSetSecurity","payload":{"id":"tls1","tls_enabled":false,"srtp_enabled":false}}"#),
+            send(
+                r#"{"type":"AccountSetSecurity","payload":{"id":"tls1","tls_enabled":false,"srtp_enabled":false}}"#
+            ),
             0
         );
         let ev = next_event();
@@ -1529,10 +1582,7 @@ mod tests {
         assert!(ptr.is_null(), "unexpected extra event in queue");
 
         // But both entries should still be in the buffer
-        assert_eq!(
-            send(r#"{"type":"GetLogBuffer","payload":{}}"#),
-            0
-        );
+        assert_eq!(send(r#"{"type":"GetLogBuffer","payload":{}}"#), 0);
         let ev = next_event();
         assert!(ev.contains("LogBufferResult"), "got: {ev}");
         assert!(ev.contains("debug noise"), "got: {ev}");
@@ -1550,10 +1600,7 @@ mod tests {
         drain_events();
 
         // engine_init logs an Info message; it should be in the buffer
-        assert_eq!(
-            send(r#"{"type":"GetLogBuffer","payload":{}}"#),
-            0
-        );
+        assert_eq!(send(r#"{"type":"GetLogBuffer","payload":{}}"#), 0);
         let ev = next_event();
         assert!(ev.contains("LogBufferResult"), "got: {ev}");
         assert!(ev.contains("Engine initialized"), "got: {ev}");
