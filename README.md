@@ -20,38 +20,43 @@ PacketDial is a modern, developer-grade Windows SIP softphone built with:
 
 ---
 
-## Prerequisites (Windows)
+## Windows setup & build
 
-- [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) (C++ workload)
-- [Rust stable](https://rustup.rs) — `rustup target add x86_64-pc-windows-msvc`
-- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows/desktop) (stable channel) — `flutter config --enable-windows-desktop`
-- Git
+> **New to this repo?** See the [Windows Setup Guide](docs/windows_setup_guide.md) for a
+> full walkthrough with the one-click setup script.
 
----
-
-## Quick start
+### One-click build (fresh Windows 10/11 VM)
 
 ```powershell
-# 1. Clone (pjproject as submodule optional until M5)
+# 1. Clone
 git clone --recurse-submodules https://github.com/md-riaz/PacketDial
+cd PacketDial
 
-# 2. Build Rust core
-cd core_rust
-cargo build --release        # produces target/release/voip_core.dll
-
-# 3. Copy DLL to Flutter
-cd ..\app_flutter
-flutter pub get
-flutter run -d windows       # hot-reload development
+# 2. Run the setup script (elevated PowerShell)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\scripts\setup_windows.ps1
+# → installs Git, VS Build Tools, Rust, Flutter, then builds & packages the app
+# → output: dist\PacketDial-windows-x64.zip
 ```
 
-### To build a release package
+### Prerequisites (if installing tools manually)
+
+- [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) — Desktop development with C++ workload
+- [Rust stable](https://rustup.rs) — `rustup target add x86_64-pc-windows-msvc`
+- [Flutter SDK](https://docs.flutter.dev/get-started/install/windows/desktop) (stable, 3.41.2) — `flutter config --enable-windows-desktop`
+- Git
+
+### Quick start (tools already installed)
 
 ```powershell
-# From repo root:
-cd core_rust && cargo build --release && cd ..
-cd app_flutter && flutter build windows --release && cd ..
-.\scripts\package.ps1        # → dist\PacketDial-windows-x64.zip
+# Skip tool installation, just build
+.\scripts\setup_windows.ps1 -SkipInstall
+```
+
+### Hot-reload development
+
+```powershell
+.\scripts\run_app.ps1
 ```
 
 ---
