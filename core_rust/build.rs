@@ -11,8 +11,7 @@ fn main() {
     //   2. engine_pjsip/build/out/ relative to the workspace root
     //      (produced by scripts/build_pjsip.ps1).
     //
-    // If neither source is found the crate compiles successfully as a
-    // stub DLL (PJSIP integration pending – Milestone M7).
+    // PJSIP is required — the build will fail if libs are not found.
     // -----------------------------------------------------------------------
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -58,11 +57,14 @@ fn main() {
             Some(p)
         } else {
             println!(
-                "cargo:warning=PJSIP lib dir exists ({}) but contains no .lib files \
-                 — building stub DLL (run scripts/build_pjsip.ps1)",
+                "cargo:warning=PJSIP lib dir exists ({}) but contains no .lib files",
                 p.display()
             );
-            None
+            panic!(
+                "PJSIP lib dir exists ({}) but contains no .lib files. \
+                 Run scripts/build_pjsip.ps1 to build PJSIP.",
+                p.display()
+            );
         }
     });
 
@@ -103,19 +105,21 @@ fn main() {
             lib.display()
         );
     } else {
-        println!("cargo:warning=PJSIP not found — building stub DLL (run scripts/build_pjsip.ps1 to enable full integration)");
+        panic!(
+            "PJSIP not found. Run scripts/build_pjsip.ps1 to build PJSIP, \
+             or set PJSIP_LIB_DIR and PJSIP_INCLUDE_DIR environment variables."
+        );
     }
 
     if let Some(inc) = &include_dir {
         println!("cargo:include={}", inc.display());
     }
 
-    // --- Optional: compile C shim if present --------------------------------
+    // --- Compile C shim -------------------------------------------------------
     //
-    // When a C shim source file is added at core_rust/src/shim/pjsip_shim.c,
-    // the cc crate will compile and link it automatically.  This is gated on
-    // both the shim file and the include directory existing so the stub build
-    // continues to work without PJSIP headers.
+    // The C shim source file at core_rust/src/shim/pjsip_shim.c is compiled and
+    // linked using the cc crate. Both the shim file and the include directory
+    // must exist.
     let shim_src = manifest_dir.join("src").join("shim").join("pjsip_shim.c");
     if shim_src.exists() {
         if let Some(inc) = &include_dir {

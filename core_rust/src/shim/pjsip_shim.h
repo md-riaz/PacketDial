@@ -169,6 +169,14 @@ int pd_call_hold(int call_id, int hold);
  */
 int pd_call_set_mute(int call_id, int mute);
 
+/**
+ * Send DTMF digits on a call.
+ * @param call_id  pjsua_call_id.
+ * @param digits   NUL-terminated string of DTMF digits (0-9, *, #, A-D).
+ * @return 0 on success, non-zero on error.
+ */
+int pd_call_send_dtmf(int call_id, const char *digits);
+
 /* -----------------------------------------------------------------------
  * Audio device management
  * ----------------------------------------------------------------------- */

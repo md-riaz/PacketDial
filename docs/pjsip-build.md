@@ -209,15 +209,10 @@ After PJSIP is built, the Rust `build.rs` script:
        .compile("pjsip_shim");
    ```
 
-4. **Sets feature flag**: `pjsip_available` (enables real SIP code)
+4. **Sets cfg flag**: `pjsip_available` (enables PJSIP code paths)
 
-### Fallback Mode
-
-If PJSIP libs are **not found**, the build:
-- Still succeeds (no error)
-- Builds stub DLL without PJSIP
-- Sets feature flag to `not(pjsip_available)`
-- App runs with placeholder SIP functionality
+PJSIP is **required** — the build will fail if libs are not found.
+Run `scripts/build_pjsip.ps1` to build PJSIP before compiling the Rust core.
 
 ---
 

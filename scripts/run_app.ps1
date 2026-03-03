@@ -39,7 +39,7 @@ function Write-Fail  { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
-# ── 1. Build Rust core (stub DLL, no PJSIP required) ────────────────────────
+# ── 1. Build Rust core (PJSIP required) ────────────────────────────────────────
 Write-Step "Building Rust core (debug mode)"
 
 & "$PSScriptRoot\build_core.ps1" -Configuration Debug
@@ -53,10 +53,10 @@ Write-OK "Rust core built"
 Write-Step "Preparing Flutter Debug environment"
 
 $DebugOut = Join-Path $RepoRoot "app_flutter\build\windows\x64\runner\Debug"
-$StubDll  = Join-Path $RepoRoot "core_rust\target\x86_64-pc-windows-msvc\debug\voip_core.dll"
+$CoreDll  = Join-Path $RepoRoot "core_rust\target\x86_64-pc-windows-msvc\debug\voip_core.dll"
 $DebugDll = Join-Path $DebugOut "voip_core.dll"
 
-if (Test-Path $StubDll) {
+if (Test-Path $CoreDll) {
     # Ensure any running instance isn't locking our DLL
     Write-Info "Stopping any running PacketDial instances..."
     Stop-Process -Name "PacketDial" -Force -ErrorAction SilentlyContinue | Out-Null
@@ -66,11 +66,11 @@ if (Test-Path $StubDll) {
         New-Item -ItemType Directory -Path $DebugOut -Force | Out-Null
     }
 
-    Copy-Item -Force $StubDll $DebugOut
+    Copy-Item -Force $CoreDll $DebugOut
     Write-OK "DLL copied to Flutter Debug output"
     Write-OK "    $DebugDll"
 } else {
-    Write-Warn "voip_core.dll not found at $StubDll"
+    Write-Warn "voip_core.dll not found at $CoreDll"
     Write-Info "App may fail to start. Check the cargo build output above."
 }
 

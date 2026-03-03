@@ -410,6 +410,13 @@ int pd_call_set_mute(int call_id, int mute)
     return 0;
 }
 
+int pd_call_send_dtmf(int call_id, const char *digits)
+{
+    if (!digits || digits[0] == '\0') return -1;
+    pj_str_t d = S(digits);
+    return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
+}
+
 /* -----------------------------------------------------------------------
  * Audio device management
  * ----------------------------------------------------------------------- */

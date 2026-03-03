@@ -46,14 +46,125 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 See [Quick Start](docs/quickstart.md) for more details and options.
 
-### Hot-reload development
+---
+
+## How to Run (Development)
+
+The fastest way to launch PacketDial for active development is the **hot-reload script:**
 
 ```powershell
+# From the repository root
 .\scripts\run_app.ps1
 ```
 
-Builds Rust core in debug mode and launches Flutter with live reload.  
-See [Developer Workflow](docs/dev-workflow.md) for workflows and tips.
+This single command will:
+1. Build the Rust core (`voip_core.dll`) in **debug mode** (~30–60 seconds)
+2. Copy the DLL to Flutter's debug output directory
+3. Launch the Flutter desktop app with **hot-reload** enabled
+
+> **Prerequisite:** PJSIP must be built first. See [How to Build](#how-to-build-release) Step 1.
+
+Once the app is running:
+- Press **`r`** → hot-reload Dart/Flutter code changes instantly
+- Press **`R`** → full restart (rebuilds Rust + reloads Flutter)
+- Press **`q`** → quit
+
+
+### Manual Run (Step-by-Step)
+
+If you prefer to run each step manually:
+
+```powershell
+# 1. Build Rust core DLL (debug mode)
+.\scripts\build_core.ps1 -Configuration Debug
+
+# 2. Run Flutter app
+cd app_flutter
+flutter pub get
+flutter run -d windows
+```
+
+---
+
+## How to Build (Release)
+
+### Prerequisites
+
+| Requirement | Details |
+|-------------|---------|
+| **OS** | Windows 10 (build 1809+) or Windows 11, 64-bit |
+| **Visual Studio Build Tools 2022** | Desktop development with C++ workload |
+| **Rust** | Stable toolchain (auto-installed by `setup_windows.ps1`) |
+| **Flutter SDK** | 3.41.2+ (auto-installed by `setup_windows.ps1`) |
+| **Disk Space** | 10+ GB free |
+
+> **Tip:** Running `.\scripts\setup_windows.ps1` installs all prerequisites automatically.
+
+### Step 1: Build PJSIP
+
+```powershell
+.\scripts\build_pjsip.ps1
+```
+
+This compiles the PJSIP C library from source. PJSIP is **required** for the app to function.
+
+### Step 2: Build the Rust Core DLL
+
+```powershell
+# Release mode (optimized, ~1-3 minutes)
+.\scripts\build_core.ps1 -Configuration Release
+
+# Debug mode (faster compile, ~30-60 seconds)
+.\scripts\build_core.ps1 -Configuration Debug
+```
+
+**Output:** `core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll`
+
+### Step 3: Build the Flutter App
+
+```powershell
+cd app_flutter
+flutter pub get
+flutter build windows --release
+```
+
+**Output:** `app_flutter\build\windows\x64\runner\Release\`
+
+### Step 4: Package for Distribution
+
+```powershell
+.\scripts\package.ps1
+```
+
+Creates a distributable ZIP at `dist\PacketDial-windows-x64.zip` containing:
+- `PacketDial.exe` (Flutter desktop app)
+- `voip_core.dll` (Rust SIP engine)
+- Flutter runtime files (`flutter_windows.dll`, `icudtl.dat`, `data/`)
+
+---
+
+## How to Test
+
+### Rust Core Tests
+
+```powershell
+cd core_rust
+cargo test
+```
+
+### Flutter Tests
+
+```powershell
+cd app_flutter
+flutter test
+```
+
+### Lint (Rust)
+
+```powershell
+cd core_rust
+cargo clippy -- -D warnings
+```
 
 ---
 
@@ -70,18 +181,14 @@ See [Developer Workflow](docs/dev-workflow.md) for workflows and tips.
 
 ---
 
-## Detailed Build & Setup
+## Known Limitations / TODOs
 
-For complete build instructions, see:
-- [Quick Start](docs/quickstart.md) — Faster (5 min)
-- [Windows Setup Guide](docs/windows_setup_guide.md) — Detailed (20-40 min)
-
-Prerequisites:
-- Windows 10 (build 1809+) or Windows 11, 64-bit
-- Visual Studio Build Tools 2022 (Desktop development with C++)
-- Rust stable (auto-installed by setup script)
-- Flutter SDK 3.41.2 (auto-installed by setup script)
-- 10+ GB free disk space
+- **Call transfer:** Not yet implemented (PJSIP `pjsua_call_xfer` integration pending)
+- **Conference calling:** Multi-party bridging not yet wired
+- **TLS/SRTP:** Config flags exist in PJSIP but are not surfaced in the UI
+- **Credential persistence:** Currently in-memory only — Windows Credential Manager integration planned
+- **Audio device hot-swap:** Device list is static at startup; runtime refresh not yet supported
+- **Linux / macOS builds:** Only Windows x64 is supported at this time
 
 ---
 
@@ -116,6 +223,35 @@ PacketDial uses a **Direct C ABI** for all communication between Dart and Rust. 
 
 See [`docs/FFI_API.md`](docs/FFI_API.md) for complete C ABI signatures and event details.
 
+### Account Model (Spec v2.1)
+
+Accounts are identified by an internal **UUID**.
+
+| Field | Purpose |
+|-------|---------|
+| `accountName` | User-friendly label (e.g., "Office", "Home") |
+| `username` | SIP Authentication ID |
+| `password` | SIP Password |
+| `domain` | SIP Domain / Registrar (e.g., `sip.provider.com`) |
+| `sipProxy` | (Optional) Outbound proxy |
+| `authUsername` | (Optional) Separate authorization name |
+| `transport` | `UDP` (default) or `TCP` |
+| `tls_enabled` | Boolean flag for SIPS/TLS |
+
+---
+
+## 🛠️ Build & CI/CD Scripts
+
+Located in [`scripts/`](file:///c:/Users/vm_user/Downloads/PacketDial/scripts/):
+
+| Script | Purpose |
+|--------|---------|
+| `setup_windows.ps1` | **Full Setup**: Prerequisites + PJSIP + Rust + Flutter |
+| `run_app.ps1` | **Dev Inner Loop**: Rebuilds Rust (debug) + Flutter Run |
+| `build_core.ps1` | **Rust Core**: Build DLL (`-Configuration Debug\|Release`) |
+| `build_pjsip.ps1` | **PJSIP Library**: Compiles PJSIP from source |
+| `package.ps1` | **Dist**: Creates Windows x64 ZIP release |
+
 ---
 
 ## Milestones
@@ -132,8 +268,6 @@ See [`docs/FFI_API.md`](docs/FFI_API.md) for complete C ABI signatures and event
 | M7 - PJSIP Integration | ✅ Done | C shim + Rust FFI: real SIP registration, outgoing/incoming calls, audio, SIP capture |
 | M8 - FFI Standardization | ✅ Done | Direct C ABI functions (`engine_register`, `engine_make_call`, `engine_hangup`, `engine_set_event_callback`), structured event callbacks, Dart/Rust test suites |
 
-> **Note:** M1–M6 deliver the full architecture and UI with a stub engine (no PJSIP libs needed).
-> M7 wires real SIP by compiling a thin C shim against pjsua when PJSIP static libs are present
-> (built by `scripts/build_pjsip.ps1`).  Without PJSIP, the DLL falls back to the stub behaviour,
-> keeping the app functional for development and testing without a full PJSIP build.
+> **Note:** PJSIP is required for all SIP functionality. Build it with `scripts/build_pjsip.ps1`
+> before compiling the Rust core. The thin C shim (`pjsip_shim.c`) bridges PJSIP and the Rust FFI layer.
 

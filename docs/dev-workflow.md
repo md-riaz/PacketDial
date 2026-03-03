@@ -137,9 +137,9 @@ Logs are masked (credentials redacted) before export.
    Press 'R' to hot-restart # Rust changes
    ```
 
-### Integrating Real PJSIP
+### Building with PJSIP
 
-By default, PacketDial builds with a **stub SIP engine**. To enable real PJSIP:
+PJSIP is required. Build it before compiling the Rust core:
 
 1. Build PJSIP:
    ```powershell
@@ -153,18 +153,7 @@ By default, PacketDial builds with a **stub SIP engine**. To enable real PJSIP:
 
 The Rust `build.rs` script automatically:
 - Detects PJSIP libs at `engine_pjsip/build/out/lib/`
-- Enables the `pjsip_available` feature flag
 - Links C shim against PJSIP static libs
-
-### Testing without PJSIP
-
-The app works perfectly with the **stub engine** for:
-- UI development
-- FFI API testing
-- Dart/Rust integration
-- Database (Isar) testing
-
-No PJSIP needed for these workflows.
 
 ---
 
@@ -221,7 +210,7 @@ If not set, `build.rs` looks for them at `engine_pjsip/build/out/` (default loca
 | Hot-reload not working | Press `R` (restart). If still broken, exit and re-run `.\scripts\run_app.ps1` |
 | DLL not found error | Run `.\.scripts\build_core_debug.ps1` manually, or check `app_flutter\build\windows\x64\runner\Debug\` |
 | "Path too long" during Rust build | Script default maps to `X:\`. If issues persist, see [troubleshooting.md](troubleshooting.md) |
-| Cargo build fails (no PJSIP) | This is normal. App builds in stub mode. Run `.\scripts\build_pjsip.ps1` if PJSIP needed |
+| Cargo build fails (no PJSIP) | PJSIP is required. Run `.\scripts\build_pjsip.ps1` first |
 | Permission denied on DLL copy | Ensure PacketDial isn't running: `Get-Process PacketDial` → `Stop-Process -Name PacketDial` |
 
 For more help, see [troubleshooting.md](troubleshooting.md).

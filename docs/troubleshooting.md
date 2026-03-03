@@ -206,20 +206,13 @@ ERROR: PJSIP build outputs not found at:
   - engine_pjsip\build\out\lib
 ```
 
-**This is normal.** PacketDial can build without PJSIP (runs as **stub SIP client**).
+**PJSIP is required.** Build it before compiling the Rust core.
 
-**To use real PJSIP:**
+**Solution:**
 
 ```powershell
 .\scripts\build_pjsip.ps1   # Build PJSIP first
 .\scripts\build_core.ps1    # Then rebuild Rust
-```
-
-**To build stub DLL (no PJSIP):**
-
-```powershell
-.\scripts\build_core.ps1    # Builds without PJSIP
-# App will have no real SIP functionality, but UI and database work fine
 ```
 
 ---
@@ -245,12 +238,6 @@ This means the Rust `build.rs` can't find PJSIP libs. Either:
    ```powershell
    $env:PJSIP_LIB_DIR = "C:\Users\YourName\Downloads\PacketDial\engine_pjsip\build\out\lib"
    $env:PJSIP_INCLUDE_DIR = "C:\Users\YourName\Downloads\PacketDial\engine_pjsip\build\out\include"
-   ```
-
-3. **Or, build stub (no PJSIP)**:
-   ```powershell
-   # Just don't set the env vars — build.rs will skip PJSIP linking
-   cargo build --release --target x86_64-pc-windows-msvc
    ```
 
 ---

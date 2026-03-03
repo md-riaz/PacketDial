@@ -23,7 +23,7 @@ PacketDial releases are distributed as **Windows x64 ZIP archives** containing:
 PacketDial-windows-x64/
 ├── PacketDial.exe                      # Main executable
 ├── flutter_windows.dll                 # Flutter runtime
-├── voip_core.dll                       # Rust core (optional; stub works)
+├── voip_core.dll                       # Rust core (required)
 ├── icudtl.dat                          # Unicode data
 ├── data/
 │   └── flutter_assets/                 # UI assets

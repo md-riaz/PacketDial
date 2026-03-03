@@ -8,7 +8,7 @@
     binary suitable for release artifacts and performance testing.
 
     This script:
-    1. Verifies PJSIP build outputs exist (or uses stub mode)
+    1. Verifies PJSIP build outputs exist (required)
     2. Builds core_rust/ with cargo (--release mode, full target triple)
     3. Copies voip_core.dll to Flutter's runner folder for platform builds
 
@@ -18,8 +18,8 @@
 .NOTES
     - Uses target x86_64-pc-windows-msvc (MSVC toolchain)
     - Output: core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll
-    - If PJSIP build outputs are missing, build will use stub DLL
-       (no PJSIP functionality, but app still runs)
+    - If PJSIP build outputs are missing, build will fail
+       (run scripts/build_pjsip.ps1 first)
 
 .LINK
     See docs/rust-core.md for detailed Rust build documentation
@@ -57,8 +57,9 @@ if ((Test-Path $IncludeDir) -and (Test-Path $LibDir)) {
   $env:PJSIP_INCLUDE_DIR = $IncludeDir
   $env:PJSIP_LIB_DIR = $LibDir
 } else {
-  Write-Info "PJSIP outputs not found - stub DLL will be built"
-  Write-Info "(To build with real PJSIP, run: .\scripts\build_pjsip.ps1 first)"
+  Write-Fail "PJSIP outputs not found at $PjsipOut"
+  Write-Info "Run: .\scripts\build_pjsip.ps1 first"
+  exit 1
 }
 
 # ---------------------------------------------------------------------------

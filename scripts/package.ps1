@@ -26,7 +26,7 @@
 
 .NOTES
     - If voip_core.dll is missing, the package is created without it
-      (app runs with stub SIP engine)
+    - If voip_core.dll is missing, the package will not be complete
     - Flutter build output is validated before packaging
     - Staging directory is cleaned up after compression
 

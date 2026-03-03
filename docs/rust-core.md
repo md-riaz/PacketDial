@@ -10,8 +10,7 @@ This document describes the Rust FFI wrapper that mediates between Flutter and P
 
 1. **Wraps PJSIP** functionality via a thin C FFI shim (`src/shim/pjsip_shim.c`)
 2. **Provides command/event channels** for JSON-based communication with Dart
-3. **Falls back to stub mode** if PJSIP libs are unavailable (app remains functional)
-4. **Compiles to both debug and release** modes for fast iteration and optimized releases
+3. **Compiles to both debug and release** modes for fast iteration and optimized releases
 
 ---
 
@@ -163,7 +162,7 @@ See `docs/FFI_API.md` for the complete list of functions, event IDs, and payload
 
 | Problem | Solution |
 |---------|----------|
-| **"PJSIP libs not found"** | Run `.\scripts\build_pjsip.ps1` first, OR use stub mode (app still works) |
+| **"PJSIP libs not found"** | Run `.\scripts\build_pjsip.ps1` first (PJSIP is required) |
 | **Cargo build fails with "link.exe not found"** | Install Visual Studio Build Tools with C++ Desktop workload |
 | **DLL not found at runtime** | Ensure `voip_core.dll` is copied to Flutter's output folder (handled by `build_core.ps1`) |
 | **Hot-reload fails with DLL lock** | `.\scripts\run_app.ps1` kills running PacketDial process before rebuilding |

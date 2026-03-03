@@ -51,14 +51,12 @@ static LOG_BUFFER: Lazy<Mutex<VecDeque<LogEntry>>> = Lazy::new(|| Mutex::new(Vec
 
 const LOG_BUFFER_MAX: usize = 200;
 
-// Maps pjsua_acc_id (i32) → our account id (String) — populated when PJSIP
-// is available and an account is registered via pd_acc_add.
-#[cfg(pjsip_available)]
+// Maps pjsua_acc_id (i32) → our account id (String) — populated when an
+// account is registered via pd_acc_add.
 static PJSIP_ACC_MAP: Lazy<Mutex<HashMap<i32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 // Maps pjsua_call_id (i32) → our internal call id (u32) — used to route
 // PJSIP call-state callbacks back to the correct Call entry.
-#[cfg(pjsip_available)]
 static PJSIP_CALL_MAP: Lazy<Mutex<HashMap<i32, u32>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 // ---------------------------------------------------------------------------
@@ -153,9 +151,7 @@ struct Account {
     /// Require SRTP for media encryption.
     srtp_enabled: bool,
     reg_state: RegistrationState,
-    /// PJSIP account id assigned by pjsua_acc_add (None when stub mode or
-    /// before the account has been registered via PJSIP).
-    #[cfg_attr(not(pjsip_available), allow(dead_code))]
+    /// PJSIP account id assigned by pjsua_acc_add (None before registration).
     pjsip_acc_id: Option<i32>,
 }
 
@@ -189,9 +185,8 @@ struct Call {
     muted: bool,
     on_hold: bool,
     started_at: u64,
-    /// PJSIP call id assigned by pjsua_call_make_call / on_incoming_call
-    /// (None when stub mode or before the call is wired to PJSIP).
-    #[cfg_attr(not(pjsip_available), allow(dead_code))]
+    /// PJSIP call id used for shim operations
+    /// (None before the call is wired to PJSIP).
     pjsip_call_id: Option<i32>,
 }
 
@@ -285,12 +280,10 @@ fn now_secs() -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// PJSIP shim FFI — compiled in only when PJSIP static libs are present.
-// The C shim (src/shim/pjsip_shim.c) wraps pjsua so that every call from
-// Rust goes through a thin, stable C boundary.
+// PJSIP shim FFI — the C shim (src/shim/pjsip_shim.c) wraps pjsua so that
+// every call from Rust goes through a thin, stable C boundary.
 // ---------------------------------------------------------------------------
 
-#[cfg(pjsip_available)]
 extern "C" {
     fn pd_init(
         user_agent: *const c_char,
@@ -308,6 +301,8 @@ extern "C" {
         registrar: *const c_char,
         username: *const c_char,
         password: *const c_char,
+        auth_username: *const c_char,
+        sip_proxy: *const c_char,
         use_tcp: i32,
     ) -> i32;
     fn pd_acc_remove(acc_id: i32) -> i32;
@@ -342,7 +337,6 @@ extern "C" {
 // ---------------------------------------------------------------------------
 
 /// Map a PJSIP log level (1–6) to our LogLevel.
-#[cfg(pjsip_available)]
 fn pj_level_to_log_level(pj_level: i32) -> LogLevel {
     match pj_level {
         1 => LogLevel::Error,
@@ -353,7 +347,6 @@ fn pj_level_to_log_level(pj_level: i32) -> LogLevel {
 }
 
 /// PJSIP log forwarding callback.
-#[cfg(pjsip_available)]
 extern "C" fn pjsip_on_log(pj_level: i32, msg_ptr: *const c_char) {
     if msg_ptr.is_null() {
         return;
@@ -369,7 +362,6 @@ extern "C" fn pjsip_on_log(pj_level: i32, msg_ptr: *const c_char) {
 
 /// PJSIP registration-state callback.
 /// Maps pjsua registration info to our RegistrationState and pushes an event.
-#[cfg(pjsip_available)]
 extern "C" fn pjsip_on_reg_state(
     pj_acc_id: i32,
     expires: i32,
@@ -435,7 +427,6 @@ extern "C" fn pjsip_on_reg_state(
 
 /// PJSIP incoming-call callback.
 /// Creates a new Call entry with Incoming direction and pushes a Ringing event.
-#[cfg(pjsip_available)]
 extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_ptr: *const c_char) {
     let from_uri = if from_uri_ptr.is_null() {
         "sip:unknown".to_owned()
@@ -493,7 +484,6 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
 
 /// PJSIP call-state callback.
 /// Maps pjsip_inv_state to CallState and updates/pushes accordingly.
-#[cfg(pjsip_available)]
 extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code: i32) {
     // pjsip_inv_state: 0=NULL 1=CALLING 2=INCOMING 3=EARLY 4=CONNECTING 5=CONFIRMED 6=DISCONNECTED
     let new_state = match inv_state {
@@ -554,7 +544,6 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
 /// PJSIP call-media callback.
 /// Called when audio media becomes active or inactive for a call.
 /// When active=1, also polls stream stats and pushes a MediaStatsUpdated event.
-#[cfg(pjsip_available)]
 extern "C" fn pjsip_on_call_media(pj_call_id: i32, active: i32) {
     let our_call_id = {
         let map = PJSIP_CALL_MAP.lock().unwrap();
@@ -587,7 +576,6 @@ extern "C" fn pjsip_on_call_media(pj_call_id: i32, active: i32) {
 }
 
 /// PJSIP SIP-message capture callback.
-#[cfg(pjsip_available)]
 extern "C" fn pjsip_on_sip_msg(pj_call_id: i32, is_tx: i32, msg_ptr: *const c_char) {
     if msg_ptr.is_null() {
         return;
@@ -611,7 +599,6 @@ extern "C" fn pjsip_on_sip_msg(pj_call_id: i32, is_tx: i32, msg_ptr: *const c_ch
 }
 
 /// Poll real-time media statistics for a PJSIP call and push a MediaStatsUpdated event.
-#[cfg(pjsip_available)]
 fn pjsip_poll_media_stats(pj_call_id: i32) {
     let our_call_id = {
         let map = PJSIP_CALL_MAP.lock().unwrap();
@@ -925,7 +912,6 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     };
 
     // Snapshot account config for PJSIP (need it outside the lock)
-    #[allow(unused_variables)]
     let acct_snapshot = {
         let accts = ACCOUNTS.lock().unwrap();
         match accts.iter().find(|a| a.uuid == id) {
@@ -945,7 +931,6 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         let mut accts = ACCOUNTS.lock().unwrap();
         if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
             // Remove any existing PJSIP account so we start fresh
-            #[cfg(pjsip_available)]
             if let Some(old_pj_id) = a.pjsip_acc_id.take() {
                 unsafe { pd_acc_remove(old_pj_id) };
                 PJSIP_ACC_MAP.lock().unwrap().remove(&old_pj_id);
@@ -955,8 +940,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     }
     push_reg_state(&id, &RegistrationState::Registering);
 
-    // --- PJSIP path ---
-    #[cfg(pjsip_available)]
+    // --- PJSIP registration ---
     {
         let use_tcp = if acct_snapshot.transport.eq_ignore_ascii_case("tcp") {
             1i32
@@ -970,10 +954,14 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         } else {
             "sip"
         };
-        let sip_uri_str = format!(
-            "{}:{}@{}",
-            scheme, acct_snapshot.username, acct_snapshot.server
-        );
+        // Use domain for SIP URI if provided, otherwise use server
+        let uri_domain = if !acct_snapshot.domain.is_empty() {
+            &acct_snapshot.domain
+        } else {
+            &acct_snapshot.server
+        };
+
+        let sip_uri_str = format!("{}:{}@{}", scheme, acct_snapshot.username, uri_domain);
         let registrar_str = format!("sip:{}", acct_snapshot.server);
 
         let sip_uri = match CString::new(sip_uri_str) {
@@ -1016,6 +1004,26 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 return EngineErrorCode::InternalError;
             }
         };
+        let auth_username = match CString::new(acct_snapshot.auth_username.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': auth_username contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
+        let sip_proxy = match CString::new(acct_snapshot.sip_proxy.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': sip_proxy contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
 
         let pj_acc_id = unsafe {
             pd_acc_add(
@@ -1023,6 +1031,8 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 registrar.as_ptr(),
                 username.as_ptr(),
                 password.as_ptr(),
+                auth_username.as_ptr(),
+                sip_proxy.as_ptr(),
                 use_tcp,
             )
         };
@@ -1056,26 +1066,6 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         // on_reg_state callback will push the final Registered / Failed event
         return EngineErrorCode::Ok;
     }
-
-    // --- Stub path (no PJSIP) ---
-    #[cfg(not(pjsip_available))]
-    {
-        log_engine(
-            LogLevel::Debug,
-            &format!("Account '{id}' registering (stub)"),
-        );
-        let mut accts2 = ACCOUNTS.lock().unwrap();
-        if let Some(a) = accts2.iter_mut().find(|a| a.uuid == id) {
-            a.reg_state = RegistrationState::Registered;
-        }
-        drop(accts2);
-        push_reg_state(&id, &RegistrationState::Registered);
-        log_engine(
-            LogLevel::Debug,
-            &format!("Account '{id}' registered (stub)"),
-        );
-        EngineErrorCode::Ok
-    }
 }
 
 fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
@@ -1088,7 +1078,6 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
         None => EngineErrorCode::NotFound,
         Some(acct) => {
             // Remove from PJSIP (triggers SIP unregistration)
-            #[cfg(pjsip_available)]
             if let Some(pj_id) = acct.pjsip_acc_id.take() {
                 unsafe { pd_acc_remove(pj_id) };
                 PJSIP_ACC_MAP.lock().unwrap().remove(&pj_id);
@@ -1120,8 +1109,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         &format!("CallStart: call_id={call_id} uri={uri} account={account_id}"),
     );
 
-    // --- PJSIP path ---
-    #[cfg(pjsip_available)]
+    // --- PJSIP call ---
     {
         let pj_acc_id = {
             let accts = ACCOUNTS.lock().unwrap();
@@ -1178,25 +1166,6 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         );
         return EngineErrorCode::Ok;
     }
-
-    // --- Stub path ---
-    #[cfg(not(pjsip_available))]
-    {
-        let call = Call {
-            id: call_id,
-            account_id,
-            uri,
-            direction: CallDirection::Outgoing,
-            state: CallState::Ringing,
-            muted: false,
-            on_hold: false,
-            started_at: now_secs(),
-            pjsip_call_id: None,
-        };
-        push_call_state(&call);
-        CALLS.lock().unwrap().push(call);
-        EngineErrorCode::Ok
-    }
 }
 
 fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
@@ -1208,23 +1177,27 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
-            // PJSIP path: answer via shim
-            #[cfg(pjsip_available)]
-            if let Some(pj_id) = call.pjsip_call_id {
-                let rc = unsafe { pd_call_answer(pj_id) };
-                if rc != 0 {
-                    log_engine(
-                        LogLevel::Warn,
-                        &format!("CallAnswer: pd_call_answer({pj_id}) rc={rc}"),
-                    );
+            // Answer via PJSIP shim
+            match call.pjsip_call_id {
+                Some(pj_id) => {
+                    let rc = unsafe { pd_call_answer(pj_id) };
+                    if rc != 0 {
+                        log_engine(
+                            LogLevel::Warn,
+                            &format!("CallAnswer: pd_call_answer({pj_id}) rc={rc}"),
+                        );
+                    }
+                    // State will be updated via on_call_state callback
+                    EngineErrorCode::Ok
                 }
-                // State will be updated via on_call_state callback
-                return EngineErrorCode::Ok;
+                None => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallAnswer: call {call_id} has no PJSIP call id"),
+                    );
+                    EngineErrorCode::NotFound
+                }
             }
-            // Stub path
-            call.state = CallState::InCall;
-            push_call_state(call);
-            EngineErrorCode::Ok
         }
     }
 }
@@ -1238,37 +1211,27 @@ fn cmd_call_hangup(p: &serde_json::Value) -> EngineErrorCode {
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
-            // PJSIP path: hang up via shim
-            #[cfg(pjsip_available)]
-            if let Some(pj_id) = call.pjsip_call_id {
-                let rc = unsafe { pd_call_hangup(pj_id) };
-                if rc != 0 {
-                    log_engine(
-                        LogLevel::Warn,
-                        &format!("CallHangup: pd_call_hangup({pj_id}) rc={rc}"),
-                    );
+            // Hang up via PJSIP shim
+            match call.pjsip_call_id {
+                Some(pj_id) => {
+                    let rc = unsafe { pd_call_hangup(pj_id) };
+                    if rc != 0 {
+                        log_engine(
+                            LogLevel::Warn,
+                            &format!("CallHangup: pd_call_hangup({pj_id}) rc={rc}"),
+                        );
+                    }
+                    // on_call_state(DISCONNECTED) callback will record history
+                    EngineErrorCode::Ok
                 }
-                // on_call_state(DISCONNECTED) callback will record history
-                return EngineErrorCode::Ok;
+                None => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallHangup: call {call_id} has no PJSIP call id"),
+                    );
+                    EngineErrorCode::NotFound
+                }
             }
-            // Stub path
-            call.state = CallState::Ended;
-            push_call_state(call);
-            let ended_at = now_secs();
-            let duration = ended_at.saturating_sub(call.started_at);
-            let entry = CallHistoryEntry {
-                call_id: call.id,
-                account_id: call.account_id.clone(),
-                uri: call.uri.clone(),
-                direction: call.direction.variant_name().to_owned(),
-                started_at: call.started_at,
-                ended_at,
-                duration_secs: duration,
-                end_state: "Ended".to_owned(),
-            };
-            CALL_HISTORY.lock().unwrap().push(entry);
-            MEDIA_STATS.lock().unwrap().remove(&call_id);
-            EngineErrorCode::Ok
         }
     }
 }
@@ -1283,8 +1246,7 @@ fn cmd_call_mute(p: &serde_json::Value) -> EngineErrorCode {
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
-            // PJSIP path: mute via conference bridge
-            #[cfg(pjsip_available)]
+            // Mute via PJSIP conference bridge
             if let Some(pj_id) = call.pjsip_call_id {
                 unsafe { pd_call_set_mute(pj_id, if muted { 1 } else { 0 }) };
             }
@@ -1305,28 +1267,27 @@ fn cmd_call_hold(p: &serde_json::Value) -> EngineErrorCode {
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
         None => EngineErrorCode::NotFound,
         Some(call) => {
-            // PJSIP path: hold via re-INVITE
-            #[cfg(pjsip_available)]
-            if let Some(pj_id) = call.pjsip_call_id {
-                let rc = unsafe { pd_call_hold(pj_id, if hold { 1 } else { 0 }) };
-                if rc != 0 {
-                    log_engine(
-                        LogLevel::Warn,
-                        &format!("CallHold: pd_call_hold({pj_id}, hold={hold}) rc={rc}"),
-                    );
+            // Hold via PJSIP re-INVITE
+            match call.pjsip_call_id {
+                Some(pj_id) => {
+                    let rc = unsafe { pd_call_hold(pj_id, if hold { 1 } else { 0 }) };
+                    if rc != 0 {
+                        log_engine(
+                            LogLevel::Warn,
+                            &format!("CallHold: pd_call_hold({pj_id}, hold={hold}) rc={rc}"),
+                        );
+                    }
+                    // on_call_media callback will update the hold state
+                    EngineErrorCode::Ok
                 }
-                // on_call_media callback will update the hold state
-                return EngineErrorCode::Ok;
+                None => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallHold: call {call_id} has no PJSIP call id"),
+                    );
+                    EngineErrorCode::NotFound
+                }
             }
-            // Stub path
-            call.on_hold = hold;
-            call.state = if hold {
-                CallState::OnHold
-            } else {
-                CallState::InCall
-            };
-            push_call_state(call);
-            EngineErrorCode::Ok
         }
     }
 }
@@ -1349,8 +1310,7 @@ fn cmd_media_stats_update(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
-    // --- PJSIP path: enumerate real audio devices ---
-    #[cfg(pjsip_available)]
+    // Enumerate real audio devices via PJSIP
     {
         let count = unsafe { pd_aud_dev_count() };
         let mut real_devices: Vec<AudioDevice> = Vec::new();
@@ -1446,8 +1406,7 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
     if !has_input || !has_output {
         return EngineErrorCode::NotFound;
     }
-    // PJSIP path: apply to the sound subsystem
-    #[cfg(pjsip_available)]
+    // Apply to the sound subsystem
     {
         let rc = unsafe { pd_aud_set_devs(input_id as i32, output_id as i32) };
         if rc != 0 {
@@ -1477,7 +1436,6 @@ fn cmd_call_send_dtmf(p: &serde_json::Value) -> EngineErrorCode {
 
     log_engine(LogLevel::Info, &format!("Sending DTMF: {digits}"));
 
-    #[cfg(pjsip_available)]
     {
         let calls = CALLS.lock().unwrap();
         if let Some(call) = calls.iter().find(|c| c.id == call_id) {
@@ -1689,8 +1647,7 @@ fn version_cstr() -> &'static CString {
 // ---------------------------------------------------------------------------
 
 /// Initialize the engine.
-/// When PJSIP is available (M7+) this initializes pjsua with transports and
-/// registers PJSIP callbacks.  Without PJSIP it behaves as a stub.
+/// Initialise pjsua with transports and register PJSIP callbacks.
 #[no_mangle]
 pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -1702,40 +1659,28 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
             return EngineErrorCode::AlreadyInitialized as i32;
         }
 
-        // --- PJSIP path ---
-        #[cfg(pjsip_available)]
-        {
-            let rc = unsafe {
-                pd_init(
-                    user_agent,
-                    std::ptr::null(), // no global STUN; set per-account
-                    pjsip_on_reg_state,
-                    pjsip_on_incoming_call,
-                    pjsip_on_call_state,
-                    pjsip_on_call_media,
-                    pjsip_on_log,
-                    pjsip_on_sip_msg,
-                )
-            };
-            if rc != 0 {
-                INITIALIZED.store(false, Ordering::SeqCst);
-                log_engine(
-                    LogLevel::Error,
-                    &format!("Engine init failed: pd_init returned {rc}"),
-                );
-                return EngineErrorCode::InternalError as i32;
-            }
-            push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
-            log_engine(LogLevel::Info, "Engine initialized (PJSIP active)");
-            return EngineErrorCode::Ok as i32;
+        let rc = unsafe {
+            pd_init(
+                user_agent,
+                std::ptr::null(), // no global STUN; set per-account
+                pjsip_on_reg_state,
+                pjsip_on_incoming_call,
+                pjsip_on_call_state,
+                pjsip_on_call_media,
+                pjsip_on_log,
+                pjsip_on_sip_msg,
+            )
+        };
+        if rc != 0 {
+            INITIALIZED.store(false, Ordering::SeqCst);
+            log_engine(
+                LogLevel::Error,
+                &format!("Engine init failed: pd_init returned {rc}"),
+            );
+            return EngineErrorCode::InternalError as i32;
         }
-
-        // --- Stub path ---
         push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
-        log_engine(
-            LogLevel::Info,
-            "Engine initialized (stub — PJSIP not linked)",
-        );
+        log_engine(LogLevel::Info, "Engine initialized (PJSIP active)");
         EngineErrorCode::Ok as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
@@ -1754,18 +1699,14 @@ pub extern "C" fn engine_shutdown() -> i32 {
         }
         log_engine(LogLevel::Info, "Engine shutting down");
 
-        // PJSIP path: destroy pjsua
-        #[cfg(pjsip_available)]
-        {
-            // Remove all PJSIP accounts to ensure clean unregistration
-            let pj_acc_ids: Vec<i32> = PJSIP_ACC_MAP.lock().unwrap().keys().copied().collect();
-            for pj_id in pj_acc_ids {
-                unsafe { pd_acc_remove(pj_id) };
-            }
-            PJSIP_ACC_MAP.lock().unwrap().clear();
-            PJSIP_CALL_MAP.lock().unwrap().clear();
-            unsafe { pd_shutdown() };
+        // Remove all PJSIP accounts to ensure clean unregistration
+        let pj_acc_ids: Vec<i32> = PJSIP_ACC_MAP.lock().unwrap().keys().copied().collect();
+        for pj_id in pj_acc_ids {
+            unsafe { pd_acc_remove(pj_id) };
         }
+        PJSIP_ACC_MAP.lock().unwrap().clear();
+        PJSIP_CALL_MAP.lock().unwrap().clear();
+        unsafe { pd_shutdown() };
 
         EngineErrorCode::Ok as i32
     }));
@@ -2281,7 +2222,6 @@ mod tests {
         }
         SELECTED_INPUT.store(0, Ordering::Relaxed);
         SELECTED_OUTPUT.store(1, Ordering::Relaxed);
-        #[cfg(pjsip_available)]
         {
             PJSIP_ACC_MAP
                 .lock()

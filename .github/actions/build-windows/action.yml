@@ -1,0 +1,124 @@
+name: 'Build Windows app'
+description: 'Build PJSIP, Rust core and Flutter Windows application'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Enable git long paths
+      shell: bash
+      run: git config --system core.longpaths true
+
+    - name: Map workspace to short path
+      shell: pwsh
+      run: |
+        subst X: "$env:GITHUB_WORKSPACE"
+        Write-Host "Mapped workspace to X:"
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+
+    - name: Cache Cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          core_rust/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Cache PJSIP build output
+      id: cache-pjsip
+      uses: actions/cache@v4
+      with:
+        path: engine_pjsip/build/out
+        key: pjsip-windows-v2142-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1') }}
+
+    - name: Build pjproject (Release x64)
+      if: steps.cache-pjsip.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        X:
+        .\scripts\build_pjsip.ps1
+
+    - name: Cargo test (Rust core)
+      shell: pwsh
+      run: |
+        X:
+        cd core_rust
+        cargo test
+
+    - name: Build Rust core (cdylib → voip_core.dll)
+      shell: pwsh
+      env:
+        PJSIP_LIB_DIR: ${{ github.workspace }}\engine_pjsip\build\out\lib
+        PJSIP_INCLUDE_DIR: ${{ github.workspace }}\engine_pjsip\build\out\include
+      run: |
+        X:
+        cd core_rust
+        cargo build --release --target x86_64-pc-windows-msvc
+
+    - name: Install Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.41.2'
+        channel: stable
+        cache: true
+
+    - name: Enable Flutter Windows desktop
+      shell: pwsh
+      run: |
+        X:
+        cd app_flutter
+        flutter config --enable-windows-desktop
+
+    - name: Flutter pub get
+      shell: pwsh
+      run: |
+        X:
+        cd app_flutter
+        flutter pub get
+
+    - name: Flutter analyze
+      shell: pwsh
+      run: |
+        X:
+        cd app_flutter
+        flutter analyze
+      continue-on-error: true
+
+    - name: Flutter test
+      shell: pwsh
+      run: |
+        X:
+        cd app_flutter
+        flutter test
+      continue-on-error: true
+
+    - name: Flutter build Windows (release)
+      shell: pwsh
+      run: |
+        X:
+        cd app_flutter
+        flutter clean
+        flutter build windows --release --verbose 2>&1
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "flutter build windows --release failed with exit code $LASTEXITCODE"
+          exit $LASTEXITCODE
+        }
+
+    - name: Copy voip_core.dll into Flutter output
+      shell: pwsh
+      run: |
+        X:
+        $dll  = "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
+        $dest = "app_flutter\build\windows\x64\runner\Release"
+        if (Test-Path $dll) {
+          Copy-Item $dll -Destination $dest
+          Write-Host "Copied $dll -> $dest"
+        } else {
+          Write-Warning "voip_core.dll not found – PJSIP integration pending."
+        }

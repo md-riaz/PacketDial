@@ -67,7 +67,7 @@ This:
   Script handles this automatically via `subst X:`. If issues persist, see [troubleshooting.md](troubleshooting.md).
 
 - **"PJSIP build failed"?**  
-  PJSIP is optional. The app runs as a stub SIP client without it.
+  PJSIP is required. Check the build output for errors and see [troubleshooting.md](troubleshooting.md).
 
 - **PowerShell script execution blocked?**  
   Run: `Set-ExecutionPolicy Bypass -Scope Process -Force`
