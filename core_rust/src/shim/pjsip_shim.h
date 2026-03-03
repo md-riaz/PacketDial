@@ -88,7 +88,8 @@ typedef void (*PdOnSipMsg)(int call_id, int is_tx, const char *msg);
  * @param on_sip_msg   Callback for raw SIP messages.
  * @return 0 on success, non-zero pj_status_t on error.
  */
-int pd_init(const char *stun_server,
+int pd_init(const char *user_agent,
+            const char *stun_server,
             PdOnRegState     on_reg,
             PdOnIncomingCall on_incoming,
             PdOnCallState    on_call,

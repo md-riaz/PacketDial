@@ -289,6 +289,7 @@ fn now_secs() -> u64 {
 #[cfg(pjsip_available)]
 extern "C" {
     fn pd_init(
+        user_agent: *const c_char,
         stun_server: *const c_char,
         on_reg: extern "C" fn(i32, i32, i32, *const c_char),
         on_incoming: extern "C" fn(i32, i32, *const c_char),
@@ -1650,7 +1651,7 @@ fn version_cstr() -> &'static CString {
 /// When PJSIP is available (M7+) this initializes pjsua with transports and
 /// registers PJSIP callbacks.  Without PJSIP it behaves as a stub.
 #[no_mangle]
-pub extern "C" fn engine_init() -> i32 {
+pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         if INITIALIZED.swap(true, Ordering::SeqCst) {
             log_engine(
@@ -1665,6 +1666,7 @@ pub extern "C" fn engine_init() -> i32 {
         {
             let rc = unsafe {
                 pd_init(
+                    user_agent,
                     std::ptr::null(), // no global STUN; set per-account
                     pjsip_on_reg_state,
                     pjsip_on_incoming_call,
@@ -2219,7 +2221,7 @@ mod tests {
     fn init_shutdown_ok() {
         let _guard = TEST_LOCK.lock().unwrap();
         reset();
-        assert_eq!(engine_init(), EngineErrorCode::Ok as i32);
+        assert_eq!(engine_init(std::ptr::null()), EngineErrorCode::Ok as i32);
         assert_eq!(engine_shutdown(), EngineErrorCode::Ok as i32);
     }
 
@@ -2227,8 +2229,11 @@ mod tests {
     fn init_twice() {
         let _guard = TEST_LOCK.lock().unwrap();
         reset();
-        assert_eq!(engine_init(), EngineErrorCode::Ok as i32);
-        assert_eq!(engine_init(), EngineErrorCode::AlreadyInitialized as i32);
+        assert_eq!(engine_init(std::ptr::null()), EngineErrorCode::Ok as i32);
+        assert_eq!(
+            engine_init(std::ptr::null()),
+            EngineErrorCode::AlreadyInitialized as i32
+        );
         assert_eq!(engine_shutdown(), EngineErrorCode::Ok as i32);
     }
 }

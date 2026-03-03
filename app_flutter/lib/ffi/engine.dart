@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart' as ffi_alloc;
 
-typedef _EngineInitC = ffi.Int32 Function();
+typedef _EngineInitC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineShutdownC = ffi.Int32 Function();
 typedef _EngineVersionC = ffi.Pointer<ffi.Int8> Function();
 
@@ -50,8 +50,9 @@ abstract class EngineEventId {
 class VoipEngine {
   final ffi.DynamicLibrary _lib;
 
-  late final int Function() _init =
-      _lib.lookupFunction<_EngineInitC, int Function()>('engine_init');
+  late final int Function(ffi.Pointer<ffi.Int8>) _init =
+      _lib.lookupFunction<_EngineInitC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_init');
   late final int Function() _shutdown =
       _lib.lookupFunction<_EngineShutdownC, int Function()>('engine_shutdown');
   late final ffi.Pointer<ffi.Int8> Function() _version =
@@ -118,7 +119,15 @@ class VoipEngine {
     return VoipEngine._(lib);
   }
 
-  int init() => _init();
+  int init(String userAgent) {
+    final ptr = _allocCString(userAgent);
+    try {
+      return _init(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
   int shutdown() => _shutdown();
 
   String version() {

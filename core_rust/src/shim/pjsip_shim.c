@@ -193,7 +193,8 @@ static void pj_log_writer(int level, const char *data, int len)
  * pd_init
  * ----------------------------------------------------------------------- */
 
-int pd_init(const char *stun_server,
+int pd_init(const char *user_agent,
+            const char *stun_server,
             PdOnRegState     on_reg,
             PdOnIncomingCall on_incoming,
             PdOnCallState    on_call,
@@ -231,6 +232,11 @@ int pd_init(const char *stun_server,
     ua_cfg.cb.on_call_state     = on_call_state;
     ua_cfg.cb.on_call_media_state = on_call_media_state;
     ua_cfg.cb.on_call_tsx_state = on_call_tsx_state;
+
+    if (user_agent && user_agent[0] != '\0') {
+        ua_cfg.user_agent = S(user_agent);
+    }
+
     ua_cfg.max_calls            = 8;
 
     if (stun_server && stun_server[0] != '\0') {
