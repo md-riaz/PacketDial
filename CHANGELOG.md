@@ -7,19 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased] — M7 PJSIP Integration
 
+### Changed
+
+#### PJSIP source delivery (vendored directly in repo — no download or submodule)
+- **`engine_pjsip/pjproject/`** — pjproject **2.14.1** source committed directly into
+  the repository as plain files (3 075 files, ~64 MB uncompressed).  A plain
+  `git clone https://github.com/md-riaz/PacketDial` is all that is needed; no
+  `--recurse-submodules`, no runtime download, no internet access required at build time.
+- **`.gitignore`** — `engine_pjsip/pjproject/` is no longer ignored; only the compiled
+  output (`engine_pjsip/build/`) remains ignored.
+- **`engine_pjsip/README.md`** — updated to document vendored source.
+- **`scripts/build_pjsip.ps1`** — removed all fetch/submodule logic; now verifies the
+  vendored source directory exists and proceeds directly to the msbuild step.
+- **`scripts/fetch_pjsip.ps1`** — deleted (no longer needed).
+- **`scripts/setup_windows.ps1`** — PJSIP step calls `build_pjsip.ps1` directly with
+  stamp-file idempotency; submodule initialisation logic removed.
+- **CI workflows** (`windows-ci.yml`, `release.yml`) — removed `submodules: recursive`
+  from checkout (no submodules exist); PJSIP build cache key hashes
+  `engine_pjsip/pjproject_config_site.h` so it invalidates when the config changes.
+- **`docs/build_windows.md`**, **`docs/windows_setup_guide.md`** — clone command
+  is plain `git clone` (no `--recurse-submodules`); PJSIP step is just
+  `.\scripts\build_pjsip.ps1`.
+
 ### Added
 
-#### PJSIP Fetch & Build Infrastructure
-- **`scripts/fetch_pjsip.ps1`** — downloads pjproject 2.14.1 source from the official
-  GitHub repository (`github.com/pjsip/pjproject`) and extracts it to
-  `engine_pjsip/pjproject/`.  Idempotent: skips download if the version stamp matches.
-  Automatically copies `engine_pjsip/pjproject_config_site.h` into the source tree.
-- **`scripts/build_pjsip.ps1`** (rewritten) — fully automates the pjproject Windows x64
-  Release build via `msbuild pjproject-vs14.sln`.  Collects all `*.lib` output files
-  and all include directories into `engine_pjsip/build/out/{lib,include}/`.
+#### PJSIP Build Infrastructure
+- **`scripts/build_pjsip.ps1`** (rewritten) — verifies pjproject submodule, locates
+  MSBuild via `vswhere`, builds `pjproject-vs14.sln` (Release/x64), collects all
+  `*Release*.lib` and include directories into `engine_pjsip/build/out/`.
 - **`engine_pjsip/pjproject_config_site.h`** (committed) — PacketDial-specific pjproject
-  compile-time configuration: IPv6 enabled, WASAPI audio device, video disabled,
-  TLS disabled for this milestone, conservative account/call limits.
+  compile-time configuration: IPv6 enabled, WASAPI audio, video disabled, TLS disabled
+  for this milestone, conservative account/call limits.
+
 
 #### Rust core (`core_rust/`)
 - **`build.rs`** (rewritten) — auto-detects built PJSIP output at
@@ -62,15 +81,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - Fetch button to request the full log buffer from the engine.
 
 #### CI & Deployment (`windows-ci.yml`, `release.yml`)
-- Added PJSIP cache step (`actions/cache@v4`, key `pjsip-windows-2.14.1-v2`).
-- Added **Fetch pjproject source** step (runs `fetch_pjsip.ps1`; skipped on cache hit).
-- Added **Build pjproject (Release x64)** step (runs `build_pjsip.ps1 -SkipFetch`; skipped on cache hit).
+- Added PJSIP cache step (`actions/cache@v4`; key hashes `.gitmodules` + `pjproject_config_site.h`).
+- Added **Build pjproject (Release x64)** step (runs `build_pjsip.ps1`; skipped on cache hit).
 - Added **Show PJSIP build output** inspection step (`if: always()`).
 - `cargo build --release` now passes `PJSIP_LIB_DIR` and `PJSIP_INCLUDE_DIR` env vars
   so `build.rs` auto-links PJSIP libs when built in CI.
 
 #### Development setup (`setup_windows.ps1`)
-- Added PJSIP fetch+build step (step 5) with stamp-file idempotency check.
+- Added PJSIP build step (step 5) with stamp-file idempotency check; initialises submodule if missing.
 - Rust build step now exports `PJSIP_LIB_DIR` / `PJSIP_INCLUDE_DIR` before `cargo build`.
 
 #### Docs

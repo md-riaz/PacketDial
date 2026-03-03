@@ -277,9 +277,9 @@ if (Test-Path 'X:\') {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Fetch and build PJSIP (produces libs for Rust linking)
+# 5. Build PJSIP (source is vendored under engine_pjsip/pjproject/)
 # ---------------------------------------------------------------------------
-Write-Step "Fetching and building pjproject 2.14.1"
+Write-Step "Building pjproject 2.14.1"
 
 $pjOutDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'engine_pjsip\build\out'
 $pjStamp  = Join-Path $pjOutDir 'pjsip_build_stamp.txt'
@@ -287,7 +287,7 @@ $pjStamp  = Join-Path $pjOutDir 'pjsip_build_stamp.txt'
 if (Test-Path $pjStamp) {
     Write-OK "PJSIP already built: $(Get-Content $pjStamp -Raw)"
 } else {
-    & "$PSScriptRoot\build_pjsip.ps1" -PjVersion 2.14.1
+    & "$PSScriptRoot\build_pjsip.ps1"
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "PJSIP build failed (exit $LASTEXITCODE)."
         exit 1

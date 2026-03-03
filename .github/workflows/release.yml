@@ -15,8 +15,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable git long paths
         run: git config --system core.longpaths true
@@ -74,28 +72,21 @@ jobs:
             ${{ runner.os }}-cargo-
 
       # -----------------------------------------------------------------------
-      # PJSIP: fetch source and build (cached by version)
+      # PJSIP: build from submodule source (cached by submodule commit SHA)
       # -----------------------------------------------------------------------
       - name: Cache PJSIP build output
         id: cache-pjsip
         uses: actions/cache@v4
         with:
           path: engine_pjsip/build/out
-          key: pjsip-windows-2.14.1-v2
-
-      - name: Fetch pjproject source
-        if: steps.cache-pjsip.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          X:
-          .\scripts\fetch_pjsip.ps1 -PjVersion 2.14.1
+          key: pjsip-windows-${{ hashFiles('.gitmodules', 'engine_pjsip/pjproject_config_site.h') }}
 
       - name: Build pjproject (Release x64)
         if: steps.cache-pjsip.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           X:
-          .\scripts\build_pjsip.ps1 -PjVersion 2.14.1 -SkipFetch
+          .\scripts\build_pjsip.ps1
 
       - name: Show PJSIP build output
         if: always()

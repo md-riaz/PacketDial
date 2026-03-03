@@ -25,16 +25,16 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 ## Manual build steps
 
 ```powershell
-# 1. Enable long paths
-git config --system core.longpaths true
+# 1. Clone the repository (pjproject source is included)
+git clone https://github.com/md-riaz/PacketDial
 
-# 2. Map to short path (avoids MAX_PATH)
+# 2. Enable long paths and map to short path (avoids MAX_PATH)
+git config --system core.longpaths true
 subst X: "$PWD"
 X:
 
-# 3. Fetch and build PJSIP (one-time, ~10-20 min on first run)
-.\scripts\fetch_pjsip.ps1
-.\scripts\build_pjsip.ps1 -SkipFetch
+# 3. Build PJSIP from the vendored source (~10-20 min first time)
+.\scripts\build_pjsip.ps1
 
 # 4. Build Rust core (links against built PJSIP)
 $env:PJSIP_LIB_DIR     = "$PWD\engine_pjsip\build\out\lib"

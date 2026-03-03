@@ -4,7 +4,12 @@
     into engine_pjsip/build/out/ for the Rust core to link against.
 
 .DESCRIPTION
-    1. Runs scripts/fetch_pjsip.ps1 unless -SkipFetch is specified.
+    pjproject is part of the repository as a git submodule (engine_pjsip/pjproject/).
+    Clone with --recurse-submodules or run:
+        git submodule update --init --recursive
+
+    This script:
+    1. Verifies the submodule is present.
     2. Locates msbuild from Visual Studio 2022 Build Tools (or any installed VS).
     3. Builds pjproject-vs14.sln in Release / x64 configuration.
     4. Copies all resulting *.lib files to engine_pjsip/build/out/lib/.
@@ -13,21 +18,13 @@
     Run from the repository root:
         .\scripts\build_pjsip.ps1
 
-.PARAMETER PjVersion
-    pjproject version to fetch and build. Default: 2.14.1
-
-.PARAMETER SkipFetch
-    Skip running fetch_pjsip.ps1 (pjproject source already present).
-
 .PARAMETER Jobs
     Number of parallel MSBuild jobs. Default: number of logical processors.
 #>
 
 [CmdletBinding()]
 param(
-    [string]$PjVersion  = '2.14.1',
-    [switch]$SkipFetch,
-    [int]$Jobs          = [Environment]::ProcessorCount
+    [int]$Jobs = [Environment]::ProcessorCount
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,19 +45,18 @@ function Write-Info { param($m) Write-Host "    [INFO] $m" -ForegroundColor Yell
 function Write-Fail { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red }
 
 # ---------------------------------------------------------------------------
-# Step 1: Fetch pjproject source if needed
+# Step 1: Verify submodule is present
 # ---------------------------------------------------------------------------
-if (-not $SkipFetch) {
-    Write-Step "Fetching pjproject $PjVersion source"
-    & "$PSScriptRoot\fetch_pjsip.ps1" -PjVersion $PjVersion
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
+Write-Step "Verifying pjproject submodule"
 
-if (-not (Test-Path $PjProjectDir)) {
-    Write-Fail "pjproject source not found at $PjProjectDir"
-    Write-Info "Run: .\scripts\fetch_pjsip.ps1"
+if (-not (Test-Path (Join-Path $PjProjectDir 'pjlib'))) {
+    Write-Fail "pjproject submodule not initialised at $PjProjectDir"
+    Write-Info "Run: git submodule update --init --recursive"
     exit 1
 }
+
+$PjVersion = '2.14.1'  # pinned in .gitmodules; recorded in stamp for reference
+Write-OK "pjproject source present at $PjProjectDir"
 
 # ---------------------------------------------------------------------------
 # Step 2: Locate msbuild
@@ -222,3 +218,4 @@ Write-Host " Headers:  $OutInclude" -ForegroundColor Green
 Write-Host " Set PJSIP_LIB_DIR=$OutLib" -ForegroundColor Green
 Write-Host " Set PJSIP_INCLUDE_DIR=$OutInclude" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
+
