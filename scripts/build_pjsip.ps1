@@ -79,6 +79,10 @@ if (Test-Path $VsWhere) {
 # Fallback: search common VS 2022 paths
 if (-not $MsBuild) {
     $candidates = @(
+        'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe',
         'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
         'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe',
         'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
@@ -157,7 +161,7 @@ Write-Info "This may take 5-20 minutes on first run…"
 
 $MsBuildArgs = @(
     $SlnFile.FullName,
-    '/t:Build',
+    '/t:pjsua2_lib',
     '/p:Configuration=Release',
     '/p:Platform=x64',
     '/p:PlatformToolset=v143',  # Use VS 2022 toolset instead of v140 (VS 2015)

@@ -30,6 +30,11 @@ $DebugOut = "build\windows\x64\runner\Debug"
 $StubDll  = "..\core_rust\target\x86_64-pc-windows-msvc\debug\voip_core.dll"
 if (Test-Path $StubDll) {
     if (-not (Test-Path $DebugOut)) { New-Item -ItemType Directory -Path $DebugOut | Out-Null }
+    
+    # Ensure any running instance isn't locking our DLL
+    Stop-Process -Name "PacketDial" -Force -ErrorAction SilentlyContinue | Out-Null
+    Start-Sleep -Milliseconds 400
+
     Copy-Item -Force $StubDll $DebugOut
     Write-Host "    [OK]   Copied voip_core.dll -> $DebugOut`n"
 } else {
