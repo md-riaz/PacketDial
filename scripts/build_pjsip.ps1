@@ -104,14 +104,17 @@ Write-OK "MSBuild: $MsBuild"
 # ---------------------------------------------------------------------------
 Write-Step "Locating pjproject Visual Studio solution"
 
-$SlnFile = Get-ChildItem $PjProjectDir -Filter 'pjproject-vs*.sln' | `
-           Sort-Object Name | Select-Object -Last 1
+# Use vs14 solution explicitly - it's compatible with VS 2022 and uses .vcxproj format
+# vs8 is legacy format using .vcproj which won't work with modern MSBuild
+$SlnPath = Join-Path $PjProjectDir 'pjproject-vs14.sln'
 
-if (-not $SlnFile) {
-    Write-Fail "No pjproject-vs*.sln found in $PjProjectDir"
-    Write-Info "Expected: pjproject-vs14.sln (or similar)"
+if (-not (Test-Path $SlnPath)) {
+    Write-Fail "pjproject-vs14.sln not found at $SlnPath"
+    Write-Info "The pjproject submodule may be incomplete or corrupted."
     exit 1
 }
+
+$SlnFile = Get-Item $SlnPath
 Write-OK "Solution: $($SlnFile.FullName)"
 
 # ---------------------------------------------------------------------------
