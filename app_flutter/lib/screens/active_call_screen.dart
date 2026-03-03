@@ -48,7 +48,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<int>(
                 groupValue: selIn,
-                onChanged: (v) => setDlgState(() => selIn = v),
+                onChanged: (v) { if (v != null) setDlgState(() => selIn = v); },
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: inputs
@@ -65,7 +65,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<int>(
                 groupValue: selOut,
-                onChanged: (v) => setDlgState(() => selOut = v),
+                onChanged: (v) { if (v != null) setDlgState(() => selOut = v); },
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: outputs
