@@ -369,7 +369,7 @@ int pd_call_hold(int call_id, int hold)
     if (hold) {
         return (int)pjsua_call_set_hold((pjsua_call_id)call_id, NULL);
     } else {
-        return (int)pjsua_call_reinvite((pjsua_call_id)call_id, NULL, NULL);
+        return (int)pjsua_call_reinvite((pjsua_call_id)call_id, PJSUA_CALL_UNHOLD, NULL);
     }
 }
 
@@ -422,10 +422,11 @@ int pd_aud_dev_info(unsigned idx, int *id_out,
     if (name_buf) safe_copy(name_buf, name_len, infos[idx].name);
 
     if (kind_out) {
-        pjmedia_dir dir = infos[idx].dir;
-        if ((dir & PJMEDIA_DIR_CAPTURE) && (dir & PJMEDIA_DIR_PLAYBACK))
+        int has_input  = (infos[idx].input_count > 0);
+        int has_output = (infos[idx].output_count > 0);
+        if (has_input && has_output)
             *kind_out = 2; /* both */
-        else if (dir & PJMEDIA_DIR_CAPTURE)
+        else if (has_input)
             *kind_out = 0; /* input */
         else
             *kind_out = 1; /* output */
