@@ -128,6 +128,7 @@ $MsBuildArgs = @(
     '/t:Build',
     '/p:Configuration=Release',
     '/p:Platform=x64',
+    '/p:PlatformToolset=v143',  # Use VS 2022 toolset instead of v140 (VS 2015)
     "/m:$Jobs",
     '/nologo',
     '/verbosity:minimal',
