@@ -132,10 +132,12 @@ class _AppState extends State<App> {
 
       final engine = VoipEngine.load();
       final v = engine.version();
+
+      // CRITICAL: Attach first so we don't miss "EngineReady" or early logs
+      EngineChannel.instance.attach(engine, widget.isar);
+
       final rc = engine.init(userAgent);
 
-      // Get Isar from Riverpod (initialized in main.dart)
-      EngineChannel.instance.attach(engine, widget.isar);
       setState(() {
         _status = rc == 0 ? 'Engine ready  •  $v' : 'Engine error: $rc';
         _ready = rc == 0;
@@ -162,6 +164,10 @@ class _AppState extends State<App> {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
+        inputDecorationTheme: const InputDecorationTheme(
+          filled: false,
+          border: UnderlineInputBorder(),
+        ),
       ),
       home: _ready
           ? Scaffold(
@@ -171,6 +177,18 @@ class _AppState extends State<App> {
                   WindowTitleBarBox(
                     child: Row(
                       children: [
+                        const SizedBox(width: 8),
+                        Image.asset('assets/app_icon.png',
+                            width: 16, height: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'PacketDial',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.indigo.shade900,
+                          ),
+                        ),
                         Expanded(child: MoveWindow()),
                         const WindowButtons(),
                       ],
@@ -222,8 +240,8 @@ class WindowButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     final buttonColors = WindowButtonColors(
       iconNormal: Colors.indigo,
-      mouseOver: Colors.indigo.withOpacity(0.1),
-      mouseDown: Colors.indigo.withOpacity(0.2),
+      mouseOver: Colors.indigo.withValues(alpha: 0.1),
+      mouseDown: Colors.indigo.withValues(alpha: 0.2),
       iconMouseOver: Colors.indigo,
       iconMouseDown: Colors.indigo,
     );
@@ -256,6 +274,7 @@ class CockpitFooter extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(activeAccountProvider);
     final regState = ref.watch(registrationStateProvider);
     final activeCall = ref.watch(activeCallProvider);
 
@@ -285,7 +304,7 @@ class CockpitFooter extends ConsumerWidget {
           ),
           Flexible(
             child: Text(
-              regState,
+              account != null ? '${account.accountName}: $regState' : regState,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
               style: TextStyle(

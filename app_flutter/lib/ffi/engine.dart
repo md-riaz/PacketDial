@@ -23,6 +23,8 @@ typedef _EngineQueryCallHistoryC = ffi.Int32 Function();
 typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineGetLogBufferC = ffi.Int32 Function();
 typedef _EngineSendDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineSendCommandC = ffi.Int32 Function(
+    ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineSetEventCallbackC = ffi.Void Function(
     ffi.Pointer<
         ffi
@@ -101,6 +103,11 @@ class VoipEngine {
   late final int Function(ffi.Pointer<ffi.Int8>) _sendDtmf = _lib
       .lookupFunction<_EngineSendDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_send_dtmf');
+  late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
+      _sendCommand = _lib.lookupFunction<
+          _EngineSendCommandC,
+          int Function(ffi.Pointer<ffi.Int8>,
+              ffi.Pointer<ffi.Int8>)>('engine_send_command');
   late final void Function(
           ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>)
       _setEventCallback = _lib.lookupFunction<
@@ -238,6 +245,19 @@ class VoipEngine {
       return _sendDtmf(ptr);
     } finally {
       _freeNative(ptr);
+    }
+  }
+
+  /// Send a structured command to the engine as JSON.
+  /// [type] is the command name, [payloadJson] is the parameters.
+  int sendCommand(String type, String payloadJson) {
+    final typePtr = _allocCString(type);
+    final payloadPtr = _allocCString(payloadJson);
+    try {
+      return _sendCommand(typePtr, payloadPtr);
+    } finally {
+      _freeNative(typePtr);
+      _freeNative(payloadPtr);
     }
   }
 

@@ -27,25 +27,26 @@ final activeCallMediaStatsProvider = Provider<MediaStats?>((ref) {
   return EngineChannel.instance.mediaStats[call.callId];
 });
 
-/// Specialized provider for registration state.
-final registrationStateProvider = Provider<String>((ref) {
-  // We need to watch events AND potentially account changes
+/// Provider for the currently active (registered or first) account.
+final activeAccountProvider = Provider<Account?>((ref) {
   ref.watch(engineEventsProvider);
+  final accounts = EngineChannel.instance.accounts.values.toList();
+  if (accounts.isEmpty) return null;
 
-  final engine = EngineChannel.instance;
-  // Get the single selected account's state
-  final accounts = engine.accounts.values.toList();
-  if (accounts.isEmpty) return 'No Account';
-
-  final activeAccount = accounts.firstWhere(
+  return accounts.firstWhere(
       (a) => a.registrationState != RegistrationState.unregistered,
       orElse: () => accounts.first);
+});
 
-  String state = activeAccount.registrationState.label;
+/// Specialized provider for registration state text.
+final registrationStateProvider = Provider<String>((ref) {
+  final activeAccount = ref.watch(activeAccountProvider);
+  if (activeAccount == null) return 'No Account';
+
   if (activeAccount.registrationState == RegistrationState.registered) {
     return 'Registered';
   } else if (activeAccount.registrationState == RegistrationState.failed) {
     return 'Registration Failed: ${activeAccount.failureReason}';
   }
-  return state;
+  return activeAccount.registrationState.label;
 });

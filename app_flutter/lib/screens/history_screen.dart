@@ -73,7 +73,7 @@ class _HistoryTile extends StatelessWidget {
       dense: true,
       leading: CircleAvatar(
         radius: 16,
-        backgroundColor: dirColor.withOpacity(0.1),
+        backgroundColor: dirColor.withValues(alpha: 0.1),
         child: Icon(dirIcon, color: dirColor, size: 16),
       ),
       title: Text(

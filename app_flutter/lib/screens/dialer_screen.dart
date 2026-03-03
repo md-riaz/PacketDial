@@ -156,7 +156,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.indigo.withOpacity(0.05),
+        color: Colors.indigo.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(

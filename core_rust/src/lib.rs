@@ -592,15 +592,19 @@ extern "C" fn pjsip_on_sip_msg(pj_call_id: i32, is_tx: i32, msg_ptr: *const c_ch
         }
     };
     let masked = mask_sip_log(&raw);
-    let escaped = masked
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r");
     let direction = if is_tx != 0 { "send" } else { "recv" };
-    push_event(format!(
-        r#"{{"type":"SipMessageCaptured","payload":{{"call_id":{pj_call_id},"direction":"{direction}","raw":"{escaped}"}}}}"#
-    ));
+
+    // Use serde_json for proper escaping of SIP message content
+    // (multi-line messages, quotes, backslashes, etc.)
+    let event = serde_json::json!({
+        "type": "SipMessageCaptured",
+        "payload": {
+            "call_id": pj_call_id,
+            "direction": direction,
+            "raw": masked,
+        }
+    });
+    push_event(event.to_string());
 }
 
 /// Poll real-time media statistics for a PJSIP call and push a MediaStatsUpdated event.
@@ -814,12 +818,22 @@ fn broadcast_ipc(json: String) {
 }
 
 fn push_reg_state(account_id: &str, state: &RegistrationState) {
+    let (account_name, display_name) = if let Ok(accts) = ACCOUNTS.lock() {
+        if let Some(a) = accts.iter().find(|a| a.uuid == account_id) {
+            (a.account_name.clone(), a.display_name.clone())
+        } else {
+            ("".to_owned(), "".to_owned())
+        }
+    } else {
+        ("".to_owned(), "".to_owned())
+    };
+
     let reason = match state {
         RegistrationState::Failed(r) => r.as_str(),
         _ => "",
     };
     push_event(format!(
-        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","state":"{}","reason":"{reason}"}}}}"#,
+        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","account_name":"{account_name}","display_name":"{display_name}","state":"{}","reason":"{reason}"}}}}"#,
         state.variant_name()
     ));
 }
@@ -922,7 +936,7 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
-    let id = match p["id"].as_str() {
+    let id = match p["uuid"].as_str().or_else(|| p["id"].as_str()) {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
@@ -954,7 +968,10 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             a.reg_state = RegistrationState::Registering;
         }
     }
-    push_reg_state(&id, &RegistrationState::Registering);
+    push_event(format!(
+        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{id}","account_name":"{}","display_name":"{}","state":"Registering","reason":""}}}}"#,
+        acct_snapshot.account_name, acct_snapshot.display_name
+    ));
 
     // --- PJSIP registration ---
     {
@@ -1085,7 +1102,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
-    let id = match p["id"].as_str() {
+    let id = match p["uuid"].as_str().or_else(|| p["id"].as_str()) {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
@@ -1953,6 +1970,42 @@ pub extern "C" fn engine_set_event_callback(
     let _ = result;
 }
 
+/// Send a structured command to the engine as JSON.
+///
+/// `cmd_type` is the name of the command (e.g. "AccountUpsert").
+/// `json_payload` is the command parameters as a JSON string.
+///
+/// Returns 0 (Ok) on success, or a non-zero error code.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_send_command(cmd_type: *const c_char, json_payload: *const c_char) -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if cmd_type.is_null() || json_payload.is_null() {
+            return EngineErrorCode::InvalidUtf8 as i32;
+        }
+        let cmd_s = match unsafe { CStr::from_ptr(cmd_type) }.to_str() {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+        let payload_s = match unsafe { CStr::from_ptr(json_payload) }.to_str() {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let payload_v: serde_json::Value = match serde_json::from_str(payload_s) {
+            Ok(v) => v,
+            Err(_) => return EngineErrorCode::InvalidJson as i32,
+        };
+
+        dispatch_command(cmd_s, &payload_v) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
 /// Register a SIP account with the engine.
 ///
 /// This is a convenience wrapper around the JSON `AccountUpsert` +
@@ -1997,7 +2050,7 @@ pub extern "C" fn engine_register(
 
         // Upsert account with user-provided account_id
         let upsert_json = serde_json::json!({
-            "id": acct_id,
+            "uuid": acct_id,
             "display_name": &user_s,
             "server": &domain_s,
             "username": &user_s,
@@ -2009,7 +2062,7 @@ pub extern "C" fn engine_register(
         }
 
         // Register
-        let reg_json = serde_json::json!({ "id": acct_id });
+        let reg_json = serde_json::json!({ "uuid": acct_id });
         dispatch_command("AccountRegister", &reg_json) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
@@ -2119,7 +2172,7 @@ pub extern "C" fn engine_unregister(account_id: *const c_char) -> i32 {
             return EngineErrorCode::NotInitialized as i32;
         }
 
-        let unreg_json = serde_json::json!({ "id": id });
+        let unreg_json = serde_json::json!({ "uuid": id });
         dispatch_command("AccountUnregister", &unreg_json) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)

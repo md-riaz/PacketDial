@@ -63,6 +63,7 @@ class Account {
   });
 
   Account copyWith({
+    String? accountName,
     String? displayName,
     String? server,
     String? sipProxy,
@@ -80,7 +81,7 @@ class Account {
   }) =>
       Account(
         uuid: uuid,
-        accountName: accountName,
+        accountName: accountName ?? this.accountName,
         displayName: displayName ?? this.displayName,
         server: server ?? this.server,
         sipProxy: sipProxy ?? this.sipProxy,

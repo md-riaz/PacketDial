@@ -190,6 +190,80 @@ static void pj_log_writer(int level, const char *data, int len)
 }
 
 /* -----------------------------------------------------------------------
+ * Global SIP message capture module
+ *
+ * on_call_tsx_state only fires for call-related transactions (INVITE, BYE).
+ * To capture REGISTER and other non-call SIP messages, we register a
+ * pjsip_module that sees ALL inbound and outbound SIP traffic.
+ * ----------------------------------------------------------------------- */
+
+static pj_bool_t on_rx_request_mod(pjsip_rx_data *rdata)
+{
+    if (!g_on_sip_msg || !rdata) return PJ_FALSE;
+    char buf[4096];
+    pj_ssize_t len = pjsip_msg_print(rdata->msg_info.msg, buf,
+                                      sizeof(buf) - 1);
+    if (len > 0) {
+        buf[len] = '\0';
+        g_on_sip_msg(-1, 0, buf);   /* call_id=-1 means non-call context */
+    }
+    return PJ_FALSE;  /* Don't consume — let other modules handle */
+}
+
+static pj_bool_t on_rx_response_mod(pjsip_rx_data *rdata)
+{
+    if (!g_on_sip_msg || !rdata) return PJ_FALSE;
+    char buf[4096];
+    pj_ssize_t len = pjsip_msg_print(rdata->msg_info.msg, buf,
+                                      sizeof(buf) - 1);
+    if (len > 0) {
+        buf[len] = '\0';
+        g_on_sip_msg(-1, 0, buf);
+    }
+    return PJ_FALSE;
+}
+
+static pj_status_t on_tx_request_mod(pjsip_tx_data *tdata)
+{
+    if (!g_on_sip_msg || !tdata) return PJ_SUCCESS;
+    char buf[4096];
+    pj_ssize_t len = pjsip_msg_print(tdata->msg, buf, sizeof(buf) - 1);
+    if (len > 0) {
+        buf[len] = '\0';
+        g_on_sip_msg(-1, 1, buf);
+    }
+    return PJ_SUCCESS;
+}
+
+static pj_status_t on_tx_response_mod(pjsip_tx_data *tdata)
+{
+    if (!g_on_sip_msg || !tdata) return PJ_SUCCESS;
+    char buf[4096];
+    pj_ssize_t len = pjsip_msg_print(tdata->msg, buf, sizeof(buf) - 1);
+    if (len > 0) {
+        buf[len] = '\0';
+        g_on_sip_msg(-1, 1, buf);
+    }
+    return PJ_SUCCESS;
+}
+
+static pjsip_module pd_sip_capture_mod = {
+    NULL, NULL,                         /* prev, next                */
+    { "pd-sip-capture", 14 },          /* name                      */
+    -1,                                 /* id (assigned by stack)    */
+    PJSIP_MOD_PRIORITY_TRANSPORT_LAYER + 1,  /* priority: just after transport */
+    NULL,                               /* load                      */
+    NULL,                               /* start                     */
+    NULL,                               /* stop                      */
+    NULL,                               /* unload                    */
+    &on_rx_request_mod,                 /* on_rx_request             */
+    &on_rx_response_mod,                /* on_rx_response            */
+    &on_tx_request_mod,                 /* on_tx_request             */
+    &on_tx_response_mod,                /* on_tx_response            */
+    NULL,                               /* on_tsx_state              */
+};
+
+/* -----------------------------------------------------------------------
  * pd_init
  * ----------------------------------------------------------------------- */
 
@@ -260,6 +334,15 @@ int pd_init(const char *user_agent,
     if (status != PJ_SUCCESS) {
         pjsua_destroy();
         return (int)status;
+    }
+
+    /* Register the SIP capture module to see ALL SIP traffic
+     * (REGISTER, OPTIONS, etc.) — not just call transactions. */
+    status = pjsip_endpt_register_module(pjsua_get_pjsip_endpt(),
+                                          &pd_sip_capture_mod);
+    if (status != PJ_SUCCESS) {
+        /* Non-fatal: SIP capture won't work but engine can still function */
+        if (g_on_log) g_on_log(2, "Warning: SIP capture module registration failed");
     }
 
     /* Create UDP transport (port 0 = OS-assigned) */

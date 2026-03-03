@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 
@@ -8,12 +9,14 @@ import '../models/audio_device.dart';
 import '../models/call.dart';
 import '../models/call_history.dart';
 import '../models/log_entry.dart';
+import '../models/sip_message.dart';
 import '../models/media_stats.dart';
 import '../models/call_history_schema.dart';
 import 'package:isar/isar.dart';
 
 /// Maximum number of structured log entries retained in memory.
 const _kLogBufferMax = 500;
+const _kSipMessageMax = 200;
 
 /// Bridges the Dart UI to the Rust core via structured C ABI and callbacks.
 ///
@@ -66,10 +69,19 @@ class EngineChannel {
   /// Structured log entries emitted by the engine (log tab).
   final List<LogEntry> logBuffer = [];
 
+  /// Captured SIP messages (REGISTER, INVITE, responses, etc.).
+  final List<SipMessage> sipMessages = [];
+
   // --- Lifecycle --------------------------------------------------------------
 
   /// Attach the channel to a loaded [VoipEngine] and register callback.
   void attach(VoipEngine engine, Isar isar) {
+    // CRITICAL: Ensure any old callback is nulled in the native engine first
+    // to prevent crashes if native worker threads try to call a deleted callback pointer.
+    try {
+      engine.setEventCallback(ffi.nullptr);
+    } catch (_) {}
+
     _engine = engine;
     _isar = isar;
 
@@ -84,6 +96,17 @@ class EngineChannel {
 
     // Request audio device list on startup
     engine.listAudioDevices();
+  }
+
+  /// Clears in-memory state without disposing the engine.
+  void reset() {
+    accounts.clear();
+    mediaStats.clear();
+    eventLog.clear();
+    logBuffer.clear();
+    sipMessages.clear();
+    activeCall = null;
+    engineReady = false;
   }
 
   void dispose() {
@@ -220,12 +243,18 @@ class EngineChannel {
     final payload =
         (event['payload'] as Map<String, dynamic>?) ?? <String, dynamic>{};
 
+    if (type != 'EngineLog') {
+      debugPrint('[EngineChannel] Event: $type, Payload: $payload');
+    }
+
     switch (type) {
       case 'EngineReady':
         engineReady = true;
 
       case 'RegistrationStateChanged':
         final id = payload['account_id'] as String? ?? '';
+        final accountName = payload['account_name'] as String? ?? 'SIP Account';
+        final displayName = payload['display_name'] as String? ?? '';
         final state =
             RegistrationState.fromString(payload['state'] as String? ?? '');
         final reason = payload['reason'] as String? ?? '';
@@ -235,8 +264,8 @@ class EngineChannel {
           // create a placeholder so the UI can show the status.
           accounts[id] = Account(
             uuid: id,
-            accountName: 'SIP Account',
-            displayName: '',
+            accountName: accountName,
+            displayName: displayName,
             server: '',
             username: '',
             password: '',
@@ -244,8 +273,12 @@ class EngineChannel {
             failureReason: reason,
           );
         } else {
-          accounts[id] = accounts[id]!
-              .copyWith(registrationState: state, failureReason: reason);
+          accounts[id] = accounts[id]!.copyWith(
+            accountName: accountName,
+            displayName: displayName,
+            registrationState: state,
+            failureReason: reason,
+          );
         }
 
       case 'CallStateChanged':
@@ -261,25 +294,27 @@ class EngineChannel {
               // Map SIP code to professional Result (Spec 2.2)
               String result = 'Ended';
               if (activeCall!.direction == CallDirection.incoming) {
-                if (sipCode == 487)
+                if (sipCode == 487) {
                   result = 'Missed';
-                else if (sipCode == 603 || sipCode == 486)
+                } else if (sipCode == 603 || sipCode == 486) {
                   result = 'Rejected';
-                else if (activeCall!.state == CallState.inCall)
+                } else if (activeCall!.state == CallState.inCall) {
                   result = 'Answered';
-                else
+                } else {
                   result = 'Missed';
+                }
               } else {
-                if (activeCall!.state == CallState.inCall)
+                if (activeCall!.state == CallState.inCall) {
                   result = 'Answered';
-                else if (sipCode == 486)
+                } else if (sipCode == 486) {
                   result = 'Busy';
-                else if (sipCode == 487)
+                } else if (sipCode == 487) {
                   result = 'Cancelled';
-                else if (sipCode != null && sipCode >= 400)
+                } else if (sipCode != null && sipCode >= 400) {
                   result = 'Failed';
-                else
+                } else {
                   result = 'Disconnected';
+                }
               }
 
               final entry = CallHistorySchema()
@@ -355,6 +390,13 @@ class EngineChannel {
         final entries = payload['entries'] as List<dynamic>? ?? [];
         for (final e in entries) {
           logBuffer.add(LogEntry.fromMap(e as Map<String, dynamic>));
+        }
+
+      case 'SipMessageCaptured':
+        final msg = SipMessage.fromMap(payload);
+        sipMessages.add(msg);
+        if (sipMessages.length > _kSipMessageMax) {
+          sipMessages.removeAt(0);
         }
     }
   }
