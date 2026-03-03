@@ -14,6 +14,7 @@ import 'core/account_service.dart';
 import 'models/account_schema.dart';
 import 'models/call_history_schema.dart';
 import 'ffi/engine.dart';
+import 'providers/engine_provider.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
@@ -175,6 +176,7 @@ class _AppState extends State<App> {
                     ),
                   ),
                   Expanded(child: _screens[_selectedIndex]),
+                  const CockpitFooter(),
                 ],
               ),
               bottomNavigationBar: NavigationBar(
@@ -244,6 +246,80 @@ class WindowButtons extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class CockpitFooter extends ConsumerWidget {
+  const CockpitFooter({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final regState = ref.watch(registrationStateProvider);
+    final activeCall = ref.watch(activeCallProvider);
+
+    bool isRegistered = regState == 'Registered';
+    bool isFailed = regState.startsWith('Registration Failed');
+    bool hasCall = activeCall != null;
+
+    return Container(
+      height: 24,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          // Registration Status
+          Icon(
+            isRegistered
+                ? Icons.check_circle
+                : (isFailed ? Icons.error : Icons.radio_button_unchecked),
+            size: 12,
+            color: isRegistered
+                ? Colors.green
+                : (isFailed ? Colors.red : Colors.orange),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            regState,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isRegistered
+                  ? Colors.green.shade700
+                  : (isFailed ? Colors.red.shade700 : Colors.grey.shade700),
+            ),
+          ),
+          const VerticalDivider(width: 20, indent: 4, endIndent: 4),
+
+          // Network / Call Status
+          if (hasCall) ...[
+            const Icon(Icons.call, size: 10, color: Colors.blue),
+            const SizedBox(width: 4),
+            Text(
+              'Call: ${activeCall.state.label} (${activeCall.uri})',
+              style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold),
+            ),
+          ] else ...[
+            const Icon(Icons.network_check, size: 10, color: Colors.grey),
+            const SizedBox(width: 4),
+            const Text('Network: OK',
+                style: TextStyle(fontSize: 10, color: Colors.grey)),
+          ],
+
+          const Spacer(),
+
+          // App Version
+          const Text('v1.0.0',
+              style: TextStyle(fontSize: 9, color: Colors.grey)),
+        ],
+      ),
     );
   }
 }

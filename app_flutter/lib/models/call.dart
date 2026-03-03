@@ -38,6 +38,7 @@ class ActiveCall {
   final CallState state;
   final bool muted;
   final bool onHold;
+  final DateTime? startedAt;
 
   const ActiveCall({
     required this.callId,
@@ -47,12 +48,14 @@ class ActiveCall {
     required this.state,
     required this.muted,
     required this.onHold,
+    this.startedAt,
   });
 
   ActiveCall copyWith({
     CallState? state,
     bool? muted,
     bool? onHold,
+    DateTime? startedAt,
   }) =>
       ActiveCall(
         callId: callId,
@@ -62,5 +65,6 @@ class ActiveCall {
         state: state ?? this.state,
         muted: muted ?? this.muted,
         onHold: onHold ?? this.onHold,
+        startedAt: startedAt ?? this.startedAt,
       );
 }

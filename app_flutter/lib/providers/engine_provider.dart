@@ -3,6 +3,7 @@ import '../ffi/engine.dart';
 import '../core/engine_channel.dart';
 import '../models/call.dart';
 import '../models/media_stats.dart';
+import '../models/account.dart';
 
 /// Provider for the raw VoipEngine instance.
 final engineProvider = Provider<VoipEngine>((ref) {
@@ -28,17 +29,23 @@ final activeCallMediaStatsProvider = Provider<MediaStats?>((ref) {
 
 /// Specialized provider for registration state.
 final registrationStateProvider = Provider<String>((ref) {
-  final events = ref.watch(engineEventsProvider);
+  // We need to watch events AND potentially account changes
+  ref.watch(engineEventsProvider);
 
-  return events.when(
-    data: (data) {
-      if (data['type'] == 'RegistrationStateChanged') {
-        final payload = data['payload'] as Map<String, dynamic>;
-        return payload['state'] as String;
-      }
-      return 'Unknown';
-    },
-    loading: () => 'Initializing...',
-    error: (e, _) => 'Error: $e',
-  );
+  final engine = EngineChannel.instance;
+  // Get the single selected account's state
+  final accounts = engine.accounts.values.toList();
+  if (accounts.isEmpty) return 'No Account';
+
+  final activeAccount = accounts.firstWhere(
+      (a) => a.registrationState != RegistrationState.unregistered,
+      orElse: () => accounts.first);
+
+  String state = activeAccount.registrationState.label;
+  if (activeAccount.registrationState == RegistrationState.registered) {
+    return 'Registered';
+  } else if (activeAccount.registrationState == RegistrationState.failed) {
+    return 'Registration Failed: ${activeAccount.failureReason}';
+  }
+  return state;
 });

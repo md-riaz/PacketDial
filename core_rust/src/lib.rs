@@ -330,6 +330,7 @@ extern "C" {
         codec_buf_len: i32,
         bitrate_kbps_out: *mut i32,
     ) -> i32;
+    fn pd_call_send_dtmf(call_id: i32, digits: *const c_char) -> i32;
 }
 
 // ---------------------------------------------------------------------------
@@ -851,6 +852,7 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "CallHangup" => cmd_call_hangup(payload),
         "CallMute" => cmd_call_mute(payload),
         "CallHold" => cmd_call_hold(payload),
+        "CallSendDtmf" => cmd_call_send_dtmf(payload),
         "MediaStatsUpdate" => cmd_media_stats_update(payload),
         "AudioListDevices" => cmd_audio_list_devices(payload),
         "AudioSetDevices" => cmd_audio_set_devices(payload),
@@ -1448,6 +1450,33 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
     push_event(format!(
         r#"{{"type":"AudioDevicesSet","payload":{{"input_id":{input_id},"output_id":{output_id}}}}}"#
     ));
+    EngineErrorCode::Ok
+}
+
+fn cmd_call_send_dtmf(p: &serde_json::Value) -> EngineErrorCode {
+    let call_id = match p["call_id"].as_u64() {
+        Some(v) => v as u32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let digits = match p["digits"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    log_engine(LogLevel::Info, &format!("Sending DTMF: {digits}"));
+
+    #[cfg(pjsip_available)]
+    {
+        let calls = CALLS.lock().unwrap();
+        if let Some(call) = calls.iter().find(|c| c.id == call_id) {
+            if let Some(pj_id) = call.pjsip_call_id {
+                if let Ok(digits_cstr) = CString::new(digits) {
+                    unsafe { pd_call_send_dtmf(pj_id, digits_cstr.as_ptr()) };
+                }
+            }
+        }
+    }
+
     EngineErrorCode::Ok
 }
 
@@ -2070,6 +2099,45 @@ pub extern "C" fn engine_set_hold(on_hold: i32) -> i32 {
 
         let hold_json = serde_json::json!({ "call_id": call_id, "hold": on_hold != 0 });
         dispatch_command("CallHold", &hold_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Send DTMF digits on the active call.
+///
+/// `digits` must be a null-terminated UTF-8 string containing digits 0-9, *, #, A-D.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_send_dtmf(digits: *const c_char) -> i32 {
+    if digits.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let digits_s = match unsafe { CStr::from_ptr(digits) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first active call
+        let call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        };
+        let call_id = match call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        let dtmf_json = serde_json::json!({ "call_id": call_id, "digits": digits_s });
+        dispatch_command("CallSendDtmf", &dtmf_json) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }

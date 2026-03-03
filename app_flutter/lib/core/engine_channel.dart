@@ -200,6 +200,21 @@ class EngineChannel {
     _engine?.getLogBuffer();
   }
 
+  /// Send DTMF digits on the active call.
+  void sendDtmf(String digits) {
+    _engine?.sendDtmf(digits);
+  }
+
+  /// Toggle mute on the active call.
+  void setMute(bool muted) {
+    _engine?.setMute(muted);
+  }
+
+  /// Toggle hold on the active call.
+  void setHold(bool onHold) {
+    _engine?.setHold(onHold);
+  }
+
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     final payload =
@@ -226,13 +241,47 @@ class EngineChannel {
           if (activeCall?.callId == callId) {
             // Save to Isar
             if (_isar != null) {
+              final sipCode = (payload['sip_code'] as num?)?.toInt();
+              final sipReason = payload['sip_reason'] as String?;
+
+              // Map SIP code to professional Result (Spec 2.2)
+              String result = 'Ended';
+              if (activeCall!.direction == CallDirection.incoming) {
+                if (sipCode == 487)
+                  result = 'Missed';
+                else if (sipCode == 603 || sipCode == 486)
+                  result = 'Rejected';
+                else if (activeCall!.state == CallState.inCall)
+                  result = 'Answered';
+                else
+                  result = 'Missed';
+              } else {
+                if (activeCall!.state == CallState.inCall)
+                  result = 'Answered';
+                else if (sipCode == 486)
+                  result = 'Busy';
+                else if (sipCode == 487)
+                  result = 'Cancelled';
+                else if (sipCode != null && sipCode >= 400)
+                  result = 'Failed';
+                else
+                  result = 'Disconnected';
+              }
+
               final entry = CallHistorySchema()
                 ..accountId = activeCall!.accountId
                 ..uri = activeCall!.uri
                 ..direction = activeCall!.direction.name
                 ..timestamp = DateTime.now()
-                ..durationSeconds = 0 // In a real app, track start time
-                ..status = 'completed';
+                ..durationSeconds = activeCall!.startedAt != null
+                    ? DateTime.now()
+                        .difference(activeCall!.startedAt!)
+                        .inSeconds
+                    : 0
+                ..sipCode = sipCode
+                ..sipReason = sipReason
+                ..result = result;
+
               _isar!.writeTxn(() => _isar!.callHistorySchemas.put(entry));
             }
             activeCall = null;
@@ -250,6 +299,9 @@ class EngineChannel {
             state: state,
             muted: payload['muted'] as bool? ?? false,
             onHold: payload['on_hold'] as bool? ?? false,
+            startedAt: (state == CallState.inCall)
+                ? DateTime.now()
+                : activeCall?.startedAt,
           );
         }
 

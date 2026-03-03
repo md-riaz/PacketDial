@@ -22,6 +22,7 @@ typedef _EngineSetAudioDevicesC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineQueryCallHistoryC = ffi.Int32 Function();
 typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineGetLogBufferC = ffi.Int32 Function();
+typedef _EngineSendDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineSetEventCallbackC = ffi.Void Function(
     ffi.Pointer<
         ffi
@@ -97,6 +98,9 @@ class VoipEngine {
   late final int Function() _getLogBuffer =
       _lib.lookupFunction<_EngineGetLogBufferC, int Function()>(
           'engine_get_log_buffer');
+  late final int Function(ffi.Pointer<ffi.Int8>) _sendDtmf = _lib
+      .lookupFunction<_EngineSendDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_send_dtmf');
   late final void Function(
           ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>>)
       _setEventCallback = _lib.lookupFunction<
@@ -226,6 +230,16 @@ class VoipEngine {
 
   /// Request all buffered log entries.
   int getLogBuffer() => _getLogBuffer();
+
+  /// Send DTMF digits on the active call.
+  int sendDtmf(String digits) {
+    final ptr = _allocCString(digits);
+    try {
+      return _sendDtmf(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
 
   /// Set a native event callback function.
   ///

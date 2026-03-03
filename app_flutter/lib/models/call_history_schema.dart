@@ -11,5 +11,10 @@ class CallHistorySchema {
   late String direction; // 'incoming', 'outgoing'
   late DateTime timestamp;
   late int durationSeconds;
-  late String status; // 'completed', 'missed', 'failed'
+
+  // Professional SIP Semantics
+  int? sipCode; // e.g. 200, 486, 603
+  String? sipReason; // e.g. "OK", "Busy Here", "Decline"
+  String?
+      result; // 'Answered', 'Missed', 'Rejected', 'Busy', 'Failed', 'Answered Elsewhere', 'Cancelled'
 }

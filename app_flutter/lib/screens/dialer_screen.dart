@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/engine_channel.dart';
 import '../core/account_service.dart';
@@ -20,24 +22,41 @@ class DialerScreen extends ConsumerStatefulWidget {
 
 class _DialerScreenState extends ConsumerState<DialerScreen> {
   final _uriCtrl = TextEditingController();
+  final _focusNode = FocusNode();
 
-  void _dialKey(String digit) => setState(() => _uriCtrl.text += digit);
+  @override
+  void initState() {
+    super.initState();
+    // Auto-focus dialer on load (Spec 6.1)
+    _focusNode.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    _uriCtrl.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _dialKey(String digit, bool isCallActive) {
+    if (isCallActive) {
+      EngineChannel.instance.sendDtmf(digit);
+    } else {
+      setState(() => _uriCtrl.text += digit);
+    }
+    _focusNode.requestFocus();
+  }
 
   void _backspace() {
     if (_uriCtrl.text.isNotEmpty) {
       setState(() =>
           _uriCtrl.text = _uriCtrl.text.substring(0, _uriCtrl.text.length - 1));
     }
+    _focusNode.requestFocus();
   }
 
   void _call(AccountSchema? activeAccount) {
-    if (activeAccount == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No active account selected.')),
-      );
-      return;
-    }
-
+    if (activeAccount == null) return;
     final raw = _uriCtrl.text.trim();
     if (raw.isEmpty) return;
 
@@ -55,10 +74,6 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   }
 
   void _hangup() => EngineChannel.instance.engine.hangup();
-  void _toggleMute(ActiveCall call) =>
-      EngineChannel.instance.engine.setMute(!call.muted);
-  void _toggleHold(ActiveCall call) =>
-      EngineChannel.instance.engine.setHold(!call.onHold);
 
   @override
   Widget build(BuildContext context) {
@@ -66,142 +81,136 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     final activeCall = ref.watch(activeCallProvider);
     final stats = ref.watch(activeCallMediaStatsProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(activeCall != null ? 'Active Call' : 'Dialer'),
-        centerTitle: true,
-      ),
-      body: activeAccountAsync.when(
-        data: (activeAccount) => SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            children: [
-              // 1. Account / Call Status Header
-              _buildHeader(activeAccount, activeCall),
-              const SizedBox(height: 16),
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.enter): const _CallActionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.escape): const _HangupActionIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyD):
+            const _FocusActionIntent(),
+      },
+      child: Actions(
+        actions: {
+          _CallActionIntent: CallbackAction<_CallActionIntent>(
+            onInvoke: (_) => _call(activeAccountAsync.value),
+          ),
+          _HangupActionIntent: CallbackAction<_HangupActionIntent>(
+            onInvoke: (_) => _hangup(),
+          ),
+          _FocusActionIntent: CallbackAction<_FocusActionIntent>(
+            onInvoke: (_) => _focusNode.requestFocus(),
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            body: activeAccountAsync.when(
+              data: (activeAccount) => Padding(
+                padding: const EdgeInsets.all(8.0), // Spec 5.1 Density
+                child: Column(
+                  children: [
+                    // 1. High-Density Status Header
+                    _buildCompactHeader(activeAccount),
+                    const SizedBox(height: 8),
 
-              // 2. Main Content Area (Visuals or Input)
-              if (activeCall != null)
-                _buildActiveCallUI(activeCall, stats)
-              else
-                _buildDialerInput(),
+                    // 2. Active Call Panel (Stack-ready)
+                    if (activeCall != null)
+                      _ActiveCallCard(
+                          call: activeCall, stats: stats, onHangup: _hangup)
+                    else
+                      const SizedBox(
+                          height: 100,
+                          child: Center(
+                              child: Text('READY',
+                                  style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 10,
+                                      letterSpacing: 2)))),
 
-              const SizedBox(height: 16),
+                    const Divider(height: 16),
 
-              // 3. Numpad (Always available for DTMF during calls)
-              _buildNumpad(),
+                    // 3. Dialing Input
+                    _buildDialInput(),
 
-              const SizedBox(height: 16),
+                    const SizedBox(height: 8),
 
-              // 4. Primary Action (Call or Hangup)
-              if (activeCall != null)
-                _buildCallControls(activeCall)
-              else
-                _buildDialButton(activeAccount),
+                    // 4. Integrated Numpad & Controls
+                    Expanded(child: _buildNumpadGrid(activeCall)),
 
-              // 5. Media Stats (Optional, expanded)
-              if (activeCall != null && stats != null) ...[
-                const SizedBox(height: 16),
-                _MediaStatsView(stats: stats),
-              ],
-            ],
+                    const SizedBox(height: 8),
+
+                    // 5. Action Bar
+                    _buildMainActionBar(activeAccount, activeCall),
+                  ],
+                ),
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+            ),
           ),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
       ),
     );
   }
 
-  Widget _buildHeader(AccountSchema? account, ActiveCall? call) {
-    bool isCall = call != null;
+  Widget _buildCompactHeader(AccountSchema? account) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: (isCall ? Colors.green : Colors.indigo).withOpacity(0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: (isCall ? Colors.green : Colors.indigo).withOpacity(0.2)),
+        color: Colors.indigo.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(4),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                isCall ? Icons.call : Icons.account_circle,
-                size: 18,
-                color: isCall ? Colors.green : Colors.indigo,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isCall
-                      ? 'On Call: ${call.uri}'
-                      : (account != null
-                          ? 'Active: ${account.displayName}'
-                          : 'No Account'),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color:
-                        isCall ? Colors.green.shade700 : Colors.indigo.shade700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (isCall)
-                Text(
-                  call.state.label.toUpperCase(),
-                  style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.green),
-                ),
-            ],
+          const Icon(Icons.account_box, size: 14, color: Colors.indigo),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              account?.displayName ?? 'No Active Account',
+              style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.indigo),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
+          const Icon(Icons.keyboard, size: 12, color: Colors.grey),
+          const SizedBox(width: 4),
+          const Text('KBD ON',
+              style: TextStyle(fontSize: 9, color: Colors.grey)),
         ],
       ),
     );
   }
 
-  Widget _buildActiveCallUI(ActiveCall call, MediaStats? stats) {
-    return Column(
-      children: [
-        const Icon(Icons.person, size: 64, color: Colors.indigo),
-        const SizedBox(height: 8),
-        Text(call.uri,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(call.state.label,
-            style: const TextStyle(color: Colors.grey, fontSize: 13)),
-      ],
-    );
-  }
-
-  Widget _buildDialerInput() {
+  Widget _buildDialInput() {
     return TextField(
       controller: _uriCtrl,
-      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+      focusNode: _focusNode,
+      style: const TextStyle(
+          fontSize: 22, fontWeight: FontWeight.normal, letterSpacing: 1),
       textAlign: TextAlign.center,
       decoration: InputDecoration(
-        hintText: 'Enter URI or Number',
-        border: InputBorder.none,
+        hintText: 'Enter number or URI',
+        hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
+        isDense: true,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade300)),
         suffixIcon: IconButton(
-          icon: const Icon(Icons.backspace_outlined, size: 20),
+          icon: const Icon(Icons.backspace_outlined, size: 18),
           onPressed: _backspace,
         ),
       ),
+      onSubmitted: (_) => _call(null), // Handled by Actions
     );
   }
 
-  Widget _buildNumpad() {
+  Widget _buildNumpadGrid(ActiveCall? activeCall) {
     return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 3,
-      childAspectRatio: 1.5,
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
+      childAspectRatio: 1.8,
+      mainAxisSpacing: 4,
+      crossAxisSpacing: 4,
       children: [
         for (final label in [
           '1',
@@ -217,136 +226,245 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           '0',
           '#'
         ])
-          OutlinedButton(
-            onPressed: () => _dialKey(label),
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text(label, style: const TextStyle(fontSize: 20)),
-          ),
+          _NumpadButton(
+              label: label, onTap: () => _dialKey(label, activeCall != null)),
       ],
     );
   }
 
-  Widget _buildDialButton(AccountSchema? account) {
-    return FilledButton.icon(
-      onPressed: () => _call(account),
-      icon: const Icon(Icons.call),
-      label: const Text('Dial'),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(50),
-        backgroundColor: Colors.green.shade600,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-
-  Widget _buildCallControls(ActiveCall call) {
+  Widget _buildMainActionBar(AccountSchema? account, ActiveCall? call) {
+    bool isCall = call != null;
     return Row(
       children: [
         Expanded(
-          child: _controlButton(
-            icon: call.muted ? Icons.mic_off : Icons.mic,
-            label: call.muted ? 'Unmute' : 'Mute',
-            active: call.muted,
-            onTap: () => _toggleMute(call),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _controlButton(
-            icon: call.onHold ? Icons.play_arrow : Icons.pause,
-            label: call.onHold ? 'Resume' : 'Hold',
-            active: call.onHold,
-            onTap: () => _toggleHold(call),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _hangup,
-            icon: const Icon(Icons.call_end),
-            label: const Text('End'),
+          child: FilledButton(
+            onPressed: isCall ? _hangup : () => _call(account),
             style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(50),
-              backgroundColor: Colors.red.shade600,
+              backgroundColor:
+                  isCall ? Colors.red.shade600 : Colors.green.shade600,
+              padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(4)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(isCall ? Icons.call_end : Icons.call, size: 18),
+                const SizedBox(width: 8),
+                Text(isCall ? 'HANG UP (Esc)' : 'DIAL (Enter)',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
             ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _controlButton(
-      {required IconData icon,
-      required String label,
-      required bool active,
-      required VoidCallback onTap}) {
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        backgroundColor: active ? Colors.orange.withOpacity(0.1) : null,
-        side: BorderSide(color: active ? Colors.orange : Colors.grey.shade300),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 20, color: active ? Colors.orange : Colors.indigo),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 10, color: active ? Colors.orange : null)),
-        ],
-      ),
     );
   }
 }
 
-class _MediaStatsView extends StatelessWidget {
-  final MediaStats stats;
-  const _MediaStatsView({required this.stats});
+class _NumpadButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _NumpadButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        padding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      child: Text(label,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w400)),
+    );
+  }
+}
+
+class _ActiveCallCard extends StatelessWidget {
+  final ActiveCall call;
+  final MediaStats? stats;
+  final VoidCallback onHangup;
+  const _ActiveCallCard(
+      {required this.call, this.stats, required this.onHangup});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.blue.shade50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Colors.blue.shade200),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Quality Metrics',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey)),
-          const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _statItem('Codec', stats.codec),
-              _statItem('Jitter', '${stats.jitterMs.round()}ms'),
-              _statItem('Loss', '${stats.packetLossPct.toStringAsFixed(1)}%'),
+              const CircleAvatar(
+                  radius: 16, child: Icon(Icons.person, size: 18)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(call.uri,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text(call.state.label,
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.blueGrey)),
+                  ],
+                ),
+              ),
+              _TimerWidget(startTime: call.startedAt),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _IconButton(
+                  icon: call.muted ? Icons.mic_off : Icons.mic,
+                  label: 'MUTE',
+                  active: call.muted,
+                  onTap: () => EngineChannel.instance.setMute(!call.muted)),
+              _IconButton(
+                  icon: Icons.pause,
+                  label: 'HOLD',
+                  active: call.onHold,
+                  onTap: () => EngineChannel.instance.setHold(!call.onHold)),
+              _IconButton(
+                  icon: Icons.grid_on,
+                  label: 'KEYPAD',
+                  active: false,
+                  onTap: () {}),
+              _IconButton(
+                  icon: Icons.swap_horiz,
+                  label: 'XFER',
+                  active: false,
+                  onTap: () {}),
             ],
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _statItem(String label, String value) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
-        Text(value,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-      ],
+class _IconButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _IconButton(
+      {required this.icon,
+      required this.label,
+      required this.active,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: active ? Colors.orange : Colors.indigo),
+          const SizedBox(height: 2),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: active ? Colors.orange : Colors.indigo)),
+        ],
+      ),
     );
   }
+}
+
+class _TimerWidget extends StatefulWidget {
+  final DateTime? startTime;
+  const _TimerWidget({this.startTime});
+
+  @override
+  State<_TimerWidget> createState() => _TimerWidgetState();
+}
+
+class _TimerWidgetState extends State<_TimerWidget> {
+  Timer? _timer;
+  Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(_TimerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.startTime != widget.startTime) {
+      _startTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    if (widget.startTime == null) {
+      setState(() => _duration = Duration.zero);
+      return;
+    }
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _duration = DateTime.now().difference(widget.startTime!);
+      });
+    });
+    // Initial sync
+    setState(() {
+      _duration = DateTime.now().difference(widget.startTime!);
+    });
+  }
+
+  String _formatDuration(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(d.inMinutes.remainder(60));
+    final seconds = twoDigits(d.inSeconds.remainder(60));
+    if (d.inHours > 0) {
+      return "${twoDigits(d.inHours)}:$minutes:$seconds";
+    }
+    return "$minutes:$seconds";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _formatDuration(_duration),
+      style: const TextStyle(
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+          color: Colors.blue),
+    );
+  }
+}
+
+// Keyboard Action Intents
+class _CallActionIntent extends Intent {
+  const _CallActionIntent();
+}
+
+class _HangupActionIntent extends Intent {
+  const _HangupActionIntent();
+}
+
+class _FocusActionIntent extends Intent {
+  const _FocusActionIntent();
 }

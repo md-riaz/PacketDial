@@ -32,18 +32,28 @@ const CallHistorySchemaSchema = CollectionSchema(
       name: r'durationSeconds',
       type: IsarType.long,
     ),
-    r'status': PropertySchema(
+    r'result': PropertySchema(
       id: 3,
-      name: r'status',
+      name: r'result',
+      type: IsarType.string,
+    ),
+    r'sipCode': PropertySchema(
+      id: 4,
+      name: r'sipCode',
+      type: IsarType.long,
+    ),
+    r'sipReason': PropertySchema(
+      id: 5,
+      name: r'sipReason',
       type: IsarType.string,
     ),
     r'timestamp': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'timestamp',
       type: IsarType.dateTime,
     ),
     r'uri': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'uri',
       type: IsarType.string,
     )
@@ -70,7 +80,18 @@ int _callHistorySchemaEstimateSize(
   var bytesCount = offsets.last;
   bytesCount += 3 + object.accountId.length * 3;
   bytesCount += 3 + object.direction.length * 3;
-  bytesCount += 3 + object.status.length * 3;
+  {
+    final value = object.result;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
+    final value = object.sipReason;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.uri.length * 3;
   return bytesCount;
 }
@@ -84,9 +105,11 @@ void _callHistorySchemaSerialize(
   writer.writeString(offsets[0], object.accountId);
   writer.writeString(offsets[1], object.direction);
   writer.writeLong(offsets[2], object.durationSeconds);
-  writer.writeString(offsets[3], object.status);
-  writer.writeDateTime(offsets[4], object.timestamp);
-  writer.writeString(offsets[5], object.uri);
+  writer.writeString(offsets[3], object.result);
+  writer.writeLong(offsets[4], object.sipCode);
+  writer.writeString(offsets[5], object.sipReason);
+  writer.writeDateTime(offsets[6], object.timestamp);
+  writer.writeString(offsets[7], object.uri);
 }
 
 CallHistorySchema _callHistorySchemaDeserialize(
@@ -100,9 +123,11 @@ CallHistorySchema _callHistorySchemaDeserialize(
   object.direction = reader.readString(offsets[1]);
   object.durationSeconds = reader.readLong(offsets[2]);
   object.id = id;
-  object.status = reader.readString(offsets[3]);
-  object.timestamp = reader.readDateTime(offsets[4]);
-  object.uri = reader.readString(offsets[5]);
+  object.result = reader.readStringOrNull(offsets[3]);
+  object.sipCode = reader.readLongOrNull(offsets[4]);
+  object.sipReason = reader.readStringOrNull(offsets[5]);
+  object.timestamp = reader.readDateTime(offsets[6]);
+  object.uri = reader.readString(offsets[7]);
   return object;
 }
 
@@ -120,10 +145,14 @@ P _callHistorySchemaDeserializeProp<P>(
     case 2:
       return (reader.readLong(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 4:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 5:
+      return (reader.readStringOrNull(offset)) as P;
+    case 6:
+      return (reader.readDateTime(offset)) as P;
+    case 7:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -629,13 +658,31 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusEqualTo(
-    String value, {
+      resultIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'result',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      resultIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'result',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      resultEqualTo(
+    String? value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'status',
+        property: r'result',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -643,15 +690,15 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusGreaterThan(
-    String value, {
+      resultGreaterThan(
+    String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'status',
+        property: r'result',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -659,15 +706,15 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusLessThan(
-    String value, {
+      resultLessThan(
+    String? value, {
     bool include = false,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'status',
+        property: r'result',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -675,16 +722,16 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusBetween(
-    String lower,
-    String upper, {
+      resultBetween(
+    String? lower,
+    String? upper, {
     bool includeLower = true,
     bool includeUpper = true,
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'status',
+        property: r'result',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -695,13 +742,13 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusStartsWith(
+      resultStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'status',
+        property: r'result',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -709,13 +756,13 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusEndsWith(
+      resultEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'status',
+        property: r'result',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -723,10 +770,10 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusContains(String value, {bool caseSensitive = true}) {
+      resultContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'status',
+        property: r'result',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -734,10 +781,10 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusMatches(String pattern, {bool caseSensitive = true}) {
+      resultMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'status',
+        property: r'result',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -745,20 +792,248 @@ extension CallHistorySchemaQueryFilter
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusIsEmpty() {
+      resultIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'status',
+        property: r'result',
         value: '',
       ));
     });
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
-      statusIsNotEmpty() {
+      resultIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'status',
+        property: r'result',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipCodeIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'sipCode',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipCodeIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'sipCode',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipCodeEqualTo(int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sipCode',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipCodeGreaterThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sipCode',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipCodeLessThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sipCode',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipCodeBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sipCode',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'sipReason',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'sipReason',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sipReason',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'sipReason',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'sipReason',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'sipReason',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'sipReason',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'sipReason',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'sipReason',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'sipReason',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'sipReason',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterFilterCondition>
+      sipReasonIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'sipReason',
         value: '',
       ));
     });
@@ -1008,16 +1283,44 @@ extension CallHistorySchemaQuerySortBy
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
-      sortByStatus() {
+      sortByResult() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.asc);
+      return query.addSortBy(r'result', Sort.asc);
     });
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
-      sortByStatusDesc() {
+      sortByResultDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.desc);
+      return query.addSortBy(r'result', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      sortBySipCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      sortBySipCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      sortBySipReason() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipReason', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      sortBySipReasonDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipReason', Sort.desc);
     });
   }
 
@@ -1107,16 +1410,44 @@ extension CallHistorySchemaQuerySortThenBy
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
-      thenByStatus() {
+      thenByResult() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.asc);
+      return query.addSortBy(r'result', Sort.asc);
     });
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
-      thenByStatusDesc() {
+      thenByResultDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'status', Sort.desc);
+      return query.addSortBy(r'result', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      thenBySipCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      thenBySipCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipCode', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      thenBySipReason() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipReason', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QAfterSortBy>
+      thenBySipReasonDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'sipReason', Sort.desc);
     });
   }
 
@@ -1172,9 +1503,23 @@ extension CallHistorySchemaQueryWhereDistinct
   }
 
   QueryBuilder<CallHistorySchema, CallHistorySchema, QDistinct>
-      distinctByStatus({bool caseSensitive = true}) {
+      distinctByResult({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'status', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'result', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QDistinct>
+      distinctBySipCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sipCode');
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, CallHistorySchema, QDistinct>
+      distinctBySipReason({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'sipReason', caseSensitive: caseSensitive);
     });
   }
 
@@ -1222,9 +1567,22 @@ extension CallHistorySchemaQueryProperty
     });
   }
 
-  QueryBuilder<CallHistorySchema, String, QQueryOperations> statusProperty() {
+  QueryBuilder<CallHistorySchema, String?, QQueryOperations> resultProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'status');
+      return query.addPropertyName(r'result');
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, int?, QQueryOperations> sipCodeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sipCode');
+    });
+  }
+
+  QueryBuilder<CallHistorySchema, String?, QQueryOperations>
+      sipReasonProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'sipReason');
     });
   }
 

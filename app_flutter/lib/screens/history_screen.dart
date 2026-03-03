@@ -85,12 +85,24 @@ class _HistoryTile extends StatelessWidget {
         '${entry.accountId}  •  ${entry.timestamp.toString().substring(0, 16)}',
         style: const TextStyle(fontSize: 11),
       ),
-      trailing: Text(
-        entry.status,
-        style: TextStyle(
-          color: entry.status == 'completed' ? Colors.grey : Colors.red,
-          fontSize: 11,
-        ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            entry.result ?? 'Ended',
+            style: TextStyle(
+              color: (entry.result == 'Answered') ? Colors.green : Colors.red,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (entry.sipCode != null)
+            Text(
+              'SIP ${entry.sipCode}',
+              style: const TextStyle(fontSize: 9, color: Colors.grey),
+            ),
+        ],
       ),
     );
   }
