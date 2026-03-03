@@ -25,6 +25,12 @@
     See docs/rust-core.md for detailed Rust build documentation
 #>
 
+[CmdletBinding()]
+param(
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Release'
+)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -35,6 +41,7 @@ function Write-Info  { param($m) Write-Host "    [INFO] $m" -ForegroundColor Yel
 function Write-Fail  { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red }
 
 $RepoRoot = Resolve-Path "."
+$IsDebug = $Configuration -eq 'Debug'
 
 # ---------------------------------------------------------------------------
 # Verify PJSIP outputs (if available)
@@ -55,14 +62,17 @@ if ((Test-Path $IncludeDir) -and (Test-Path $LibDir)) {
 }
 
 # ---------------------------------------------------------------------------
-# Build Rust core (release mode)
+# Build Rust core
 # ---------------------------------------------------------------------------
-Write-Step "Building Rust core (release mode)"
+Write-Step "Building Rust core ($Configuration mode)"
 Write-Info "This may take 1-3 minutes..."
 
 Push-Location "core_rust"
 try {
-  cargo build --release --target x86_64-pc-windows-msvc
+  $CargoArgs = @("build", "--target", "x86_64-pc-windows-msvc")
+  if (-not $IsDebug) { $CargoArgs += "--release" }
+  
+  cargo @CargoArgs
   if ($LASTEXITCODE -ne 0) {
     Write-Fail "Cargo build failed with exit code $LASTEXITCODE"
     exit 1
@@ -76,10 +86,19 @@ Write-OK "Rust core build complete"
 # ---------------------------------------------------------------------------
 # Verify and copy DLL to Flutter output
 # ---------------------------------------------------------------------------
-Write-Step "Copying DLL to Flutter runner"
+Write-Step "Copying DLL to Flutter environment"
 
-$DllSrc = Join-Path $RepoRoot "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
-$DllDstDir = Join-Path $RepoRoot "app_flutter\windows\runner"
+$ConfigDir = if ($IsDebug) { "debug" } else { "release" }
+$DllSrc = Join-Path $RepoRoot "core_rust\target\x86_64-pc-windows-msvc\$ConfigDir\voip_core.dll"
+
+# Determine destination
+if ($IsDebug) {
+    # Debug mode copies to the build output for immediate run_app iteration
+    $DllDstDir = Join-Path $RepoRoot "app_flutter\build\windows\x64\runner\Debug"
+} else {
+    # Release mode copies to runner folder for platform builds/packaging
+    $DllDstDir = Join-Path $RepoRoot "app_flutter\windows\runner"
+}
 
 if (-not (Test-Path $DllSrc)) {
   Write-Fail "voip_core.dll not found at $DllSrc"
@@ -97,6 +116,6 @@ Write-OK "    → $DllDstDir"
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Green
-Write-Host "Rust core (release) built successfully" -ForegroundColor Green
+Write-Host "Rust core ($Configuration) built successfully" -ForegroundColor Green
 Write-Host "DLL: $DllSrc" -ForegroundColor Green
 Write-Host "================================================" -ForegroundColor Green

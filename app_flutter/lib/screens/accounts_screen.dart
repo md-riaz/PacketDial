@@ -16,12 +16,32 @@ class AccountsScreen extends ConsumerStatefulWidget {
 }
 
 class _AccountsScreenState extends ConsumerState<AccountsScreen> {
+  Widget _withHelp(Widget child, String help) {
+    return Row(
+      children: [
+        Expanded(child: child),
+        const SizedBox(width: 4),
+        Tooltip(
+          message: help,
+          preferBelow: false,
+          child:
+              const Icon(Icons.help_outline, size: 16, color: Colors.blueGrey),
+        ),
+      ],
+    );
+  }
+
   void _showAccountDialog({AccountSchema? existing}) {
-    final idCtrl = TextEditingController(text: existing?.accountId ?? '');
-    final nameCtrl = TextEditingController(text: existing?.displayName ?? '');
+    final nameCtrl = TextEditingController(text: existing?.accountName ?? '');
+    final displayCtrl =
+        TextEditingController(text: existing?.displayName ?? '');
     final serverCtrl = TextEditingController(
         text: existing?.server ?? 'cpx.alphapbx.net:8090');
+    final proxyCtrl = TextEditingController(text: existing?.sipProxy ?? '');
     final userCtrl = TextEditingController(text: existing?.username ?? '');
+    final authUserCtrl =
+        TextEditingController(text: existing?.authUsername ?? '');
+    final domainCtrl = TextEditingController(text: existing?.domain ?? '');
     final passCtrl = TextEditingController(text: existing?.password ?? '');
     final stunCtrl = TextEditingController(text: existing?.stunServer ?? '');
     final turnCtrl = TextEditingController(text: existing?.turnServer ?? '');
@@ -40,35 +60,75 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isNew)
+                _withHelp(
                   TextField(
-                      controller: idCtrl,
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Account Name (Friendly)')),
+                  'Internal label to distinguish accounts (e.g. "Work", "Home")',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: displayCtrl,
                       decoration:
-                          const InputDecoration(labelText: 'Account ID')),
-                TextField(
-                    controller: nameCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Display Name')),
-                TextField(
-                    controller: serverCtrl,
-                    decoration: const InputDecoration(labelText: 'SIP Server')),
-                TextField(
-                    controller: userCtrl,
-                    decoration: const InputDecoration(labelText: 'Username')),
-                TextField(
-                    controller: passCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password')),
+                          const InputDecoration(labelText: 'Display Name')),
+                  'The name displayed to the other party during calls',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: serverCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'SIP Server')),
+                  'The registrar server address (e.g. sip.provider.com)',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: proxyCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'SIP Proxy (Optional)')),
+                  'The address of the SIP proxy server if required',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: userCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Username (Extension)')),
+                  'Your SIP username or extension number',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: authUserCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Login (Auth Username)')),
+                  'Used for authentication. Often same as Username.',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: domainCtrl,
+                      decoration:
+                          const InputDecoration(labelText: 'SIP Domain')),
+                  'The SIP domain name (often the same as SIP Server)',
+                ),
+                _withHelp(
+                  TextField(
+                      controller: passCtrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: 'Password')),
+                  'Your SIP account password',
+                ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: transport,
-                  decoration: const InputDecoration(labelText: 'Transport'),
-                  items: const [
-                    DropdownMenuItem(value: 'udp', child: Text('UDP')),
-                    DropdownMenuItem(value: 'tcp', child: Text('TCP')),
-                    DropdownMenuItem(value: 'tls', child: Text('TLS')),
-                  ],
-                  onChanged: (v) => setDlgState(() => transport = v ?? 'udp'),
+                _withHelp(
+                  DropdownButtonFormField<String>(
+                    value: transport,
+                    decoration: const InputDecoration(labelText: 'Transport'),
+                    items: const [
+                      DropdownMenuItem(value: 'udp', child: Text('UDP')),
+                      DropdownMenuItem(value: 'tcp', child: Text('TCP')),
+                      DropdownMenuItem(value: 'tls', child: Text('TLS')),
+                    ],
+                    onChanged: (v) => setDlgState(() => transport = v ?? 'udp'),
+                  ),
+                  'Network protocol for SIP signaling (UDP is standard)',
                 ),
                 TextField(
                     controller: stunCtrl,
@@ -89,15 +149,19 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () async {
-                final id = isNew ? idCtrl.text.trim() : existing.accountId;
-                if (id.isEmpty) return;
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
 
                 final schema = AccountSchema()
                   ..id = existing?.id
-                  ..accountId = id
-                  ..displayName = nameCtrl.text.trim()
+                  ..uuid = existing?.uuid ?? ''
+                  ..accountName = name
+                  ..displayName = displayCtrl.text.trim()
                   ..server = serverCtrl.text.trim()
+                  ..sipProxy = proxyCtrl.text.trim()
                   ..username = userCtrl.text.trim()
+                  ..authUsername = authUserCtrl.text.trim()
+                  ..domain = domainCtrl.text.trim()
                   ..password = passCtrl.text
                   ..transport = transport
                   ..stunServer = stunCtrl.text.trim()
@@ -171,7 +235,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                             onPressed: () async {
                               await ref
                                   .read(accountServiceProvider)
-                                  .setSelectedAccount(a.accountId);
+                                  .setSelectedAccount(a.uuid);
                               ref.invalidate(accountsListProvider);
                             },
                             child: const Text('Select'),
@@ -194,7 +258,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                           onPressed: () async {
                             await ref
                                 .read(accountServiceProvider)
-                                .deleteAccount(a.accountId);
+                                .deleteAccount(a.uuid);
                             ref.invalidate(accountsListProvider);
                           },
                         ),

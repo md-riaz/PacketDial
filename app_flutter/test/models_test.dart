@@ -9,13 +9,11 @@ void main() {
           RegistrationState.registered);
       expect(RegistrationState.fromString('Registering'),
           RegistrationState.registering);
-      expect(
-          RegistrationState.fromString('Failed'), RegistrationState.failed);
+      expect(RegistrationState.fromString('Failed'), RegistrationState.failed);
       expect(RegistrationState.fromString('Unregistered'),
           RegistrationState.unregistered);
       // Unknown strings default to unregistered
-      expect(RegistrationState.fromString(''),
-          RegistrationState.unregistered);
+      expect(RegistrationState.fromString(''), RegistrationState.unregistered);
     });
 
     test('label produces human-readable text', () {
@@ -42,10 +40,8 @@ void main() {
 
   group('CallDirection', () {
     test('fromString maps correctly', () {
-      expect(
-          CallDirection.fromString('Incoming'), CallDirection.incoming);
-      expect(
-          CallDirection.fromString('Outgoing'), CallDirection.outgoing);
+      expect(CallDirection.fromString('Incoming'), CallDirection.incoming);
+      expect(CallDirection.fromString('Outgoing'), CallDirection.outgoing);
       expect(CallDirection.fromString(''), CallDirection.outgoing);
     });
   });
@@ -53,7 +49,8 @@ void main() {
   group('Account', () {
     test('copyWith preserves id and updates fields', () {
       const original = Account(
-        id: 'acc1',
+        uuid: 'uuid1',
+        accountName: 'Alice Work',
         displayName: 'Alice',
         server: 'sip.example.com',
         username: 'alice',
@@ -62,14 +59,16 @@ void main() {
       final updated = original.copyWith(
         registrationState: RegistrationState.registered,
       );
-      expect(updated.id, 'acc1');
+      expect(updated.uuid, 'uuid1');
+      expect(updated.accountName, 'Alice Work');
       expect(updated.displayName, 'Alice');
       expect(updated.registrationState, RegistrationState.registered);
     });
 
     test('default values', () {
       const acct = Account(
-        id: 'test',
+        uuid: 'test-uuid',
+        accountName: 'Test Account',
         displayName: 'Test',
         server: 'sip.test',
         username: 'u',

@@ -155,11 +155,11 @@ Before building a release, ensure:
 # (Ensure PJSIP is built first)
 .\scripts\build_pjsip.ps1       # One-time if PJSIP changed
 
-# Build Rust release DLL
-.\scripts\build_core.ps1
+# Build Rust release DLL (automatically copies to app_flutter\windows\runner)
+.\scripts\build_core.ps1 -Configuration Release
 
 # Verify DLL was created
-Test-Path "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
+Test-Path "app_flutter\windows\runner\voip_core.dll"
 ```
 
 ### Build Flutter Release

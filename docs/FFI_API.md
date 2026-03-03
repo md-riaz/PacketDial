@@ -1,127 +1,88 @@
-# Rust <-> Flutter FFI API (v0)
+# Rust <-> Flutter FFI API (v1)
 
-## C ABI
+PacketDial uses a structured C ABI for communication between Dart and Rust.
+
+## C ABI Core
+
 All functions use `extern "C"` and stable primitive types.
 
-### Core Lifecycle & JSON Channel
-
 ```c
-// returns 0 on success, non-zero on failure
-int32_t engine_init(void);
+// Initialize the engine. returns 0 on success.
+int32_t engine_init(const char* user_agent);
 
-// returns 0 on success
+// Shutdown the engine. returns 0 on success.
 int32_t engine_shutdown(void);
 
-// returns pointer to a null-terminated UTF-8 string (static)
+// Returns pointer to a static null-terminated UTF-8 version string.
 const char* engine_version(void);
 
-// Send a JSON command to the engine.
-// cmd_json must be a null-terminated UTF-8 string:
-//   {"type": "CommandName", "payload": {...}}
-// Returns 0 on success. Error codes:
-//   1  AlreadyInitialized
-//   2  NotInitialized
-//   3  InvalidUtf8
-//   4  InvalidJson
-//   5  UnknownCommand
-//   6  NotFound
-// 100  InternalError
-int32_t engine_send_command(const char* cmd_json);
-
-// Poll for the next queued event from the engine.
-// Returns a heap-allocated null-terminated UTF-8 JSON string, or NULL if the
-// queue is empty.  Caller MUST free the result with engine_free_string.
-// Event shape: {"type": "EventName", "payload": {...}}
-char* engine_poll_event(void);
-
-// Free a string previously returned by engine_poll_event.
-void engine_free_string(char* ptr);
+// Set a callback for events.
+//   cb: function pointer with signature (int event_id, const char* json_payload)
+void engine_set_event_callback(void (*cb)(int event_id, const char* json_payload));
 ```
 
-### Direct Structured API (no JSON parsing needed)
+## Structured API Commands
 
-These functions provide a clean C ABI for common operations without JSON
-string parsing on either side.
+These functions provide the primary interface for controlling the VoIP engine.
 
 ```c
-// Event callback type: called when structured events occur.
-//   event_id: one of the EngineEventId values below
-//   message:  null-terminated UTF-8 context string
-typedef void (*EngineEventCallback)(int event_id, const char* message);
-
-// Event IDs:
-//   1 = REGISTERED           — SIP account registered successfully
-//   2 = REGISTRATION_FAILED  — SIP registration failed
-//   3 = INCOMING_CALL        — Incoming call received
-//   4 = CALL_CONNECTED       — Call connected (audio active)
-//   5 = CALL_TERMINATED      — Call ended
-//   6 = ERROR_OCCURRED       — General error
-
-// Set a callback for structured events. Pass NULL to clear.
-// The callback remains valid until engine_shutdown or a new call to this fn.
-void engine_set_event_callback(EngineEventCallback cb);
-
 // Register a SIP account.
-//   user:   SIP username (null-terminated UTF-8)
-//   pass:   SIP password (null-terminated UTF-8)
-//   domain: SIP domain/server (null-terminated UTF-8)
 // Returns 0 on success, non-zero on error.
-int32_t engine_register(const char* user, const char* pass, const char* domain);
+int32_t engine_register(const char* account_id, const char* user, const char* pass, const char* domain);
+
+// Unregister a SIP account.
+int32_t engine_unregister(const char* account_id);
 
 // Make an outgoing call.
-//   number: destination SIP URI or phone number (null-terminated UTF-8)
-//           If not a full SIP URI, "sip:<number>@<domain>" is constructed.
-// Uses the first registered account (or first account if none registered).
-// Returns 0 on success, non-zero on error.
-int32_t engine_make_call(const char* number);
+int32_t engine_make_call(const char* account_id, const char* number);
+
+// Answer an incoming call.
+int32_t engine_answer_call(void);
 
 // Hang up the current active call.
-// Returns 0 on success, non-zero (6=NotFound) if no active call exists.
 int32_t engine_hangup(void);
+
+// Toggle mute (1=muted, 0=unmuted).
+int32_t engine_set_mute(int32_t muted);
+
+// Toggle hold (1=on_hold, 0=resumed).
+int32_t engine_set_hold(int32_t on_hold);
+
+// Send DTMF digits.
+int32_t engine_send_dtmf(const char* digits);
+
+// Request audio device list (triggers AudioDeviceList event).
+int32_t engine_list_audio_devices(void);
+
+// Set active audio devices.
+int32_t engine_set_audio_devices(int32_t input_id, int32_t output_id);
+
+// Request call history (triggers CallHistoryResult event).
+int32_t engine_query_call_history(void);
+
+// Set engine log level ("Error", "Warn", "Info", "Debug").
+int32_t engine_set_log_level(const char* level);
+
+// Request all buffered logs (triggers LogBufferResult event).
+int32_t engine_get_log_buffer(void);
 ```
 
-## Supported Commands
+## Events (via Callback)
 
-| Command              | Required payload fields                                                  |
-|----------------------|--------------------------------------------------------------------------|
-| `AccountUpsert`      | `id`, `display_name`, `server`, `username`, `password`, `transport` (udp/tcp), `stun_server`, `turn_server` |
-| `AccountRegister`    | `id`                                                                     |
-| `AccountUnregister`  | `id`                                                                     |
-| `AccountSetSecurity` | `id`, `tls_enabled` (bool), `srtp_enabled` (bool)                        |
-| `CallStart`          | `account_id`, `uri`                                                      |
-| `CallAnswer`         | `call_id`                                                                |
-| `CallHangup`         | `call_id`                                                                |
-| `CallMute`           | `call_id`, `muted` (bool)                                                |
-| `CallHold`           | `call_id`, `hold` (bool)                                                 |
-| `MediaStatsUpdate`   | `call_id`, `jitter_ms`, `packet_loss_pct`, `codec`, `bitrate_kbps`      |
-| `AudioListDevices`   | _(none)_                                                                 |
-| `AudioSetDevices`    | `input_id`, `output_id`                                                  |
-| `CallHistoryQuery`   | _(none)_                                                                 |
-| `SipCaptureMessage`  | `direction` (send/recv), `raw` (SIP message text)                        |
-| `DiagExportBundle`   | `anonymize` (bool, default true)                                         |
-| `CredStore`          | `key`, `value`                                                           |
-| `CredRetrieve`       | `key`                                                                    |
-| `EnginePing`         | _(none)_                                                                 |
-| `SetLogLevel`        | `level` (one of: `"Error"`, `"Warn"`, `"Info"`, `"Debug"`)              |
-| `GetLogBuffer`       | _(none)_ — returns all buffered log entries as `LogBufferResult`         |
+Events are delivered to the registered callback. Each event has an `event_id` and a JSON string `payload`.
 
-## Events Emitted
-
-| Event                      | Key payload fields                                                  |
-|----------------------------|---------------------------------------------------------------------|
-| `EngineReady`              | _(empty)_                                                           |
-| `RegistrationStateChanged` | `account_id`, `state` (Unregistered/Registering/Registered/Failed), `reason` |
-| `CallStateChanged`         | `call_id`, `account_id`, `uri`, `direction`, `state`, `muted`, `on_hold` |
-| `MediaStatsUpdated`        | `call_id`, `jitter_ms`, `packet_loss_pct`, `codec`, `bitrate_kbps` |
-| `AudioDeviceList`          | `devices[]` (id/name/kind), `selected_input`, `selected_output`    |
-| `AudioDevicesSet`          | `input_id`, `output_id`                                             |
-| `CallHistoryResult`        | `entries[]` (call_id, account_id, uri, direction, started_at, ended_at, duration_secs, end_state) |
-| `SipMessageCaptured`       | `direction`, `raw` (masked)                                         |
-| `DiagBundleReady`          | `anonymize`, `call_history_count`, `account_count`, `note`          |
-| `CredStored`               | `key`                                                               |
-| `CredRetrieved`            | `key`, `value`                                                      |
-| `EnginePong`               | _(empty)_                                                           |
-| `LogLevelSet`              | `level`                                                             |
-| `EngineLog`                | `level` (Error/Warn/Info/Debug), `message`, `ts` (Unix seconds)     |
-| `LogBufferResult`          | `entries[]` (level, message, ts) — response to `GetLogBuffer`       |
+| ID | Name | Payload Key Fields |
+|----|------|--------------------|
+| 1 | `EngineReady` | _(empty)_ |
+| 2 | `RegistrationStateChanged` | `account_id`, `state` (Unregistered/Registering/Registered/Failed), `reason` |
+| 3 | `CallStateChanged` | `call_id`, `account_id`, `uri`, `direction`, `state`, `muted`, `on_hold` |
+| 4 | `MediaStatsUpdated` | `call_id`, `jitter_ms`, `packet_loss_pct`, `codec`, `bitrate_kbps` |
+| 5 | `AudioDeviceList` | `devices[]` (id/name/kind), `selected_input`, `selected_output` |
+| 6 | `AudioDevicesSet` | `input_id`, `output_id` |
+| 7 | `CallHistoryResult` | `entries[]` (call_id, account_id, uri, direction, started_at, ended_at, duration_secs, end_state) |
+| 8 | `SipMessageCaptured` | `direction`, `raw` (masked) |
+| 9 | `DiagBundleReady` | `anonymize`, `call_history_count`, `account_count` |
+| 14| `LogLevelSet` | `level` |
+| 15| `LogBufferResult` | `entries[]` (level, message, ts) |
+| 16| `EngineLog` | `level`, `message`, `ts` |
 

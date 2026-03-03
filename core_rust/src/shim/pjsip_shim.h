@@ -116,6 +116,7 @@ int pd_shutdown(void);
  */
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
+               const char *auth_username, const char *sip_proxy,
                int use_tcp);
 
 /**

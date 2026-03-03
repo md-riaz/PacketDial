@@ -98,10 +98,8 @@ Prerequisites:
 
 ```
 Flutter Desktop UI
-    ↕  JSON commands / events (50 ms poll)
     ↕  Direct C ABI (engine_register / engine_make_call / engine_hangup)
 EngineChannel (Dart)
-    ↕  Dart FFI  (engine_send_command / engine_poll_event / engine_free_string)
     ↕  Direct FFI (engine_register / engine_make_call / engine_hangup / engine_set_event_callback)
 voip_core.dll  (Rust)
     ↕  C shim FFI (pd_init / pd_acc_add / pd_call_make / ...)
@@ -114,17 +112,9 @@ See [`docs/architecture.md`](docs/architecture.md) and [`docs/FFI_API.md`](docs/
 
 ## FFI API
 
-PacketDial provides two FFI interfaces between Dart and Rust:
+PacketDial uses a **Direct C ABI** for all communication between Dart and Rust. This ensures high performance and type safety without the overhead of JSON parsing for every command.
 
-1. **JSON Command/Event Channel** — Send JSON commands via `engine_send_command()`, poll for JSON events via `engine_poll_event()`. Full flexibility for complex operations.
-
-2. **Direct C ABI** — Clean, structured functions for common operations without JSON:
-   - `engine_register(user, pass, domain)` — Register a SIP account
-   - `engine_make_call(number)` — Make an outgoing call
-   - `engine_hangup()` — Hang up the current call
-   - `engine_set_event_callback(cb)` — Receive structured event callbacks
-
-See [`docs/FFI_API.md`](docs/FFI_API.md) for complete C ABI signatures.
+See [`docs/FFI_API.md`](docs/FFI_API.md) for complete C ABI signatures and event details.
 
 ---
 

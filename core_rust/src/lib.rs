@@ -136,10 +136,14 @@ struct LogEntry {
 
 #[derive(Debug, Clone)]
 struct Account {
-    id: String,
+    uuid: String,
+    account_name: String,
     display_name: String,
     server: String,
+    sip_proxy: String,
     username: String,
+    auth_username: String,
+    domain: String,
     password: String,
     transport: String,
     stun_server: String,
@@ -415,7 +419,7 @@ extern "C" fn pjsip_on_reg_state(
 
     {
         let mut accts = ACCOUNTS.lock().unwrap();
-        if let Some(a) = accts.iter_mut().find(|a| a.id == account_id) {
+        if let Some(a) = accts.iter_mut().find(|a| a.uuid == account_id) {
             a.reg_state = new_state.clone();
         }
     }
@@ -869,15 +873,19 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
 }
 
 fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
-    let id = match p["id"].as_str() {
+    let uuid = match p["uuid"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
     let mut accts = ACCOUNTS.lock().unwrap();
-    if let Some(existing) = accts.iter_mut().find(|a| a.id == id) {
+    if let Some(existing) = accts.iter_mut().find(|a| a.uuid == uuid) {
+        existing.account_name = p["account_name"].as_str().unwrap_or("").to_owned();
         existing.display_name = p["display_name"].as_str().unwrap_or("").to_owned();
         existing.server = p["server"].as_str().unwrap_or("").to_owned();
+        existing.sip_proxy = p["sip_proxy"].as_str().unwrap_or("").to_owned();
         existing.username = p["username"].as_str().unwrap_or("").to_owned();
+        existing.auth_username = p["auth_username"].as_str().unwrap_or("").to_owned();
+        existing.domain = p["domain"].as_str().unwrap_or("").to_owned();
         existing.password = p["password"].as_str().unwrap_or("").to_owned();
         existing.transport = p["transport"].as_str().unwrap_or("udp").to_owned();
         existing.stun_server = p["stun_server"].as_str().unwrap_or("").to_owned();
@@ -886,10 +894,14 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         existing.srtp_enabled = p["srtp_enabled"].as_bool().unwrap_or(existing.srtp_enabled);
     } else {
         let acct = Account {
-            id: id.clone(),
+            uuid: uuid.clone(),
+            account_name: p["account_name"].as_str().unwrap_or("").to_owned(),
             display_name: p["display_name"].as_str().unwrap_or("").to_owned(),
             server: p["server"].as_str().unwrap_or("").to_owned(),
+            sip_proxy: p["sip_proxy"].as_str().unwrap_or("").to_owned(),
             username: p["username"].as_str().unwrap_or("").to_owned(),
+            auth_username: p["auth_username"].as_str().unwrap_or("").to_owned(),
+            domain: p["domain"].as_str().unwrap_or("").to_owned(),
             password: p["password"].as_str().unwrap_or("").to_owned(),
             transport: p["transport"].as_str().unwrap_or("udp").to_owned(),
             stun_server: p["stun_server"].as_str().unwrap_or("").to_owned(),
@@ -901,7 +913,7 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         };
         accts.push(acct);
         drop(accts);
-        push_reg_state(&id, &RegistrationState::Unregistered);
+        push_reg_state(&uuid, &RegistrationState::Unregistered);
     }
     EngineErrorCode::Ok
 }
@@ -916,7 +928,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     #[allow(unused_variables)]
     let acct_snapshot = {
         let accts = ACCOUNTS.lock().unwrap();
-        match accts.iter().find(|a| a.id == id) {
+        match accts.iter().find(|a| a.uuid == id) {
             None => {
                 log_engine(
                     LogLevel::Error,
@@ -931,7 +943,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     // Transition to Registering state
     {
         let mut accts = ACCOUNTS.lock().unwrap();
-        if let Some(a) = accts.iter_mut().find(|a| a.id == id) {
+        if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
             // Remove any existing PJSIP account so we start fresh
             #[cfg(pjsip_available)]
             if let Some(old_pj_id) = a.pjsip_acc_id.take() {
@@ -1018,7 +1030,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         if pj_acc_id < 0 {
             let fail = RegistrationState::Failed("pd_acc_add failed".to_owned());
             let mut accts = ACCOUNTS.lock().unwrap();
-            if let Some(a) = accts.iter_mut().find(|a| a.id == id) {
+            if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
                 a.reg_state = fail.clone();
             }
             push_reg_state(&id, &fail);
@@ -1032,7 +1044,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         // Store the PJSIP account id for future operations
         {
             let mut accts = ACCOUNTS.lock().unwrap();
-            if let Some(a) = accts.iter_mut().find(|a| a.id == id) {
+            if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
                 a.pjsip_acc_id = Some(pj_acc_id);
             }
         }
@@ -1053,7 +1065,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             &format!("Account '{id}' registering (stub)"),
         );
         let mut accts2 = ACCOUNTS.lock().unwrap();
-        if let Some(a) = accts2.iter_mut().find(|a| a.id == id) {
+        if let Some(a) = accts2.iter_mut().find(|a| a.uuid == id) {
             a.reg_state = RegistrationState::Registered;
         }
         drop(accts2);
@@ -1072,7 +1084,7 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let mut accts = ACCOUNTS.lock().unwrap();
-    match accts.iter_mut().find(|a| a.id == id) {
+    match accts.iter_mut().find(|a| a.uuid == id) {
         None => EngineErrorCode::NotFound,
         Some(acct) => {
             // Remove from PJSIP (triggers SIP unregistration)
@@ -1115,7 +1127,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             let accts = ACCOUNTS.lock().unwrap();
             accts
                 .iter()
-                .find(|a| a.id == account_id)
+                .find(|a| a.uuid == account_id)
                 .and_then(|a| a.pjsip_acc_id)
         };
         let pj_acc_id = match pj_acc_id {
@@ -1539,7 +1551,7 @@ fn cmd_account_set_security(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let mut accts = ACCOUNTS.lock().unwrap();
-    match accts.iter_mut().find(|a| a.id == id) {
+    match accts.iter_mut().find(|a| a.uuid == id) {
         None => EngineErrorCode::NotFound,
         Some(acct) => {
             if let Some(tls) = p["tls_enabled"].as_bool() {

@@ -54,8 +54,8 @@ This:
 | Goal | Command |
 |------|---------|
 | **Rebuild after code changes** | `.\scripts\setup_windows.ps1 -SkipInstall` |
-| **Build release DLL only** | `.\scripts\build_core.ps1` |
-| **Build debug DLL only** | `.\scripts\build_core_debug.ps1` |
+| **Build Rust core (Release)** | `.\scripts\build_core.ps1 -Configuration Release` |
+| **Build Rust core (Debug)** | `.\scripts\build_core.ps1 -Configuration Debug` |
 | **Rebuild PJSIP (rarely needed)** | `.\scripts\build_pjsip.ps1` |
 | **Create release ZIP** | `.\scripts\package.ps1` |
 

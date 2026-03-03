@@ -307,6 +307,7 @@ int pd_shutdown(void)
 
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
+               const char *auth_username, const char *sip_proxy,
                int use_tcp)
 {
     pjsua_acc_config cfg;
@@ -319,9 +320,15 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
     cfg.cred_count = 1;
     cfg.cred_info[0].realm     = S("*");
     cfg.cred_info[0].scheme    = S("digest");
-    cfg.cred_info[0].username  = S(username);
+    cfg.cred_info[0].username  = S(auth_username && auth_username[0] != '\0' ? auth_username : username);
     cfg.cred_info[0].data_type = PJSIP_CRED_DATA_PLAIN_PASSWD;
     cfg.cred_info[0].data      = S(password);
+
+    /* Proxy configuration */
+    if (sip_proxy && sip_proxy[0] != '\0') {
+        cfg.proxy_cnt = 1;
+        cfg.proxy[0] = S(sip_proxy);
+    }
 
     /* Transport selection */
     if (use_tcp && g_tcp_tp != PJSUA_INVALID_ID) {

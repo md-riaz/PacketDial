@@ -41,17 +41,11 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 # ── 1. Build Rust core (stub DLL, no PJSIP required) ────────────────────────
 Write-Step "Building Rust core (debug mode)"
-Write-Info "This may take 30-60 seconds..."
 
-Push-Location "$RepoRoot\core_rust"
-try {
-    cargo build --target x86_64-pc-windows-msvc
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail "Cargo build failed with exit code $LASTEXITCODE"
-        exit 1
-    }
-} finally {
-    Pop-Location
+& "$PSScriptRoot\build_core.ps1" -Configuration Debug
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "Rust core build failed"
+    exit 1
 }
 Write-OK "Rust core built"
 

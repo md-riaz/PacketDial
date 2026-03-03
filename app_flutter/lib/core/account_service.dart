@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/account_schema.dart';
 import '../models/call_history_schema.dart';
 import '../providers/engine_provider.dart';
+import 'package:uuid/uuid.dart';
 
 final accountServiceProvider = Provider((ref) => AccountService(ref));
 
@@ -24,7 +25,7 @@ class AccountService {
     return isar!.accountSchemas.filter().isSelectedEqualTo(true).findFirst();
   }
 
-  Future<void> setSelectedAccount(String accountId) async {
+  Future<void> setSelectedAccount(String uuid) async {
     await isar!.writeTxn(() async {
       // Unselect all
       final accounts = await isar!.accountSchemas.where().findAll();
@@ -33,10 +34,8 @@ class AccountService {
         await isar!.accountSchemas.put(a);
       }
       // Select the new one
-      final selected = await isar!.accountSchemas
-          .filter()
-          .accountIdEqualTo(accountId)
-          .findFirst();
+      final selected =
+          await isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
       if (selected != null) {
         selected.isSelected = true;
         await isar!.accountSchemas.put(selected);
@@ -46,15 +45,18 @@ class AccountService {
     // Handle registration change immediately
     final accounts = await getAllAccounts();
     for (final a in accounts) {
-      if (a.accountId == accountId) {
+      if (a.uuid == uuid) {
         register(a);
       } else {
-        unregister(a.accountId);
+        unregister(a.uuid);
       }
     }
   }
 
   Future<void> saveAccount(AccountSchema account) async {
+    if (account.uuid.isEmpty) {
+      account.uuid = const Uuid().v4();
+    }
     await isar!.writeTxn(() async {
       final count = await isar!.accountSchemas.count();
       if (count == 0) {
@@ -67,12 +69,9 @@ class AccountService {
     });
   }
 
-  Future<void> deleteAccount(String accountId) async {
+  Future<void> deleteAccount(String uuid) async {
     await isar!.writeTxn(() async {
-      await isar!.accountSchemas
-          .filter()
-          .accountIdEqualTo(accountId)
-          .deleteAll();
+      await isar!.accountSchemas.filter().uuidEqualTo(uuid).deleteAll();
     });
   }
 
@@ -80,16 +79,16 @@ class AccountService {
   void register(AccountSchema schema) {
     final engine = _ref.read(engineProvider);
     engine.register(
-      schema.accountId,
+      schema.uuid,
       schema.username,
       schema.password,
       schema.server,
     );
   }
 
-  void unregister(String accountId) {
+  void unregister(String uuid) {
     final engine = _ref.read(engineProvider);
-    engine.unregister(accountId);
+    engine.unregister(uuid);
   }
 
   Future<void> autoRegisterAll() async {
