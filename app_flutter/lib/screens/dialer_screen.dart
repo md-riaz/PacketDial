@@ -14,8 +14,7 @@ class _DialerScreenState extends State<DialerScreen> {
   final _uriCtrl = TextEditingController();
   String? _selectedAccountId;
 
-  void _dialKey(String digit) =>
-      setState(() => _uriCtrl.text += digit);
+  void _dialKey(String digit) => setState(() => _uriCtrl.text += digit);
 
   void _backspace() {
     if (_uriCtrl.text.isNotEmpty) {
@@ -25,19 +24,36 @@ class _DialerScreenState extends State<DialerScreen> {
   }
 
   void _call() {
-    final uri = _uriCtrl.text.trim();
-    if (uri.isEmpty) return;
-    final accountId = _selectedAccountId ??
-        _channel.accounts.keys.firstOrNull ??
-        '';
-    if (accountId.isEmpty) {
+    final raw = _uriCtrl.text.trim();
+    if (raw.isEmpty) return;
+
+    final accounts = _channel.accounts;
+    if (accounts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configure and register an account first.')),
+        const SnackBar(content: Text('Add an account first (Accounts tab).')),
       );
       return;
     }
-    // Use structured C ABI to make call
+
+    final accountId = _selectedAccountId ?? accounts.keys.first;
+    final account = accounts[accountId];
+
+    // Build a proper SIP URI if the user typed just a number/extension.
+    // sip:127  →  sip:127@<server>   (server from the account config)
+    String uri = raw;
+    if (!uri.contains(':')) {
+      // bare extension or number — prepend sip: and append @server
+      final server = account?.server ?? '';
+      uri = server.isNotEmpty ? 'sip:$raw@$server' : 'sip:$raw';
+    } else if (!uri.startsWith('sip:') && !uri.startsWith('sips:')) {
+      uri = 'sip:$raw';
+    }
+
     _channel.engine.makeCall(accountId, uri);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Calling $uri …')),
+    );
   }
 
   Widget _dialButton(String label) => Expanded(
@@ -48,8 +64,7 @@ class _DialerScreenState extends State<DialerScreen> {
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 18),
             ),
-            child: Text(label,
-                style: const TextStyle(fontSize: 20)),
+            child: Text(label, style: const TextStyle(fontSize: 20)),
           ),
         ),
       );
@@ -67,8 +82,7 @@ class _DialerScreenState extends State<DialerScreen> {
             if (accountIds.isNotEmpty)
               DropdownButtonFormField<String>(
                 initialValue: _selectedAccountId ?? accountIds.first,
-                decoration:
-                    const InputDecoration(labelText: 'Account'),
+                decoration: const InputDecoration(labelText: 'Account'),
                 items: accountIds
                     .map((id) => DropdownMenuItem(value: id, child: Text(id)))
                     .toList(),
@@ -81,8 +95,7 @@ class _DialerScreenState extends State<DialerScreen> {
                 labelText: 'SIP URI / Number',
                 hintText: 'sip:alice@example.com',
                 suffixIcon: IconButton(
-                    icon: const Icon(Icons.backspace),
-                    onPressed: _backspace),
+                    icon: const Icon(Icons.backspace), onPressed: _backspace),
               ),
               keyboardType: TextInputType.url,
             ),
@@ -94,9 +107,7 @@ class _DialerScreenState extends State<DialerScreen> {
               ['7', '8', '9'],
               ['*', '0', '#'],
             ])
-              Row(
-                  children:
-                      row.map(_dialButton).toList()),
+              Row(children: row.map(_dialButton).toList()),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _call,

@@ -24,7 +24,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
   void _showAccountDialog({Account? existing}) {
     final idCtrl = TextEditingController(text: existing?.id ?? '');
     final nameCtrl = TextEditingController(text: existing?.displayName ?? '');
-    final serverCtrl = TextEditingController(text: existing?.server ?? '');
+    final serverCtrl = TextEditingController(
+        text: existing?.server ?? 'cpx.alphapbx.net:8090');
     final userCtrl = TextEditingController(text: existing?.username ?? '');
     final passCtrl = TextEditingController(text: existing?.password ?? '');
     final stunCtrl = TextEditingController(text: existing?.stunServer ?? '');
@@ -54,28 +55,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         const InputDecoration(labelText: 'Display Name')),
                 TextField(
                     controller: serverCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'SIP Server')),
+                    decoration: const InputDecoration(labelText: 'SIP Server')),
                 TextField(
                     controller: userCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Username')),
+                    decoration: const InputDecoration(labelText: 'Username')),
                 TextField(
                     controller: passCtrl,
                     obscureText: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Password')),
+                    decoration: const InputDecoration(labelText: 'Password')),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: transport,
-                  decoration:
-                      const InputDecoration(labelText: 'Transport'),
+                  decoration: const InputDecoration(labelText: 'Transport'),
                   items: const [
                     DropdownMenuItem(value: 'udp', child: Text('UDP')),
                     DropdownMenuItem(value: 'tcp', child: Text('TCP')),
                   ],
-                  onChanged: (v) =>
-                      setDlgState(() => transport = v ?? 'udp'),
+                  onChanged: (v) => setDlgState(() => transport = v ?? 'udp'),
                 ),
                 const SizedBox(height: 4),
                 TextField(
@@ -94,16 +90,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   title: const Text('Enable TLS (SIPS)'),
                   subtitle: const Text('Encrypts SIP signalling'),
                   value: tlsEnabled,
-                  onChanged: (v) =>
-                      setDlgState(() => tlsEnabled = v ?? false),
+                  onChanged: (v) => setDlgState(() => tlsEnabled = v ?? false),
                 ),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Enable SRTP'),
                   subtitle: const Text('Encrypts audio media'),
                   value: srtpEnabled,
-                  onChanged: (v) =>
-                      setDlgState(() => srtpEnabled = v ?? false),
+                  onChanged: (v) => setDlgState(() => srtpEnabled = v ?? false),
                 ),
               ],
             ),

@@ -28,7 +28,7 @@ set(FLUTTER_LIBRARY "${EPHEMERAL_DIR}/flutter_windows.dll")
 # Published to parent scope for install step.
 set(FLUTTER_LIBRARY ${FLUTTER_LIBRARY} PARENT_SCOPE)
 set(FLUTTER_ICU_DATA_FILE "${EPHEMERAL_DIR}/icudtl.dat" PARENT_SCOPE)
-set(PROJECT_BUILD_DIR "${PROJECT_BINARY_DIR}" PARENT_SCOPE)
+set(PROJECT_BUILD_DIR "${PROJECT_DIR}/build/" PARENT_SCOPE)
 set(AOT_LIBRARY "${PROJECT_BINARY_DIR}/windows/app.so" PARENT_SCOPE)
 
 list(APPEND FLUTTER_LIBRARY_HEADERS
@@ -62,10 +62,13 @@ set(WRAPPER_SRCS
 
 # === Flutter tool backend ===
 # _phony_ is a non-existent file to force this command to always run.
+# Mark it SYMBOLIC so MSBuild suppresses the "output not created" warning.
+set(PHONY_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/_phony_")
+set_source_files_properties("${PHONY_OUTPUT}" PROPERTIES SYMBOLIC TRUE)
 add_custom_command(
   OUTPUT ${FLUTTER_LIBRARY} ${FLUTTER_LIBRARY_HEADERS}
     ${WRAPPER_SRCS}
-    "${CMAKE_CURRENT_BINARY_DIR}/_phony_"
+    ${PHONY_OUTPUT}
   COMMAND ${CMAKE_COMMAND} -E env
     ${FLUTTER_TOOL_ENVIRONMENT}
     "${FLUTTER_ROOT}/packages/flutter_tools/bin/tool_backend.bat"

@@ -51,37 +51,26 @@ add_dependencies(${BINARY_NAME} flutter_assemble)
 # Try to find the DLL in this order:
 # 1. Target-specific path matching the CMake build configuration (debug/release)
 # 2. Non-target-specific path (target/debug or target/release)
-set(CORE_RUST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../core_rust")
+# Locate voip_core.dll (Rust core) relative to the Flutter project root.
+# PROJECT_DIR is set by the Flutter tool (generated_config.cmake) and always
+# points to the canonical project path (e.g. X:\app_flutter). Going up one
+# level gives the repository root, regardless of drive letter mapping.
+get_filename_component(REPO_ROOT "${PROJECT_DIR}" DIRECTORY)
+set(CORE_RUST_DIR "${REPO_ROOT}/core_rust")
 
-# Determine which Rust build profile to use based on CMake configuration
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(RUST_PROFILE "release")
-else()
-  # Debug and Profile both use debug Rust builds (faster compilation for dev)
-  set(RUST_PROFILE "debug")
-endif()
+# Paths for debug and release DLLs.
+set(VOIP_CORE_DLL_DEBUG   "${CORE_RUST_DIR}/target/x86_64-pc-windows-msvc/debug/voip_core.dll")
+set(VOIP_CORE_DLL_RELEASE "${CORE_RUST_DIR}/target/x86_64-pc-windows-msvc/release/voip_core.dll")
 
-# Try target-specific path first (preferred when using --target flag)
-set(VOIP_CORE_DLL_TARGET "${CORE_RUST_DIR}/target/x86_64-pc-windows-msvc/${RUST_PROFILE}/voip_core.dll")
-# Fallback to non-target-specific path
-set(VOIP_CORE_DLL_FALLBACK "${CORE_RUST_DIR}/target/${RUST_PROFILE}/voip_core.dll")
+# Post-build copy: use PowerShell so the copy is skipped gracefully when the
+# DLL does not yet exist (cmake copy_if_different exits 1 in that case).
+# The $<IF:...> generator expression selects debug vs release at build time.
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command
+    "$src = '$<IF:$<CONFIG:Release>,${VOIP_CORE_DLL_RELEASE},${VOIP_CORE_DLL_DEBUG}>'; if (Test-Path $src) { Copy-Item -Force $src '$<TARGET_FILE_DIR:${BINARY_NAME}>' } else { Write-Host 'voip_core.dll not found, skipping copy.' }"
+  COMMENT "Copying voip_core.dll to output directory (if present)"
+  VERBATIM
+)
 
-if(EXISTS "${VOIP_CORE_DLL_TARGET}")
-  set(VOIP_CORE_DLL "${VOIP_CORE_DLL_TARGET}")
-  message(STATUS "Found voip_core.dll at: ${VOIP_CORE_DLL}")
-elseif(EXISTS "${VOIP_CORE_DLL_FALLBACK}")
-  set(VOIP_CORE_DLL "${VOIP_CORE_DLL_FALLBACK}")
-  message(STATUS "Found voip_core.dll at: ${VOIP_CORE_DLL}")
-else()
-  set(VOIP_CORE_DLL "")
-  message(STATUS "voip_core.dll not found. Build it with: cd core_rust && cargo build $<IF:$<CONFIG:Release>,--release,> --target x86_64-pc-windows-msvc")
-endif()
 
-if(VOIP_CORE_DLL)
-  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      ${VOIP_CORE_DLL}
-      $<TARGET_FILE_DIR:${BINARY_NAME}>
-    COMMENT "Copying voip_core.dll to output directory"
-  )
-endif()
+

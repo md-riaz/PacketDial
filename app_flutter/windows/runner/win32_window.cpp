@@ -186,6 +186,17 @@ Win32Window::MessageHandler(HWND hwnd, UINT const message, WPARAM const wparam,
 
       return 0;
     }
+    case WM_GETMINMAXINFO: {
+      // Enforce a minimum window size matching the compact mobile form factor.
+      // Values are in physical pixels; 360x680 at 96 DPI = 360x680 logical px.
+      UINT dpi = GetDpiForWindow(hwnd);
+      double scale = dpi / 96.0;
+      auto* mmi = reinterpret_cast<MINMAXINFO*>(lparam);
+      mmi->ptMinTrackSize.x = static_cast<LONG>(360 * scale);
+      mmi->ptMinTrackSize.y = static_cast<LONG>(680 * scale);
+      return 0;
+    }
+
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {
