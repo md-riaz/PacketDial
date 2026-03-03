@@ -3,6 +3,8 @@
 ## C ABI
 All functions use `extern "C"` and stable primitive types.
 
+### Core Lifecycle & JSON Channel
+
 ```c
 // returns 0 on success, non-zero on failure
 int32_t engine_init(void);
@@ -36,6 +38,48 @@ char* engine_poll_event(void);
 void engine_free_string(char* ptr);
 ```
 
+### Direct Structured API (no JSON parsing needed)
+
+These functions provide a clean C ABI for common operations without JSON
+string parsing on either side.
+
+```c
+// Event callback type: called when structured events occur.
+//   event_id: one of the EngineEventId values below
+//   message:  null-terminated UTF-8 context string
+typedef void (*EngineEventCallback)(int event_id, const char* message);
+
+// Event IDs:
+//   1 = REGISTERED           — SIP account registered successfully
+//   2 = REGISTRATION_FAILED  — SIP registration failed
+//   3 = INCOMING_CALL        — Incoming call received
+//   4 = CALL_CONNECTED       — Call connected (audio active)
+//   5 = CALL_TERMINATED      — Call ended
+//   6 = ERROR_OCCURRED       — General error
+
+// Set a callback for structured events. Pass NULL to clear.
+// The callback remains valid until engine_shutdown or a new call to this fn.
+void engine_set_event_callback(EngineEventCallback cb);
+
+// Register a SIP account.
+//   user:   SIP username (null-terminated UTF-8)
+//   pass:   SIP password (null-terminated UTF-8)
+//   domain: SIP domain/server (null-terminated UTF-8)
+// Returns 0 on success, non-zero on error.
+int32_t engine_register(const char* user, const char* pass, const char* domain);
+
+// Make an outgoing call.
+//   number: destination SIP URI or phone number (null-terminated UTF-8)
+//           If not a full SIP URI, "sip:<number>@<domain>" is constructed.
+// Uses the first registered account (or first account if none registered).
+// Returns 0 on success, non-zero on error.
+int32_t engine_make_call(const char* number);
+
+// Hang up the current active call.
+// Returns 0 on success, non-zero (6=NotFound) if no active call exists.
+int32_t engine_hangup(void);
+```
+
 ## Supported Commands
 
 | Command              | Required payload fields                                                  |
@@ -43,6 +87,7 @@ void engine_free_string(char* ptr);
 | `AccountUpsert`      | `id`, `display_name`, `server`, `username`, `password`, `transport` (udp/tcp), `stun_server`, `turn_server` |
 | `AccountRegister`    | `id`                                                                     |
 | `AccountUnregister`  | `id`                                                                     |
+| `AccountSetSecurity` | `id`, `tls_enabled` (bool), `srtp_enabled` (bool)                        |
 | `CallStart`          | `account_id`, `uri`                                                      |
 | `CallAnswer`         | `call_id`                                                                |
 | `CallHangup`         | `call_id`                                                                |
