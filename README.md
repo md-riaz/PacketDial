@@ -106,14 +106,19 @@ See [`docs/architecture.md`](docs/architecture.md) and [`docs/FFI_API.md`](docs/
 
 ## Milestones
 
-| Milestone | Status |
-|-----------|--------|
-| M0 - Build System | ✅ Done |
-| M1 - Registration | ✅ Done |
-| M2 - Calling | ✅ Done |
-| M3 - Diagnostics | ✅ Done |
-| M4 - Packaging | ✅ Done |
-| M5 - Windows Build | ✅ Done |
-| M6 - Hardening & TLS | ✅ Done |
-| M7 - PJSIP Integration | 🔄 In Progress |
+| Milestone | Status | Notes |
+|-----------|--------|-------|
+| M0 - Build System | ✅ Done | CI, CMake, Rust cdylib, Flutter Windows desktop |
+| M1 - Registration | ✅ Done | Account model, command/event channel, stub SIP registration |
+| M2 - Calling | ✅ Done | Dialer UI, call state machine, hold/mute/hangup (stub) |
+| M3 - Diagnostics | ✅ Done | SIP capture + log masking, media stats, export bundle |
+| M4 - Packaging | ✅ Done | `scripts/package.ps1`, GitHub Release workflow |
+| M5 - Windows Build | ✅ Done | CI build with PJSIP cache, `subst X:` workaround |
+| M6 - Hardening & TLS | ✅ Done | TLS/SRTP flags, credential store, `cargo clippy -D warnings` |
+| M7 - PJSIP Integration | ✅ Done | C shim + Rust FFI: real SIP registration, outgoing/incoming calls, audio, SIP capture |
+
+> **Note:** M1–M6 deliver the full architecture and UI with a stub engine (no PJSIP libs needed).
+> M7 wires real SIP by compiling a thin C shim against pjsua when PJSIP static libs are present
+> (built by `scripts/build_pjsip.ps1`).  Without PJSIP, the DLL falls back to the stub behaviour,
+> keeping the app functional for development and testing without a full PJSIP build.
 

@@ -25,6 +25,7 @@ $RepoRoot    = Split-Path -Parent $PSScriptRoot
 $VersionFile = Join-Path $RepoRoot 'version.json'
 $FlutterBuild = Join-Path $RepoRoot 'app_flutter\build\windows\x64\runner\Release'
 $RustRelease  = Join-Path $RepoRoot 'core_rust\target\release'
+$RustReleaseTarget = Join-Path $RepoRoot 'core_rust\target\x86_64-pc-windows-msvc\release'
 $DistDir      = Join-Path $RepoRoot 'dist'
 $StagingBase  = Join-Path $DistDir  'staging'
 
@@ -104,8 +105,19 @@ Get-ChildItem -Path $StagingDir -Recurse | Select-Object -First 20 | ForEach-Obj
 # ---------------------------------------------------------------------------
 # Staging: copy Rust core DLL (if built)
 # ---------------------------------------------------------------------------
-$CoreDll = Join-Path $RustRelease 'voip_core.dll'
-if (Test-Path $CoreDll) {
+# Prefer the target-triple path (used when building with --target x86_64-pc-windows-msvc),
+# fall back to the plain release path.
+$CoreDllTarget = Join-Path $RustReleaseTarget 'voip_core.dll'
+$CoreDllPlain  = Join-Path $RustRelease 'voip_core.dll'
+if (Test-Path $CoreDllTarget) {
+    $CoreDll = $CoreDllTarget
+} elseif (Test-Path $CoreDllPlain) {
+    $CoreDll = $CoreDllPlain
+} else {
+    $CoreDll = $null
+}
+
+if ($CoreDll) {
     Write-Host "Copying voip_core.dll…"
     Copy-Item $CoreDll -Destination $StagingDir
 } else {

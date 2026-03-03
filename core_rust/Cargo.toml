@@ -8,9 +8,14 @@ crate-type = ["cdylib"]
 
 [dependencies]
 once_cell = "1.19"
-thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [build-dependencies]
 cc = "1.0"
+
+# Declare custom cfg flags so `cargo clippy` does not warn about
+# unexpected_cfgs.  The actual flag values are emitted by build.rs when
+# the PJSIP static libraries are detected.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(pjsip_available)'] }

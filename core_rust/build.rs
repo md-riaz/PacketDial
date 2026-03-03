@@ -23,20 +23,28 @@ fn main() {
 
     // --- Resolve lib and include paths --------------------------------------
 
-    let env_lib_dir     = env::var("PJSIP_LIB_DIR").ok().map(PathBuf::from);
+    let env_lib_dir = env::var("PJSIP_LIB_DIR").ok().map(PathBuf::from);
     let env_include_dir = env::var("PJSIP_INCLUDE_DIR").ok().map(PathBuf::from);
 
-    let auto_out    = repo_root.join("engine_pjsip").join("build").join("out");
-    let auto_lib    = auto_out.join("lib");
-    let auto_inc    = auto_out.join("include");
+    let auto_out = repo_root.join("engine_pjsip").join("build").join("out");
+    let auto_lib = auto_out.join("lib");
+    let auto_inc = auto_out.join("include");
 
-    let lib_dir = env_lib_dir
-        .filter(|p| p.is_dir())
-        .or_else(|| if auto_lib.is_dir() { Some(auto_lib.clone()) } else { None });
+    let lib_dir = env_lib_dir.filter(|p| p.is_dir()).or_else(|| {
+        if auto_lib.is_dir() {
+            Some(auto_lib.clone())
+        } else {
+            None
+        }
+    });
 
-    let include_dir = env_include_dir
-        .filter(|p| p.is_dir())
-        .or_else(|| if auto_inc.is_dir() { Some(auto_inc.clone()) } else { None });
+    let include_dir = env_include_dir.filter(|p| p.is_dir()).or_else(|| {
+        if auto_inc.is_dir() {
+            Some(auto_inc.clone())
+        } else {
+            None
+        }
+    });
 
     // Validate that the resolved lib dir actually contains .lib files.
     // If the stamp exists but libs are missing (e.g. partial build), emit a
@@ -86,7 +94,14 @@ fn main() {
         println!("cargo:rustc-link-lib=winmm");
         println!("cargo:rustc-link-lib=Avrt");
 
-        println!("cargo:warning=PJSIP integration: linking against libs in {}", lib.display());
+        // Signal to the rest of the crate that PJSIP is available so that
+        // real SIP code paths are compiled in (M7 integration).
+        println!("cargo:rustc-cfg=pjsip_available");
+
+        println!(
+            "cargo:warning=PJSIP integration: linking against libs in {}",
+            lib.display()
+        );
     } else {
         println!("cargo:warning=PJSIP not found — building stub DLL (run scripts/build_pjsip.ps1 to enable full integration)");
     }
@@ -105,9 +120,13 @@ fn main() {
     if shim_src.exists() {
         if let Some(inc) = &include_dir {
             println!("cargo:rerun-if-changed=src/shim/pjsip_shim.c");
+            println!("cargo:rerun-if-changed=src/shim/pjsip_shim.h");
             cc::Build::new()
                 .file(&shim_src)
+                // PJSIP public headers (e.g. pjsua-lib/pjsua.h, pj/config.h)
                 .include(inc)
+                // shim's own header directory
+                .include(manifest_dir.join("src").join("shim"))
                 .opt_level(2)
                 .compile("pjsip_shim");
         }

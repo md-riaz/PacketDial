@@ -229,7 +229,11 @@ $IncludeDirs = @(
 foreach ($rel in $IncludeDirs) {
     $src = Join-Path $PjProjectDir $rel
     if (Test-Path $src) {
-        Copy-Item $src -Destination $OutInclude -Recurse -Force
+        # Use "$src\*" to copy the CONTENTS of each include directory directly
+        # into $OutInclude, so headers land at out/include/pj/*.h (not
+        # out/include/include/pj/*.h which is what Copy-Item without wildcard
+        # produces when the destination already exists).
+        Copy-Item "$src\*" -Destination $OutInclude -Recurse -Force
         Write-Host "    Copied $rel" -ForegroundColor Gray
     } else {
         Write-Info "Include dir not found (skipping): $src"
