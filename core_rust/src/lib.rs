@@ -770,9 +770,38 @@ fn mask_single_uri(uri: &str) -> String {
 // Event helpers
 // ---------------------------------------------------------------------------
 
+/// Parse event JSON and invoke the structured event callback.
+/// The JSON format is: {"type":"EventType","payload":{...}}
 fn push_event(json: String) {
-    if let Ok(mut q) = EVENT_QUEUE.lock() {
-        q.push_back(json);
+    // Parse the event type and forward to callback
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
+        if let Some(event_type) = v["type"].as_str() {
+            let event_id = match event_type {
+                "EngineReady" => EngineEventId::EngineReady,
+                "RegistrationStateChanged" => EngineEventId::RegistrationStateChanged,
+                "CallStateChanged" => EngineEventId::CallStateChanged,
+                "MediaStatsUpdated" => EngineEventId::MediaStatsUpdated,
+                "AudioDeviceList" => EngineEventId::AudioDeviceList,
+                "AudioDevicesSet" => EngineEventId::AudioDevicesSet,
+                "CallHistoryResult" => EngineEventId::CallHistoryResult,
+                "SipMessageCaptured" => EngineEventId::SipMessageCaptured,
+                "DiagBundleReady" => EngineEventId::DiagBundleReady,
+                "AccountSecurityUpdated" => EngineEventId::AccountSecurityUpdated,
+                "CredStored" => EngineEventId::CredStored,
+                "CredRetrieved" => EngineEventId::CredRetrieved,
+                "EnginePong" => EngineEventId::EnginePong,
+                "LogLevelSet" => EngineEventId::LogLevelSet,
+                "LogBufferResult" => EngineEventId::LogBufferResult,
+                "EngineLog" => EngineEventId::EngineLog,
+                _ => return, // Unknown event type, ignore
+            };
+            // Extract payload and pass as JSON string
+            if let Some(payload) = v.get("payload") {
+                if let Ok(payload_json) = serde_json::to_string(payload) {
+                    invoke_event_callback(event_id, &payload_json);
+                }
+            }
+        }
     }
 }
 
@@ -785,17 +814,6 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
         r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","state":"{}","reason":"{reason}"}}}}"#,
         state.variant_name()
     ));
-
-    // Also invoke direct callback if set
-    match state {
-        RegistrationState::Registered => {
-            invoke_event_callback(EngineEventId::Registered, account_id);
-        }
-        RegistrationState::Failed(reason) => {
-            invoke_event_callback(EngineEventId::RegistrationFailed, reason);
-        }
-        _ => {}
-    }
 }
 
 fn push_call_state(call: &Call) {
@@ -809,20 +827,6 @@ fn push_call_state(call: &Call) {
         call.muted,
         call.on_hold
     ));
-
-    // Also invoke direct callback if set
-    match call.state {
-        CallState::Ringing if matches!(call.direction, CallDirection::Incoming) => {
-            invoke_event_callback(EngineEventId::IncomingCall, &call.uri);
-        }
-        CallState::InCall => {
-            invoke_event_callback(EngineEventId::CallConnected, &call.uri);
-        }
-        CallState::Ended => {
-            invoke_event_callback(EngineEventId::CallTerminated, &call.uri);
-        }
-        _ => {}
-    }
 }
 
 fn push_media_stats(stats: &MediaStats) {
@@ -1820,12 +1824,22 @@ pub unsafe extern "C" fn engine_free_string(ptr: *mut c_char) {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EngineEventId {
-    Registered = 1,
-    RegistrationFailed = 2,
-    IncomingCall = 3,
-    CallConnected = 4,
-    CallTerminated = 5,
-    ErrorOccurred = 6,
+    EngineReady = 1,
+    RegistrationStateChanged = 2,
+    CallStateChanged = 3,
+    MediaStatsUpdated = 4,
+    AudioDeviceList = 5,
+    AudioDevicesSet = 6,
+    CallHistoryResult = 7,
+    SipMessageCaptured = 8,
+    DiagBundleReady = 9,
+    AccountSecurityUpdated = 10,
+    CredStored = 11,
+    CredRetrieved = 12,
+    EnginePong = 13,
+    LogLevelSet = 14,
+    LogBufferResult = 15,
+    EngineLog = 16,
 }
 
 /// C callback: `void (*)(int event_id, const char* message)`
@@ -1848,12 +1862,16 @@ fn invoke_event_callback(event_id: EngineEventId, message: &str) {
 
 /// Set a callback function that receives structured events.
 ///
-/// The callback signature is: `void cb(int event_id, const char* message)`
+/// The callback signature is: `void cb(int event_id, const char* json_data)`
 ///
 /// Event IDs:
-///   1 = REGISTERED, 2 = REGISTRATION_FAILED, 3 = INCOMING_CALL,
-///   4 = CALL_CONNECTED, 5 = CALL_TERMINATED, 6 = ERROR_OCCURRED
+///   1 = EngineReady, 2 = RegistrationStateChanged, 3 = CallStateChanged,
+///   4 = MediaStatsUpdated, 5 = AudioDeviceList, 6 = AudioDevicesSet,
+///   7 = CallHistoryResult, 8 = SipMessageCaptured, 9 = DiagBundleReady,
+///   10 = AccountSecurityUpdated, 11 = CredStored, 12 = CredRetrieved,
+///   13 = EnginePong, 14 = LogLevelSet, 15 = LogBufferResult, 16 = EngineLog
 ///
+/// The json_data parameter contains event-specific data as a JSON string.
 /// Pass NULL to clear the callback.
 ///
 /// # Safety
@@ -1962,10 +1980,7 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
         let account_id = match account_id {
             Some(id) => id,
             None => {
-                invoke_event_callback(
-                    EngineEventId::ErrorOccurred,
-                    "No account available for call",
-                );
+                log_engine(LogLevel::Error, "No account available for call");
                 return EngineErrorCode::NotFound as i32;
             }
         };
@@ -1978,10 +1993,7 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
             let domain = match account_id.split('@').nth(1) {
                 Some(d) => d,
                 None => {
-                    invoke_event_callback(
-                        EngineEventId::ErrorOccurred,
-                        "Account has no domain for URI construction",
-                    );
+                    log_engine(LogLevel::Error, "Account has no domain for URI construction");
                     return EngineErrorCode::InternalError as i32;
                 }
             };
@@ -2024,6 +2036,173 @@ pub extern "C" fn engine_hangup() -> i32 {
 
         let hangup_json = serde_json::json!({ "call_id": call_id });
         dispatch_command("CallHangup", &hangup_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Unregister a SIP account.
+///
+/// `account_id` must be a null-terminated UTF-8 string.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_unregister(account_id: *const c_char) -> i32 {
+    if account_id.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let id = match unsafe { CStr::from_ptr(account_id) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let unreg_json = serde_json::json!({ "id": id });
+        dispatch_command("AccountUnregister", &unreg_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Answer an incoming call.
+///
+/// Answers the first ringing incoming call.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_answer_call() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first ringing incoming call
+        let call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls
+                .iter()
+                .find(|c| c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming))
+                .map(|c| c.id)
+        };
+        let call_id = match call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        let answer_json = serde_json::json!({ "call_id": call_id });
+        dispatch_command("CallAnswer", &answer_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Toggle mute on the active call.
+///
+/// `muted` should be 1 to mute, 0 to unmute.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_set_mute(muted: i32) -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first active call
+        let call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        };
+        let call_id = match call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        let mute_json = serde_json::json!({ "call_id": call_id, "muted": muted != 0 });
+        dispatch_command("CallMute", &mute_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Toggle hold on the active call.
+///
+/// `on_hold` should be 1 to hold, 0 to resume.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_set_hold(on_hold: i32) -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first active call
+        let call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        };
+        let call_id = match call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        let hold_json = serde_json::json!({ "call_id": call_id, "on_hold": on_hold != 0 });
+        dispatch_command("CallHold", &hold_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Request audio device list.
+///
+/// This will trigger an AudioDeviceList event via the callback.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_list_audio_devices() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let empty = serde_json::json!({});
+        dispatch_command("AudioListDevices", &empty) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Set active audio devices.
+///
+/// `input_id` and `output_id` are device IDs from the AudioDeviceList event.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_set_audio_devices(input_id: i32, output_id: i32) -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let devices_json = serde_json::json!({ "input_id": input_id, "output_id": output_id });
+        dispatch_command("AudioSetDevices", &devices_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Request call history.
+///
+/// This will trigger a CallHistoryResult event via the callback.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_query_call_history() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let empty = serde_json::json!({});
+        dispatch_command("CallHistoryQuery", &empty) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
