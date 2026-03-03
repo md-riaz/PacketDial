@@ -785,6 +785,17 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
         r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","state":"{}","reason":"{reason}"}}}}"#,
         state.variant_name()
     ));
+
+    // Also invoke direct callback if set
+    match state {
+        RegistrationState::Registered => {
+            invoke_event_callback(EngineEventId::Registered, account_id);
+        }
+        RegistrationState::Failed(reason) => {
+            invoke_event_callback(EngineEventId::RegistrationFailed, reason);
+        }
+        _ => {}
+    }
 }
 
 fn push_call_state(call: &Call) {
@@ -798,6 +809,20 @@ fn push_call_state(call: &Call) {
         call.muted,
         call.on_hold
     ));
+
+    // Also invoke direct callback if set
+    match call.state {
+        CallState::Ringing if matches!(call.direction, CallDirection::Incoming) => {
+            invoke_event_callback(EngineEventId::IncomingCall, &call.uri);
+        }
+        CallState::InCall => {
+            invoke_event_callback(EngineEventId::CallConnected, &call.uri);
+        }
+        CallState::Ended => {
+            invoke_event_callback(EngineEventId::CallTerminated, &call.uri);
+        }
+        _ => {}
+    }
 }
 
 fn push_media_stats(stats: &MediaStats) {
@@ -1789,6 +1814,212 @@ pub unsafe extern "C" fn engine_free_string(ptr: *mut c_char) {
 }
 
 // ---------------------------------------------------------------------------
+// C ABI — event callback types & storage
+// ---------------------------------------------------------------------------
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum EngineEventId {
+    Registered = 1,
+    RegistrationFailed = 2,
+    IncomingCall = 3,
+    CallConnected = 4,
+    CallTerminated = 5,
+    ErrorOccurred = 6,
+}
+
+/// C callback: `void (*)(int event_id, const char* message)`
+type EngineEventCallback = Option<extern "C" fn(event_id: i32, message: *const c_char)>;
+
+static EVENT_CALLBACK: Lazy<Mutex<EngineEventCallback>> = Lazy::new(|| Mutex::new(None));
+
+fn invoke_event_callback(event_id: EngineEventId, message: &str) {
+    let cb = EVENT_CALLBACK.lock().ok().and_then(|g| *g);
+    if let Some(cb) = cb {
+        if let Ok(cs) = CString::new(message) {
+            cb(event_id as i32, cs.as_ptr());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// C ABI — direct structured API (no JSON parsing needed)
+// ---------------------------------------------------------------------------
+
+/// Set a callback function that receives structured events.
+///
+/// The callback signature is: `void cb(int event_id, const char* message)`
+///
+/// Event IDs:
+///   1 = REGISTERED, 2 = REGISTRATION_FAILED, 3 = INCOMING_CALL,
+///   4 = CALL_CONNECTED, 5 = CALL_TERMINATED, 6 = ERROR_OCCURRED
+///
+/// Pass NULL to clear the callback.
+///
+/// # Safety
+/// The callback must remain valid for the lifetime of the engine.
+#[no_mangle]
+pub extern "C" fn engine_set_event_callback(
+    cb: Option<extern "C" fn(event_id: i32, message: *const c_char)>,
+) {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if let Ok(mut g) = EVENT_CALLBACK.lock() {
+            *g = cb;
+        }
+    }));
+    let _ = result;
+}
+
+/// Register a SIP account with the engine.
+///
+/// This is a convenience wrapper around the JSON `AccountUpsert` +
+/// `AccountRegister` commands.  All strings must be null-terminated UTF-8.
+///
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_register(
+    user: *const c_char,
+    pass: *const c_char,
+    domain: *const c_char,
+) -> i32 {
+    if user.is_null() || pass.is_null() || domain.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let user_s = match unsafe { CStr::from_ptr(user) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+        let pass_s = match unsafe { CStr::from_ptr(pass) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+        let domain_s = match unsafe { CStr::from_ptr(domain) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Use a deterministic account id derived from user@domain
+        let acct_id = format!("{user_s}@{domain_s}");
+
+        // Upsert account
+        let upsert_json = serde_json::json!({
+            "id": acct_id,
+            "display_name": &user_s,
+            "server": &domain_s,
+            "username": &user_s,
+            "password": &pass_s,
+        });
+        let rc = dispatch_command("AccountUpsert", &upsert_json);
+        if rc != EngineErrorCode::Ok {
+            return rc as i32;
+        }
+
+        // Register
+        let reg_json = serde_json::json!({ "id": acct_id });
+        dispatch_command("AccountRegister", &reg_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Make an outgoing call.
+///
+/// `number` is the destination SIP URI or phone number (null-terminated UTF-8).
+/// Uses the first registered account.
+///
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
+    if number.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let number_s = match unsafe { CStr::from_ptr(number) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first registered account, or first account if none registered
+        let account_id = {
+            let accts = ACCOUNTS.lock().unwrap();
+            accts
+                .iter()
+                .find(|a| a.reg_state == RegistrationState::Registered)
+                .or_else(|| accts.first())
+                .map(|a| a.id.clone())
+        };
+        let account_id = match account_id {
+            Some(id) => id,
+            None => {
+                invoke_event_callback(
+                    EngineEventId::ErrorOccurred,
+                    "No account available for call",
+                );
+                return EngineErrorCode::NotFound as i32;
+            }
+        };
+
+        // Format as SIP URI if not already
+        let uri = if number_s.starts_with("sip:") || number_s.starts_with("sips:") {
+            number_s
+        } else {
+            // Extract domain from account_id (user@domain)
+            let domain = account_id
+                .split('@')
+                .nth(1)
+                .unwrap_or("localhost");
+            format!("sip:{number_s}@{domain}")
+        };
+
+        let call_json = serde_json::json!({
+            "account_id": account_id,
+            "uri": uri,
+        });
+        dispatch_command("CallStart", &call_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Hang up the current active call.
+///
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn engine_hangup() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first active (non-ended) call
+        let call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+        };
+        let call_id = match call_id {
+            Some(id) => id,
+            None => {
+                return EngineErrorCode::NotFound as i32;
+            }
+        };
+
+        let hangup_json = serde_json::json!({ "call_id": call_id });
+        dispatch_command("CallHangup", &hangup_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1819,6 +2050,9 @@ mod tests {
         CRED_STORE.lock().unwrap_or_else(|e| e.into_inner()).clear();
         LOG_BUFFER.lock().unwrap_or_else(|e| e.into_inner()).clear();
         ACTIVE_LOG_LEVEL.store(LogLevel::Info as u8, Ordering::Relaxed);
+        if let Ok(mut g) = EVENT_CALLBACK.lock() {
+            *g = None;
+        }
         SELECTED_INPUT.store(0, Ordering::Relaxed);
         SELECTED_OUTPUT.store(1, Ordering::Relaxed);
         #[cfg(pjsip_available)]
@@ -2373,5 +2607,129 @@ mod tests {
         );
 
         engine_shutdown();
+    }
+
+    // --- Direct C ABI tests -------------------------------------------------
+
+    #[test]
+    fn engine_register_direct_api() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        let user = CString::new("alice").unwrap();
+        let pass = CString::new("secret").unwrap();
+        let domain = CString::new("sip.example.com").unwrap();
+        let rc = engine_register(user.as_ptr(), pass.as_ptr(), domain.as_ptr());
+        assert_eq!(rc, 0);
+
+        // Should have events: Unregistered -> Registering -> Registered
+        let ev1 = next_event();
+        assert!(ev1.contains("Unregistered"), "got: {ev1}");
+        let ev2 = next_event();
+        assert!(ev2.contains("Registering"), "got: {ev2}");
+        let ev3 = next_event();
+        assert!(ev3.contains("Registered"), "got: {ev3}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn engine_make_call_and_hangup_direct_api() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+
+        // Register first
+        let user = CString::new("alice").unwrap();
+        let pass = CString::new("secret").unwrap();
+        let domain = CString::new("sip.example.com").unwrap();
+        engine_register(user.as_ptr(), pass.as_ptr(), domain.as_ptr());
+        drain_events();
+
+        // Make a call
+        let number = CString::new("sip:bob@sip.example.com").unwrap();
+        let rc = engine_make_call(number.as_ptr());
+        assert_eq!(rc, 0);
+        let ev = next_event();
+        assert!(ev.contains("Ringing"), "got: {ev}");
+
+        // Hangup
+        let rc = engine_hangup();
+        assert_eq!(rc, 0);
+        let ev = next_event();
+        assert!(ev.contains("Ended"), "got: {ev}");
+
+        engine_shutdown();
+    }
+
+    #[test]
+    fn engine_set_event_callback_invoked() {
+        use std::sync::atomic::AtomicI32;
+
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+
+        static LAST_EVENT_ID: AtomicI32 = AtomicI32::new(0);
+
+        extern "C" fn test_cb(event_id: i32, _msg: *const c_char) {
+            LAST_EVENT_ID.store(event_id, Ordering::SeqCst);
+        }
+
+        engine_set_event_callback(Some(test_cb));
+        engine_init();
+        drain_events();
+
+        // Register → should trigger Registered callback (event_id = 1)
+        let user = CString::new("alice").unwrap();
+        let pass = CString::new("secret").unwrap();
+        let domain = CString::new("sip.example.com").unwrap();
+        engine_register(user.as_ptr(), pass.as_ptr(), domain.as_ptr());
+        drain_events();
+
+        assert_eq!(
+            LAST_EVENT_ID.load(Ordering::SeqCst),
+            EngineEventId::Registered as i32
+        );
+
+        // Clear callback
+        engine_set_event_callback(None);
+        engine_shutdown();
+    }
+
+    #[test]
+    fn engine_hangup_no_active_call() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+        assert_eq!(engine_hangup(), EngineErrorCode::NotFound as i32);
+        engine_shutdown();
+    }
+
+    #[test]
+    fn engine_register_null_args() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        engine_init();
+        drain_events();
+        assert_eq!(
+            engine_register(std::ptr::null(), std::ptr::null(), std::ptr::null()),
+            EngineErrorCode::InvalidUtf8 as i32
+        );
+        engine_shutdown();
+    }
+
+    #[test]
+    fn engine_make_call_not_initialized() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        reset();
+        let number = CString::new("sip:bob@example.com").unwrap();
+        assert_eq!(
+            engine_make_call(number.as_ptr()),
+            EngineErrorCode::NotInitialized as i32
+        );
     }
 }
