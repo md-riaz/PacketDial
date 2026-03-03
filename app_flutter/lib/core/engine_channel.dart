@@ -229,7 +229,21 @@ class EngineChannel {
         final state =
             RegistrationState.fromString(payload['state'] as String? ?? '');
         final reason = payload['reason'] as String? ?? '';
-        if (accounts.containsKey(id)) {
+
+        if (!accounts.containsKey(id)) {
+          // If account is not in our live map (e.g. initial registration from db),
+          // create a placeholder so the UI can show the status.
+          accounts[id] = Account(
+            uuid: id,
+            accountName: 'SIP Account',
+            displayName: '',
+            server: '',
+            username: '',
+            password: '',
+            registrationState: state,
+            failureReason: reason,
+          );
+        } else {
           accounts[id] = accounts[id]!
               .copyWith(registrationState: state, failureReason: reason);
         }

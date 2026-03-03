@@ -282,29 +282,35 @@ class CockpitFooter extends ConsumerWidget {
                 ? Colors.green
                 : (isFailed ? Colors.red : Colors.orange),
           ),
-          const SizedBox(width: 6),
-          Text(
-            regState,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              color: isRegistered
-                  ? Colors.green.shade700
-                  : (isFailed ? Colors.red.shade700 : Colors.grey.shade700),
+          Flexible(
+            child: Text(
+              regState,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: isRegistered
+                    ? Colors.green.shade700
+                    : (isFailed ? Colors.red.shade700 : Colors.grey.shade700),
+              ),
             ),
           ),
-          const VerticalDivider(width: 20, indent: 4, endIndent: 4),
+          const VerticalDivider(width: 16, indent: 4, endIndent: 4),
 
           // Network / Call Status
           if (hasCall) ...[
             const Icon(Icons.call, size: 10, color: Colors.blue),
-            const SizedBox(width: 4),
-            Text(
-              'Call: ${activeCall.state.label} (${activeCall.uri})',
-              style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold),
+            Flexible(
+              child: Text(
+                'Call: ${activeCall.state.label} (${activeCall.uri})',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold),
+              ),
             ),
           ] else ...[
             const Icon(Icons.network_check, size: 10, color: Colors.grey),

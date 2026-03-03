@@ -222,11 +222,13 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                       color: isSelected ? Colors.green : Colors.grey,
                     ),
                     title: Text(a.displayName,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontWeight: isSelected
                                 ? FontWeight.bold
                                 : FontWeight.normal)),
-                    subtitle: Text('${a.username}@${a.server}'),
+                    subtitle: Text('${a.username}@${a.server}',
+                        overflow: TextOverflow.ellipsis),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

@@ -157,6 +157,27 @@ if ($CoreDll) {
 }
 
 # ---------------------------------------------------------------------------
+# Staging: copy CLI Tool (pd.exe) if built
+# ---------------------------------------------------------------------------
+$PdExeTarget = Join-Path $RepoRoot 'tools\pd\target\x86_64-pc-windows-msvc\release\pd.exe'
+$PdExePlain  = Join-Path $RepoRoot 'tools\pd\target\release\pd.exe'
+
+if (Test-Path $PdExeTarget) {
+    $PdExe = $PdExeTarget
+} elseif (Test-Path $PdExePlain) {
+    $PdExe = $PdExePlain
+} else {
+    $PdExe = $null
+}
+
+if ($PdExe) {
+    Write-Host "Copying pd.exe…"
+    Copy-Item $PdExe -Destination $StagingDir
+} else {
+    Write-Warning "pd.exe not found - skipping"
+}
+
+# ---------------------------------------------------------------------------
 # Copy version metadata into the bundle
 # ---------------------------------------------------------------------------
 if (Test-Path $VersionFile) {

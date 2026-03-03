@@ -61,6 +61,13 @@ runs:
         cd core_rust
         cargo build --release --target x86_64-pc-windows-msvc
 
+    - name: Build CLI (pd.exe)
+      shell: pwsh
+      run: |
+        X:
+        cd tools\pd
+        cargo build --release --target x86_64-pc-windows-msvc
+
     - name: Install Flutter
       uses: subosito/flutter-action@v2
       with:

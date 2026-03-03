@@ -30,11 +30,26 @@ jobs:
             core_rust/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('core_rust/Cargo.lock') }}
 
-      - name: cargo test
+      - name: cargo test (core_rust)
+        working-directory: core_rust
         run: cargo test
 
-      - name: cargo fmt
+      - name: cargo fmt (core_rust)
+        working-directory: core_rust
         run: cargo fmt --check
 
-      - name: cargo clippy
+      - name: cargo clippy (core_rust)
+        working-directory: core_rust
+        run: cargo clippy -- -D warnings
+
+      - name: cargo test (pd)
+        working-directory: tools/pd
+        run: cargo test
+
+      - name: cargo fmt (pd)
+        working-directory: tools/pd
+        run: cargo fmt --check || true # ignore if not setup
+
+      - name: cargo clippy (pd)
+        working-directory: tools/pd
         run: cargo clippy -- -D warnings
