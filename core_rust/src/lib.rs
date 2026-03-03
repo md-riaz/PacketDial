@@ -1929,10 +1929,29 @@ static EVENT_CALLBACK: Lazy<Mutex<EngineEventCallback>> = Lazy::new(|| Mutex::ne
 static CLIENT_SENDERS: Lazy<Mutex<Vec<Sender<String>>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 fn invoke_event_callback(event_id: EngineEventId, message: &str) {
+    // IMPORTANT: The Dart side uses NativeCallable.listener which runs the
+    // callback ASYNCHRONOUSLY on the Dart event loop.  This means the C
+    // string pointer must remain valid after this function returns.
+    //
+    // We keep two recent CString allocations alive (double-buffer) so
+    // the previous pointer is still valid while Dart processes it.
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+    static PREV: Lazy<Mutex<Option<CString>>> = Lazy::new(|| Mutex::new(None));
+    static CURR: Lazy<Mutex<Option<CString>>> = Lazy::new(|| Mutex::new(None));
+
     if let Ok(g) = EVENT_CALLBACK.lock() {
         if let Some(cb) = *g {
             if let Ok(cs) = CString::new(message) {
-                cb(event_id as i32, cs.as_ptr());
+                let ptr = cs.as_ptr();
+                // Rotate: drop prev, move curr → prev, store new → curr
+                {
+                    let mut prev = PREV.lock().unwrap();
+                    let mut curr = CURR.lock().unwrap();
+                    *prev = curr.take();
+                    *curr = Some(cs);
+                }
+                cb(event_id as i32, ptr);
             }
         }
     }

@@ -60,7 +60,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     final raw = _uriCtrl.text.trim();
     if (raw.isEmpty) return;
 
-    final accountName = activeAccount.accountName;
+    final accountId = activeAccount.uuid;
     final server = activeAccount.server;
 
     String uri = raw;
@@ -70,7 +70,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       uri = 'sip:$raw';
     }
 
-    EngineChannel.instance.engine.makeCall(accountName, uri);
+    EngineChannel.instance.engine.makeCall(accountId, uri);
   }
 
   void _hangup() => EngineChannel.instance.engine.hangup();

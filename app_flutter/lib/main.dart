@@ -304,7 +304,7 @@ class CockpitFooter extends ConsumerWidget {
           ),
           Flexible(
             child: Text(
-              account != null ? '${account.accountName}: $regState' : regState,
+              account != null ? '${account.username}: $regState' : regState,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
               style: TextStyle(
