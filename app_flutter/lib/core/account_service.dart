@@ -161,6 +161,10 @@ class AccountService {
     return isar!.accountSchemas.filter().isSelectedEqualTo(true).findFirst();
   }
 
+  Future<AccountSchema?> getAccountByUuid(String uuid) async {
+    return isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
+  }
+
   Future<void> setSelectedAccount(String uuid) async {
     await isar!.writeTxn(() async {
       // Unselect all
@@ -245,8 +249,23 @@ class AccountService {
   }
 
   Future<void> autoRegisterAll() async {
-    final selected = await getSelectedAccount();
-    if (selected != null && selected.autoRegister) {
+    final all = await isar!.accountSchemas.where().findAll();
+    if (all.isEmpty) return;
+
+    bool didRegister = false;
+
+    // Register all accounts that have autoRegister enabled
+    for (final acct in all) {
+      if (acct.autoRegister) {
+        register(acct);
+        didRegister = true;
+      }
+    }
+
+    // Fallback: if no account had autoRegister, register the selected one
+    // or the first account
+    if (!didRegister) {
+      final selected = all.where((a) => a.isSelected).firstOrNull ?? all.first;
       register(selected);
     }
   }

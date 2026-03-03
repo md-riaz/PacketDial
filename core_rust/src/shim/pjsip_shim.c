@@ -446,7 +446,18 @@ int pd_call_make(int acc_id, const char *dst_uri)
     pjsua_call_id call_id;
     pj_status_t status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
                                                NULL, NULL, NULL, &call_id);
-    if (status != PJ_SUCCESS) return -1;
+    if (status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char err_msg[256];
+            pj_strerror(status, err_msg, sizeof(err_msg));
+            char buf[512];
+            snprintf(buf, sizeof(buf),
+                     "pd_call_make failed: acc_id=%d uri=%s status=%d (%s)",
+                     acc_id, dst_uri, (int)status, err_msg);
+            g_on_log(2, buf);
+        }
+        return -1;
+    }
     return (int)call_id;
 }
 

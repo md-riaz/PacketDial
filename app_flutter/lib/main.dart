@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'dart:async';
+import 'dart:developer';
 
 import 'core/engine_channel.dart';
 import 'core/account_service.dart';
@@ -51,9 +53,6 @@ void main() async {
   final accountService = container.read(accountServiceProvider);
   await accountService.init(isar);
 
-  // Auto-register accounts
-  await accountService.autoRegisterAll();
-
   // Register Global Hotkey (Alt + D) to dial from clipboard
   HotKey dialHotkey = HotKey(
     key: PhysicalKeyboardKey.keyD,
@@ -78,7 +77,7 @@ void main() async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: App(isar: isar),
+      child: App(isar: isar, accountService: accountService),
     ),
   );
 
@@ -95,7 +94,8 @@ void main() async {
 
 class App extends StatefulWidget {
   final Isar isar;
-  const App({super.key, required this.isar});
+  final AccountService accountService;
+  const App({super.key, required this.isar, required this.accountService});
 
   @override
   State<App> createState() => _AppState();
@@ -137,11 +137,29 @@ class _AppState extends State<App> {
       EngineChannel.instance.attach(engine, widget.isar);
 
       final rc = engine.init(userAgent);
+      // rc == 0 → OK, rc == 1 → AlreadyInitialized (hot restart: DLL still loaded)
+      final engineOk = rc == 0 || rc == 1;
 
       setState(() {
-        _status = rc == 0 ? 'Engine ready  •  $v' : 'Engine error: $rc';
-        _ready = rc == 0;
+        _status = engineOk ? 'Engine ready  •  $v' : 'Engine error: $rc';
+        _ready = engineOk;
       });
+
+      // Auto-register saved accounts AFTER the callback is attached
+      if (engineOk) {
+        await widget.accountService.autoRegisterAll();
+
+        // Listen for registration failures → auto-show edit dialog
+        _regFailureSub = EngineChannel.instance.eventStream.listen((event) {
+          if (event['type'] == 'RegistrationStateChanged') {
+            final payload = event['payload'] as Map<String, dynamic>? ?? {};
+            if (payload['state'] == 'Failed') {
+              final accountId = payload['account_id'] as String? ?? '';
+              _onRegistrationFailed(accountId);
+            }
+          }
+        });
+      }
     } catch (e) {
       log("Failed to load engine: $e");
       setState(() {
@@ -150,8 +168,46 @@ class _AppState extends State<App> {
     }
   }
 
+  StreamSubscription? _regFailureSub;
+
+  void _onRegistrationFailed(String accountId) async {
+    if (!mounted) return;
+    // Look up account from Isar
+    final account = await widget.accountService.getAccountByUuid(accountId);
+    if (account == null || !mounted) return;
+
+    // Switch to Accounts tab
+    setState(() => _selectedIndex = 0);
+
+    // Show edit dialog after frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('Registration Failed'),
+          content: Text(
+            'Account "${account.accountName}" failed to register.\n'
+            'Please check your credentials.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    });
+
+    // Cancel after first failure to avoid spamming
+    _regFailureSub?.cancel();
+  }
+
   @override
   void dispose() {
+    _regFailureSub?.cancel();
     EngineChannel.instance.dispose();
     super.dispose();
   }
