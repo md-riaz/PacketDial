@@ -1912,7 +1912,10 @@ pub extern "C" fn engine_make_call(number: *const c_char) -> i32 {
             let domain = match account_id.split('@').nth(1) {
                 Some(d) => d,
                 None => {
-                    log_engine(LogLevel::Error, "Account has no domain for URI construction");
+                    log_engine(
+                        LogLevel::Error,
+                        "Account has no domain for URI construction",
+                    );
                     return EngineErrorCode::InternalError as i32;
                 }
             };
@@ -2001,7 +2004,9 @@ pub extern "C" fn engine_answer_call() -> i32 {
             let calls = CALLS.lock().unwrap();
             calls
                 .iter()
-                .find(|c| c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming))
+                .find(|c| {
+                    c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming)
+                })
                 .map(|c| c.id)
         };
         let call_id = match call_id {

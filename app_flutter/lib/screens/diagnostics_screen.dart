@@ -53,8 +53,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     });
   }
 
-  void _exportBundle() =>
-      _channel.sendCommand('DiagExportBundle', {'anonymize': true});
+  void _exportBundle() {
+    // TODO: Implement with new C ABI - needs engine_export_diagnostics() function
+    _showSnack('Export bundle feature coming soon');
+  }
 
   void _copyAllEvents() {
     Clipboard.setData(ClipboardData(text: _channel.eventLog.join('\n')));
@@ -74,7 +76,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
 
   void _setEngineLevel(String level) {
     setState(() => _engineLevel = level);
-    _channel.setLogLevel(level);
+    // TODO: Implement with new C ABI - needs engine_set_log_level() function
+    _showSnack('Log level control coming soon');
   }
 
   void _showSnack(String msg) {
@@ -201,11 +204,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                 onChanged: (v) { if (v != null) setState(() => _filterLevel = v); },
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
-                tooltip: 'Fetch from engine',
-                onPressed: () => _channel.getLogBuffer(),
-              ),
+              // TODO: Re-enable when engine_get_log_buffer() is added to C ABI
+              // IconButton(
+              //   icon: const Icon(Icons.refresh, size: 20),
+              //   tooltip: 'Fetch from engine',
+              //   onPressed: () => _channel.getLogBuffer(),
+              // ),
               IconButton(
                 icon: const Icon(Icons.copy, size: 20),
                 tooltip: 'Copy all',

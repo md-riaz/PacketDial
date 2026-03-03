@@ -17,7 +17,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     // Refresh on first load and whenever events arrive
-    _channel.sendCommand('CallHistoryQuery');
+    _channel.engine.queryCallHistory();
     _channel.events.listen((_) {
       if (mounted) setState(() {});
     });
@@ -34,7 +34,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
-            onPressed: () => _channel.sendCommand('CallHistoryQuery'),
+            onPressed: () => _channel.engine.queryCallHistory(),
           ),
         ],
       ),
