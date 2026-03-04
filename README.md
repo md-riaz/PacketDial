@@ -18,6 +18,7 @@ PacketDial is a modern, developer-grade Windows SIP softphone built with:
 - [Developer Workflow](docs/dev-workflow.md) — Hot-reload setup and daily workflows
 - [Rust Core Guide](docs/rust-core.md) — Building and FFI integration
 - [PJSIP Build Guide](docs/pjsip-build.md) — PJSIP compilation details
+- [PJSUA Configuration](docs/pjsua-configuration.md) — How to configure PJSIP behavior
 - [Flutter App Guide](docs/flutter-app.md) — Windows desktop setup
 
 **Release & Distribution?**
