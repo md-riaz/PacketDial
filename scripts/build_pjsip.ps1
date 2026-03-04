@@ -193,10 +193,10 @@ New-Item -ItemType Directory -Force -Path $OutInclude | Out-Null
 
 # Collect all *.lib files produced by the build (Release x64 only)
 # pjproject names them like: pjlib-x86_64-x64-vc14-Release.lib
-$LibFiles = Get-ChildItem $PjProjectDir -Recurse -Filter '*Release*.lib' |
-            Where-Object { $_.FullName -notlike '*Debug*' -and
-                           $_.FullName -notlike '*obj*'   -and
-                           $_.FullName -notlike '*\CMakeFiles\*' }
+$LibFiles = @(Get-ChildItem $PjProjectDir -Recurse -Filter '*Release*.lib' |
+              Where-Object { $_.FullName -notlike '*Debug*' -and
+                             $_.FullName -notlike '*obj*'   -and
+                             $_.FullName -notlike '*\CMakeFiles\*' })
 
 if ($LibFiles.Count -eq 0) {
     Write-Fail "No Release *.lib files found under $PjProjectDir"
