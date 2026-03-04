@@ -7,6 +7,8 @@ import '../core/sip_uri_utils.dart';
 import '../core/engine_channel.dart';
 import '../core/account_service.dart';
 import '../models/account_schema.dart';
+import '../models/account.dart';
+import '../models/audio_device.dart';
 import '../models/call.dart';
 import '../models/media_stats.dart';
 import '../providers/engine_provider.dart';
@@ -57,11 +59,33 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     _focusNode.requestFocus();
   }
 
-  void _call(AccountSchema? activeAccount) {
+  void _call(AccountSchema? activeAccount, Account? activeAccountState,
+      List<AudioDevice> audioDevices) {
     if (activeAccount == null) return;
     final raw = _uriCtrl.text.trim();
     if (raw.isEmpty) return;
 
+    final isRegistered =
+        activeAccountState?.registrationState == RegistrationState.registered;
+    final hasInput = audioDevices.any((d) => d.isInput);
+    final hasOutput = audioDevices.any((d) => d.isOutput);
+
+    if (!isRegistered || !hasInput || !hasOutput) {
+      _showPreFlightChecklist(
+        context,
+        activeAccount: activeAccount,
+        isRegistered: isRegistered,
+        hasInput: hasInput,
+        hasOutput: hasOutput,
+        onCallAnyway: () => _executeCall(activeAccount, raw),
+      );
+      return;
+    }
+
+    _executeCall(activeAccount, raw);
+  }
+
+  void _executeCall(AccountSchema activeAccount, String raw) {
     final accountId = activeAccount.uuid;
     final server = activeAccount.server;
 
@@ -73,6 +97,102 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     }
 
     EngineChannel.instance.engine.makeCall(accountId, uri);
+  }
+
+  void _showPreFlightChecklist(
+    BuildContext context, {
+    required AccountSchema activeAccount,
+    required bool isRegistered,
+    required bool hasInput,
+    required bool hasOutput,
+    required VoidCallback onCallAnyway,
+  }) {
+    final hasError = !isRegistered;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceCard,
+          title: const Text('Pre-flight Checklist',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildChecklistItem(
+                label: 'Account Registered',
+                isOk: isRegistered,
+                isWarning: false,
+              ),
+              const SizedBox(height: 8),
+              _buildChecklistItem(
+                label: 'Microphone Detected',
+                isOk: hasInput,
+                isWarning: true,
+              ),
+              const SizedBox(height: 8),
+              _buildChecklistItem(
+                label: 'Speaker Detected',
+                isOk: hasOutput,
+                isWarning: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: hasError
+                  ? null
+                  : () {
+                      Navigator.pop(context);
+                      onCallAnyway();
+                    },
+              child: Text(
+                'Call Anyway',
+                style: TextStyle(
+                  color: hasError
+                      ? AppTheme.textTertiary.withValues(alpha: 0.5)
+                      : AppTheme.primary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildChecklistItem({
+    required String label,
+    required bool isOk,
+    required bool isWarning,
+  }) {
+    IconData icon;
+    Color color;
+
+    if (isOk) {
+      icon = Icons.check_circle;
+      color = AppTheme.callGreen;
+    } else if (isWarning) {
+      icon = Icons.warning;
+      color = AppTheme.warningAmber;
+    } else {
+      icon = Icons.cancel;
+      color = AppTheme.errorRed;
+    }
+
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: AppTheme.textPrimary)),
+      ],
+    );
   }
 
   void _hangup() => EngineChannel.instance.engine.hangup();
@@ -106,7 +226,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       child: Actions(
         actions: {
           _CallActionIntent: CallbackAction<_CallActionIntent>(
-            onInvoke: (_) => _call(activeAccountAsync.value),
+            onInvoke: (_) {
+              final audioDevices = ref.read(audioDevicesProvider);
+              final activeAccountState = ref.read(activeAccountProvider);
+              _call(activeAccountAsync.value, activeAccountState, audioDevices);
+              return null;
+            },
           ),
           _HangupActionIntent: CallbackAction<_HangupActionIntent>(
             onInvoke: (_) => _hangup(),
@@ -118,38 +243,43 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         child: Focus(
           autofocus: true,
           child: activeAccountAsync.when(
-            data: (activeAccount) => Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                children: [
-                  // 1. Compact Header
-                  _buildCompactHeader(activeAccount),
-                  const SizedBox(height: 10),
+            data: (activeAccount) {
+              final audioDevices = ref.watch(audioDevicesProvider);
+              final activeAccountState = ref.watch(activeAccountProvider);
+              return Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  children: [
+                    // 1. Compact Header
+                    _buildCompactHeader(activeAccount),
+                    const SizedBox(height: 10),
 
-                  // 2. Active Call Panel
-                  if (activeCall != null)
-                    _ActiveCallCard(
-                        call: activeCall, stats: stats, onHangup: _hangup)
-                  else
-                    _buildReadyIndicator(),
+                    // 2. Active Call Panel
+                    if (activeCall != null)
+                      _ActiveCallCard(
+                          call: activeCall, stats: stats, onHangup: _hangup)
+                    else
+                      _buildReadyIndicator(),
 
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
 
-                  // 3. Dialing Input
-                  _buildDialInput(),
+                    // 3. Dialing Input
+                    _buildDialInput(),
 
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
 
-                  // 4. Integrated Numpad
-                  Expanded(child: _buildNumpadGrid(activeCall)),
+                    // 4. Integrated Numpad
+                    Expanded(child: _buildNumpadGrid(activeCall)),
 
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
 
-                  // 5. Action Bar
-                  _buildMainActionBar(activeAccount, activeCall),
-                ],
-              ),
-            ),
+                    // 5. Action Bar
+                    _buildMainActionBar(activeAccount, activeAccountState,
+                        activeCall, audioDevices),
+                  ],
+                ),
+              );
+            },
             loading: () => Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2,
@@ -288,7 +418,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               )
             : null,
       ),
-      onSubmitted: (_) => _call(null),
+      onSubmitted: (_) => _call(null, null, []),
     );
   }
 
@@ -322,7 +452,11 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     );
   }
 
-  Widget _buildMainActionBar(AccountSchema? account, ActiveCall? call) {
+  Widget _buildMainActionBar(
+      AccountSchema? account,
+      Account? activeAccountState,
+      ActiveCall? call,
+      List<AudioDevice> audioDevices) {
     bool isCall = call != null;
     return Container(
       width: double.infinity,
@@ -344,7 +478,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: isCall ? _hangup : () => _call(account),
+          onTap: isCall
+              ? _hangup
+              : () => _call(account, activeAccountState, audioDevices),
           borderRadius: BorderRadius.circular(12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

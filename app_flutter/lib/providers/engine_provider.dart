@@ -4,6 +4,7 @@ import '../core/engine_channel.dart';
 import '../models/call.dart';
 import '../models/media_stats.dart';
 import '../models/account.dart';
+import '../models/audio_device.dart';
 
 /// Provider for the raw VoipEngine instance.
 final engineProvider = Provider<VoipEngine>((ref) {
@@ -25,6 +26,12 @@ final activeCallMediaStatsProvider = Provider<MediaStats?>((ref) {
   final call = EngineChannel.instance.activeCall;
   if (call == null) return null;
   return EngineChannel.instance.mediaStats[call.callId];
+});
+
+/// Provider for the list of available audio devices
+final audioDevicesProvider = Provider<List<AudioDevice>>((ref) {
+  ref.watch(engineEventsProvider);
+  return EngineChannel.instance.audioDevices;
 });
 
 /// Provider for the currently active (registered or first) account.

@@ -362,17 +362,6 @@ int pd_init(const char *user_agent,
         return (int)status;
     }
 
-    /* Fallback to null audio device if the system has no audio devices
-     * (e.g. headless Windows VMs). Otherwise pjsua_call_make_call fails
-     * with PJMEDIA_EAUD_NODEFDEV (420006). */
-    pjmedia_aud_dev_info aud_infos[64];
-    unsigned aud_count = 64;
-    pj_status_t dev_st = pjsua_enum_aud_devs(aud_infos, &aud_count);
-    if (dev_st == PJ_SUCCESS && aud_count == 0) {
-        if (g_on_log) g_on_log(3, "No audio devices found. Falling back to null sound device.");
-        pjsua_set_no_snd_dev();
-    }
-
     /* Register the SIP capture module to see ALL SIP traffic
      * (REGISTER, OPTIONS, etc.) — not just call transactions. */
     status = pjsip_endpt_register_module(pjsua_get_pjsip_endpt(),
@@ -404,6 +393,21 @@ int pd_init(const char *user_agent,
     if (status != PJ_SUCCESS) {
         pjsua_destroy();
         return (int)status;
+    }
+
+    /* Fallback to null audio device if the system has no audio devices
+     * (e.g. headless Windows VMs). Otherwise pjsua_call_make_call fails
+     * with PJMEDIA_EAUD_NODEFDEV (420006). */
+    if (g_on_log) g_on_log(3, "Using null sound device to avoid PJMEDIA_EAUD_NODEFDEV on VMs");
+    pj_status_t aud_st = pjsua_set_null_snd_dev();
+    if (aud_st != PJ_SUCCESS && g_on_log) {
+        char err_msg[256];
+        pj_strerror(aud_st, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf), "pjsua_set_null_snd_dev failed: %d (%s)", aud_st, err_msg);
+        g_on_log(1, buf);
+    } else if (g_on_log) {
+        g_on_log(4, "Set pjsua_set_null_snd_dev() successfully");
     }
 
     return 0;
@@ -489,11 +493,11 @@ int pd_call_make(int acc_id, const char *dst_uri)
     if (status != PJ_SUCCESS) {
         if (g_on_log) {
             char err_msg[256];
-            pj_strerror(status, err_msg, sizeof(err_msg));
+            pj_str_t err_str = pj_strerror(status, err_msg, sizeof(err_msg));
             char buf[512];
             snprintf(buf, sizeof(buf),
-                     "pd_call_make failed: acc_id=%d uri=%s status=%d (%s)",
-                     acc_id, dst_uri, (int)status, err_msg);
+                     "pd_call_make failed: acc_id=%d uri=%s status=%d (%.*s)",
+                     acc_id, dst_uri, (int)status, (int)err_str.slen, err_str.ptr);
             g_on_log(1, buf);   /* level 1 = Error so it always shows */
         }
         /* Return negated status so caller can inspect the exact error */
