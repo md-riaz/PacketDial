@@ -1,0 +1,1 @@
+CRITICAL pjsua_call_make_call FAILED: 420006 - Unable to find default audio device (PJMEDIA_EAUD_NODEFDEV)

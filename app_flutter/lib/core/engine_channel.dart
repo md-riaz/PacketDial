@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
+import 'package:ffi/ffi.dart';
 
 import '../ffi/engine.dart';
 import '../models/account.dart';
@@ -198,15 +199,8 @@ class EngineChannel {
 
   /// Helper to read C string
   String _ptrToString(ffi.Pointer<ffi.Int8> ptr) {
-    final bytes = <int>[];
-    int i = 0;
-    while (true) {
-      final v = (ptr + i).value;
-      if (v == 0) break;
-      bytes.add(v);
-      i++;
-    }
-    return String.fromCharCodes(bytes);
+    if (ptr.address == 0) return '';
+    return ptr.cast<Utf8>().toDartString();
   }
 
   // --- Command helpers (now using structured C ABI) ---------------------------
@@ -243,9 +237,8 @@ class EngineChannel {
     final payload =
         (event['payload'] as Map<String, dynamic>?) ?? <String, dynamic>{};
 
-    if (type != 'EngineLog') {
-      debugPrint('[EngineChannel] Event: $type, Payload: $payload');
-    }
+    // Always print all events for debugging
+    debugPrint('[EngineChannel] Event: $type, Payload: $payload');
 
     switch (type) {
       case 'EngineReady':

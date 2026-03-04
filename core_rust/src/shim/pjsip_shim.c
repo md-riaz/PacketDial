@@ -37,6 +37,32 @@ static pjsua_transport_id g_tcp_tp = PJSUA_INVALID_ID;
  * Internal helpers
  * ----------------------------------------------------------------------- */
 
+/* PJSIP thread registration — required for any thread that calls PJSIP API.
+ * Without this, pjsua_call_make_call (and friends) will abort/crash silently
+ * because pj_thread_this() asserts on unregistered threads.
+ *
+ * We use __declspec(thread) / __thread for thread-local storage so each
+ * external thread gets its own descriptor.  The main (pd_init) thread is
+ * registered automatically by pjsua_create(). */
+#if defined(_MSC_VER)
+  static __declspec(thread) pj_thread_desc  tls_thread_desc;
+  static __declspec(thread) pj_thread_t    *tls_thread_ptr = NULL;
+  static __declspec(thread) int             tls_thread_registered = 0;
+#else
+  static __thread pj_thread_desc  tls_thread_desc;
+  static __thread pj_thread_t    *tls_thread_ptr = NULL;
+  static __thread int             tls_thread_registered = 0;
+#endif
+
+static void pd_ensure_thread(void)
+{
+    if (tls_thread_registered) return;
+    if (!pj_thread_is_registered()) {
+        pj_thread_register("pd_ext", tls_thread_desc, &tls_thread_ptr);
+    }
+    tls_thread_registered = 1;
+}
+
 /* Safe snprintf wrapper that always NUL-terminates */
 static void safe_copy(char *dst, int dst_len, const char *src)
 {
@@ -336,6 +362,17 @@ int pd_init(const char *user_agent,
         return (int)status;
     }
 
+    /* Fallback to null audio device if the system has no audio devices
+     * (e.g. headless Windows VMs). Otherwise pjsua_call_make_call fails
+     * with PJMEDIA_EAUD_NODEFDEV (420006). */
+    pjmedia_aud_dev_info aud_infos[64];
+    unsigned aud_count = 64;
+    pj_status_t dev_st = pjsua_enum_aud_devs(aud_infos, &aud_count);
+    if (dev_st == PJ_SUCCESS && aud_count == 0) {
+        if (g_on_log) g_on_log(3, "No audio devices found. Falling back to null sound device.");
+        pjsua_set_no_snd_dev();
+    }
+
     /* Register the SIP capture module to see ALL SIP traffic
      * (REGISTER, OPTIONS, etc.) — not just call transactions. */
     status = pjsip_endpt_register_module(pjsua_get_pjsip_endpt(),
@@ -393,6 +430,7 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *auth_username, const char *sip_proxy,
                int use_tcp)
 {
+    pd_ensure_thread();
     pjsua_acc_config cfg;
     pjsua_acc_config_default(&cfg);
 
@@ -433,6 +471,7 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
 
 int pd_acc_remove(int acc_id)
 {
+    pd_ensure_thread();
     return (int)pjsua_acc_del((pjsua_acc_id)acc_id);
 }
 
@@ -442,6 +481,7 @@ int pd_acc_remove(int acc_id)
 
 int pd_call_make(int acc_id, const char *dst_uri)
 {
+    pd_ensure_thread();
     pj_str_t dst = S(dst_uri);
     pjsua_call_id call_id;
     pj_status_t status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
@@ -454,25 +494,29 @@ int pd_call_make(int acc_id, const char *dst_uri)
             snprintf(buf, sizeof(buf),
                      "pd_call_make failed: acc_id=%d uri=%s status=%d (%s)",
                      acc_id, dst_uri, (int)status, err_msg);
-            g_on_log(2, buf);
+            g_on_log(1, buf);   /* level 1 = Error so it always shows */
         }
-        return -1;
+        /* Return negated status so caller can inspect the exact error */
+        return -(int)status;
     }
     return (int)call_id;
 }
 
 int pd_call_answer(int call_id)
 {
+    pd_ensure_thread();
     return (int)pjsua_call_answer((pjsua_call_id)call_id, 200, NULL, NULL);
 }
 
 int pd_call_hangup(int call_id)
 {
+    pd_ensure_thread();
     return (int)pjsua_call_hangup((pjsua_call_id)call_id, 0, NULL, NULL);
 }
 
 int pd_call_hold(int call_id, int hold)
 {
+    pd_ensure_thread();
     if (hold) {
         return (int)pjsua_call_set_hold((pjsua_call_id)call_id, NULL);
     } else {
@@ -482,6 +526,7 @@ int pd_call_hold(int call_id, int hold)
 
 int pd_call_set_mute(int call_id, int mute)
 {
+    pd_ensure_thread();
     pjsua_call_info ci;
     pj_bzero(&ci, sizeof(ci));
     if (pjsua_call_get_info((pjsua_call_id)call_id, &ci) != PJ_SUCCESS)
@@ -506,6 +551,7 @@ int pd_call_set_mute(int call_id, int mute)
 
 int pd_call_send_dtmf(int call_id, const char *digits)
 {
+    pd_ensure_thread();
     if (!digits || digits[0] == '\0') return -1;
     pj_str_t d = S(digits);
     return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
@@ -517,6 +563,7 @@ int pd_call_send_dtmf(int call_id, const char *digits)
 
 unsigned pd_aud_dev_count(void)
 {
+    pd_ensure_thread();
     pjmedia_aud_dev_info infos[64];
     unsigned count = 64;
     pj_status_t st = pjsua_enum_aud_devs(infos, &count);

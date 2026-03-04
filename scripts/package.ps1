@@ -100,6 +100,37 @@ if (-not $icuFound) {
     exit 1
 }
 
+# Find app.so (AOT compiled dart code). It may be in build\windows\ or in data\
+$appSoPaths = @(
+    (Join-Path $RepoRoot 'app_flutter\build\windows\app.so'),
+    (Join-Path $StagingDir 'data\app.so'),
+    (Join-Path $StagingDir 'app.so')
+)
+$appSoFound = $false
+$appSoSrc = $null
+foreach ($p in $appSoPaths) {
+    if (Test-Path $p) {
+        $appSoFound = $true
+        $appSoSrc = $p
+        break
+    }
+}
+if (-not $appSoFound) {
+    Write-Error "Missing required Flutter AOT library: app.so`nThe build output is incomplete. Re-run: flutter build windows --release"
+    exit 1
+}
+
+# Ensure app.so is copied to the correct location (data/app.so)
+$dataDir = Join-Path $StagingDir 'data'
+if (-not (Test-Path $dataDir)) {
+    New-Item -ItemType Directory -Path $dataDir | Out-Null
+}
+$appSoTarget = Join-Path $dataDir 'app.so'
+if ($appSoSrc -ne $appSoTarget) {
+    Write-Host "Copying app.so to staging data directory..."
+    Copy-Item -Path $appSoSrc -Destination $appSoTarget -Force
+}
+
 foreach ($f in $RequiredFiles) {
     if (-not (Test-Path $f)) {
         Write-Error "Missing required Flutter file: $f`nThe build output is incomplete. Re-run: flutter build windows --release"
