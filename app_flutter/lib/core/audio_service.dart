@@ -48,11 +48,17 @@ class AudioService {
 
   Future<void> playDialTone(String digit) async {
     try {
-      // Use a click sound or a pre-recorded DTMF asset
-      await _uiPlayer.play(AssetSource('sounds/dial.wav'),
-          mode: PlayerMode.lowLatency);
+      String assetName = digit;
+      if (digit == '*') assetName = 'star';
+      if (digit == '#') assetName = 'hash';
+
+      // Use low latency player for immediate digit feedback
+      await _uiPlayer.play(
+        AssetSource('sounds/dtmf_$assetName.wav'),
+        mode: PlayerMode.lowLatency,
+      );
     } catch (e) {
-      debugPrint('[AudioService] Failed to play dial tone: $e');
+      debugPrint('[AudioService] Failed to play DTMF asset for $digit: $e');
     }
   }
 

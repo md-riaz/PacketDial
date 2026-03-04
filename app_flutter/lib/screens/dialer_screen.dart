@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
+import '../core/audio_service.dart';
 import '../core/engine_channel.dart';
 import '../core/account_service.dart';
 import '../models/account_schema.dart';
@@ -45,7 +46,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   void _dialKey(String digit, bool isCallActive) {
     // Local feedback (Spec 6.2)
     HapticFeedback.lightImpact();
-    EngineChannel.instance.playDtmf(digit);
+    AudioService.instance.playDialTone(digit);
 
     if (isCallActive) {
       EngineChannel.instance.sendDtmf(digit);
@@ -258,12 +259,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     _buildCompactHeader(activeAccount),
                     const SizedBox(height: 10),
 
-                    // 2. Active Call Panel
+                    // 2. Active Call Panel (expands to fill space)
                     if (activeCall != null)
-                      _ActiveCallCard(
-                          call: activeCall, stats: stats, onHangup: _hangup)
+                      Expanded(
+                        child: _ActiveCallCard(
+                            call: activeCall, stats: stats, onHangup: _hangup),
+                      )
                     else
-                      _buildReadyIndicator(),
+                      Expanded(child: _buildReadyIndicator()),
 
                     const SizedBox(height: 10),
 
@@ -273,7 +276,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     const SizedBox(height: 10),
 
                     // 4. Integrated Numpad
-                    Expanded(child: _buildNumpadGrid(activeCall)),
+                    _buildNumpadGrid(activeCall),
 
                     const SizedBox(height: 10),
 
@@ -356,7 +359,6 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   Widget _buildReadyIndicator() {
     return Container(
-      height: 80,
       decoration: AppTheme.glassCard(
         borderRadius: 10,
         color: AppTheme.surfaceCard.withValues(alpha: 0.4),
@@ -366,12 +368,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.phone_enabled,
-                size: 24, color: AppTheme.callGreen.withValues(alpha: 0.5)),
-            const SizedBox(height: 4),
+                size: 32, color: AppTheme.callGreen.withValues(alpha: 0.5)),
+            const SizedBox(height: 8),
             Text('READY',
                 style: TextStyle(
                   color: AppTheme.textTertiary.withValues(alpha: 0.7),
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 3,
                   fontWeight: FontWeight.w600,
                 )),
@@ -432,6 +434,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       childAspectRatio: 1.6,
       mainAxisSpacing: 6,
       crossAxisSpacing: 6,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       children: [
         for (final label in [
           '1',

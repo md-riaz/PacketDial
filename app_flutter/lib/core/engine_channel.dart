@@ -98,6 +98,15 @@ class EngineChannel {
 
     // Request audio device list on startup
     engine.listAudioDevices();
+    
+    // Re-request audio devices after a short delay to catch late-initialized devices
+    // This helps with Windows audio subsystem initialization timing issues
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (_engine != null) {
+        debugPrint('[EngineChannel] Re-enumerating audio devices after delay');
+        engine.listAudioDevices();
+      }
+    });
 
     // Initialize audio feedback service
     AudioService.instance.init();

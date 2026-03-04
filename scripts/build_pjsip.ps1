@@ -110,11 +110,23 @@ Write-OK "MSBuild: $MsBuild"
 Write-Step "Verifying pjproject configuration"
 
 $ConfigSiteFile = Join-Path $PjProjectDir 'pjlib\include\pj\config_site.h'
+$ProjectConfigSite = Join-Path $RepoRoot 'engine_pjsip\pjproject_config_site.h'
 
-if (-not (Test-Path $ConfigSiteFile)) {
+# Use the project's config_site.h if it exists, otherwise generate default
+if (Test-Path $ProjectConfigSite) {
+    # Copy the project's configuration
+    if (-not (Test-Path $ConfigSiteFile) -or 
+        (Get-Item $ConfigSiteFile).LastWriteTime -lt (Get-Item $ProjectConfigSite).LastWriteTime) {
+        Write-Info "Copying project config_site.h from pjproject_config_site.h"
+        Copy-Item $ProjectConfigSite $ConfigSiteFile -Force
+        Write-OK "Copied project config_site.h"
+    } else {
+        Write-OK "config_site.h already exists and is up to date"
+    }
+} elseif (-not (Test-Path $ConfigSiteFile)) {
     Write-Info "Creating default config_site.h"
 
-    # Create a minimal config_site.h for Windows x64 builds
+    # Create a config_site.h for Windows x64 builds with WASAPI support
     $ConfigContent = @"
 /* Automatically generated config_site.h for Windows x64 builds */
 
@@ -123,9 +135,22 @@ if (-not (Test-Path $ConfigSiteFile)) {
 /* Enable floating point support */
 #define PJ_HAS_FLOATING_POINT 1
 
-/* Use Windows WMME audio backend */
-#define PJMEDIA_AUDIO_DEV_HAS_PORTAUDIO 0
-#define PJMEDIA_AUDIO_DEV_HAS_WMME 1
+/* Enable IPv6 support */
+#define PJ_HAS_IPV6 1
+
+/* Audio device backends - WASAPI for low-latency, WMME for compatibility */
+#define PJMEDIA_AUDIO_DEV_HAS_WASAPI    1
+#define PJMEDIA_AUDIO_DEV_HAS_WMME      1
+
+/* Disable video (audio-only SIP client) */
+#define PJMEDIA_HAS_VIDEO               0
+#define PJSUA_HAS_VIDEO                 0
+
+/* TLS disabled for now */
+#define PJSIP_HAS_TLS_TRANSPORT         0
+
+/* Logging */
+#define PJ_LOG_MAX_LEVEL                5
 
 "@
 

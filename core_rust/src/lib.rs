@@ -1434,6 +1434,11 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
     // Enumerate real audio devices via PJSIP
     {
         let count = unsafe { pd_aud_dev_count() };
+        log_engine(
+            LogLevel::Info,
+            &format!("Audio enumeration: PJSIP reported {} devices", count),
+        );
+        
         let mut real_devices: Vec<AudioDevice> = Vec::new();
         for idx in 0..count {
             let mut id: i32 = 0;
@@ -1449,6 +1454,10 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
                 )
             };
             if rc != 0 {
+                log_engine(
+                    LogLevel::Debug,
+                    &format!("Audio device {} enumeration failed with rc={}", idx, rc),
+                );
                 continue;
             }
             let name = unsafe {
@@ -1457,6 +1466,10 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
                     .unwrap_or("Unknown")
                     .to_owned()
             };
+            log_engine(
+                LogLevel::Debug,
+                &format!("Found audio device: {} (id={}, kind={})", name, id, kind),
+            );
             // kind: 0=input, 1=output, 2=both → emit two entries for "both"
             if kind == 0 || kind == 2 {
                 real_devices.push(AudioDevice {
@@ -1480,25 +1493,34 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
         let selected_in = if cap >= 0 { cap as u32 } else { 0 };
         let selected_out = if play >= 0 { play as u32 } else { 0 };
 
+        log_engine(
+            LogLevel::Info,
+            &format!("Audio devices: {} real devices found, selected input={}, output={}", 
+                    real_devices.len(), selected_in, selected_out),
+        );
+
         *AUDIO_DEVICES.lock().unwrap() = real_devices;
         SELECTED_INPUT.store(selected_in, Ordering::Relaxed);
         SELECTED_OUTPUT.store(selected_out, Ordering::Relaxed);
     }
 
     // Ensure we have at least one input and one output for the UI's Pre-flight Checklist
+    // Use PJSIP default device IDs (-1 mapped to 0) for fallback
     {
         let mut devices = AUDIO_DEVICES.lock().unwrap();
         if !devices.iter().any(|d| d.kind == AudioDeviceKind::Input) {
+            log_engine(LogLevel::Warn, "No input devices found, adding fallback device");
             devices.push(AudioDevice {
-                id: 998,
-                name: "Default Input".to_owned(),
+                id: 0,  // Use PJSIP default device ID
+                name: "System Default Input".to_owned(),
                 kind: AudioDeviceKind::Input,
             });
         }
         if !devices.iter().any(|d| d.kind == AudioDeviceKind::Output) {
+            log_engine(LogLevel::Warn, "No output devices found, adding fallback device");
             devices.push(AudioDevice {
-                id: 999,
-                name: "Default Output".to_owned(),
+                id: 0,  // Use PJSIP default device ID
+                name: "System Default Output".to_owned(),
                 kind: AudioDeviceKind::Output,
             });
         }
