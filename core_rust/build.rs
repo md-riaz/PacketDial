@@ -105,23 +105,10 @@ fn main() {
             lib.display()
         );
     } else {
-        // PJSIP not found. On Windows this is a build error. On other platforms,
-        // allow building without PJSIP (stub implementations will be used).
-        #[cfg(target_os = "windows")]
-        {
-            panic!(
-                "PJSIP not found. Run scripts/build_pjsip.ps1 to build PJSIP, \
-                 or set PJSIP_LIB_DIR and PJSIP_INCLUDE_DIR environment variables."
-            );
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            println!(
-                "cargo:warning=PJSIP not found - building with stub implementations only. \
-                 PJSIP integration is only supported on Windows."
-            );
-        }
+        panic!(
+            "PJSIP not found. Run scripts/build_pjsip.ps1 to build PJSIP, \
+             or set PJSIP_LIB_DIR and PJSIP_INCLUDE_DIR environment variables."
+        );
     }
 
     if let Some(inc) = &include_dir {
