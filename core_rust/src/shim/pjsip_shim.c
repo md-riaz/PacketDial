@@ -33,6 +33,10 @@ static PdOnSipMsg       g_on_sip_msg  = NULL;
 static pjsua_transport_id g_udp_tp = PJSUA_INVALID_ID;
 static pjsua_transport_id g_tcp_tp = PJSUA_INVALID_ID;
 
+/* Tone generator for playing dialpad sounds locally */
+static pjmedia_port *g_tone_port = NULL;
+static pjsua_conf_port_id g_tone_slot = PJSUA_INVALID_ID;
+
 /* -----------------------------------------------------------------------
  * Internal helpers
  * ----------------------------------------------------------------------- */
@@ -419,6 +423,17 @@ int pd_init(const char *user_agent,
         }
     }
 
+    /* Create tone generator for local feedback */
+    pj_pool_t *pool = pj_pool_create(pjsua_get_pool_factory(), "pd_tone", 1024, 1024, NULL);
+    pj_status_t st = pjmedia_tonegen_create(pool, 8000, 1, 160, 16, 0, &g_tone_port);
+    if (st == PJ_SUCCESS) {
+        st = pjsua_conf_add_port(pool, g_tone_port, &g_tone_slot);
+        if (st == PJ_SUCCESS) {
+            /* Connect tone port to master (speaker) so it's audible locally */
+            pjsua_conf_connect(g_tone_slot, 0);
+        }
+    }
+
     return 0;
 }
 
@@ -428,6 +443,15 @@ int pd_init(const char *user_agent,
 
 int pd_shutdown(void)
 {
+    if (g_tone_slot != PJSUA_INVALID_ID) {
+        pjsua_conf_remove_port(g_tone_slot);
+        g_tone_slot = PJSUA_INVALID_ID;
+    }
+    if (g_tone_port) {
+        pjmedia_port_destroy(g_tone_port);
+        g_tone_port = NULL;
+    }
+
     pj_status_t status = pjsua_destroy();
     g_udp_tp = PJSUA_INVALID_ID;
     g_tcp_tp = PJSUA_INVALID_ID;
@@ -712,4 +736,27 @@ int pd_call_get_stream_stat(int call_id,
     }
 
     return 0;
+}
+
+int pd_aud_play_dtmf(const char *digits)
+{
+    if (!g_tone_port || !digits || digits[0] == '\0') {
+        return 0;
+    }
+
+    pd_ensure_thread();
+
+    pj_ssize_t count = (pj_ssize_t)strlen(digits);
+    pjmedia_tone_digit tone_digits[32];
+    if (count > 32) count = 32;
+
+    for (pj_ssize_t i = 0; i < count; ++i) {
+        tone_digits[i].digit = digits[i];
+        tone_digits[i].on_msec = 100;
+        tone_digits[i].off_msec = 50;
+        tone_digits[i].volume = 0; // default
+    }
+
+    pj_status_t status = pjmedia_tonegen_play_digits(g_tone_port, (unsigned)count, tone_digits, 0);
+    return (int)status;
 }

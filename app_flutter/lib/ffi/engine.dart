@@ -23,6 +23,7 @@ typedef _EngineQueryCallHistoryC = ffi.Int32 Function();
 typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineGetLogBufferC = ffi.Int32 Function();
 typedef _EngineSendDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EnginePlayDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineSendCommandC = ffi.Int32 Function(
     ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineSetEventCallbackC = ffi.Void Function(
@@ -103,6 +104,9 @@ class VoipEngine {
   late final int Function(ffi.Pointer<ffi.Int8>) _sendDtmf = _lib
       .lookupFunction<_EngineSendDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_send_dtmf');
+  late final int Function(ffi.Pointer<ffi.Int8>) _playDtmf = _lib
+      .lookupFunction<_EnginePlayDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_play_dtmf');
   late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
       _sendCommand = _lib.lookupFunction<
           _EngineSendCommandC,
@@ -243,6 +247,16 @@ class VoipEngine {
     final ptr = _allocCString(digits);
     try {
       return _sendDtmf(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Play DTMF tones locally.
+  int playDtmf(String digits) {
+    final ptr = _allocCString(digits);
+    try {
+      return _playDtmf(ptr);
     } finally {
       _freeNative(ptr);
     }

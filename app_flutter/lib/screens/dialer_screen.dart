@@ -43,6 +43,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   }
 
   void _dialKey(String digit, bool isCallActive) {
+    // Local feedback (Spec 6.2)
+    HapticFeedback.lightImpact();
+    EngineChannel.instance.playDtmf(digit);
+
     if (isCallActive) {
       EngineChannel.instance.sendDtmf(digit);
     } else {

@@ -339,6 +339,7 @@ extern "C" {
         bitrate_kbps_out: *mut i32,
     ) -> i32;
     fn pd_call_send_dtmf(call_id: i32, digits: *const c_char) -> i32;
+    fn pd_aud_play_dtmf(digits: *const c_char) -> i32;
 }
 
 // ---------------------------------------------------------------------------
@@ -2366,6 +2367,26 @@ pub extern "C" fn engine_send_dtmf(digits: *const c_char) -> i32 {
 
         let dtmf_json = serde_json::json!({ "call_id": call_id, "digits": digits_s });
         dispatch_command("CallSendDtmf", &dtmf_json) as i32
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Play DTMF tones locally.
+///
+/// `digits` is the string of tones to play (0-9, *, #, A-D).
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_play_dtmf(digits: *const c_char) -> i32 {
+    if digits.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        unsafe { pd_aud_play_dtmf(digits) }
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }

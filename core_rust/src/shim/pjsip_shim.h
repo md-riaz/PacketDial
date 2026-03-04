@@ -214,6 +214,13 @@ int pd_aud_set_devs(int capture_id, int playback_id);
  */
 int pd_aud_get_devs(int *capture_id_out, int *playback_id_out);
 
+/**
+ * Play DTMF tones locally through the system speaker.
+ * @param digits   NUL-terminated string of DTMF digits (0-9, *, #, A-D).
+ * @return 0 on success, non-zero on error.
+ */
+int pd_aud_play_dtmf(const char *digits);
+
 /* -----------------------------------------------------------------------
  * Stream statistics
  * ----------------------------------------------------------------------- */

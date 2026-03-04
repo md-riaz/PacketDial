@@ -14,6 +14,7 @@ import '../models/sip_message.dart';
 import '../models/media_stats.dart';
 import '../models/call_history_schema.dart';
 import 'package:isar/isar.dart';
+import 'audio_service.dart';
 
 /// Maximum number of structured log entries retained in memory.
 const _kLogBufferMax = 500;
@@ -97,6 +98,9 @@ class EngineChannel {
 
     // Request audio device list on startup
     engine.listAudioDevices();
+
+    // Initialize audio feedback service
+    AudioService.instance.init();
   }
 
   /// Clears in-memory state without disposing the engine.
@@ -222,6 +226,11 @@ class EngineChannel {
     _engine?.sendDtmf(digits);
   }
 
+  /// Play DTMF digits locally.
+  void playDtmf(String digits) {
+    _engine?.playDtmf(digits);
+  }
+
   /// Toggle mute on the active call.
   void setMute(bool muted) {
     _engine?.setMute(muted);
@@ -277,6 +286,18 @@ class EngineChannel {
       case 'CallStateChanged':
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
         final state = CallState.fromString(payload['state'] as String? ?? '');
+
+        // Handle Audio Feedback
+        if (state == CallState.ringing) {
+          if (payload['direction'] == 'Incoming') {
+            AudioService.instance.startRingtone();
+          } else {
+            AudioService.instance.startRingback();
+          }
+        } else if (state == CallState.inCall || state == CallState.ended) {
+          AudioService.instance.stopAll();
+        }
+
         if (state == CallState.ended) {
           if (activeCall?.callId == callId) {
             // Save to Isar

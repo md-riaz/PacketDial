@@ -26,6 +26,7 @@ dependencies:
   shared_preferences: ^2.2.3
   desktop_multi_window: ^0.3.0
   phone_numbers_parser: ^8.3.0
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -39,6 +40,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/app_icon.png
+    - assets/sounds/
 
 flutter_launcher_icons:
   android: false
