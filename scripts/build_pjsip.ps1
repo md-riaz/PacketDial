@@ -161,7 +161,6 @@ Write-Info "This may take 5-20 minutes on first run…"
 
 $MsBuildArgs = @(
     $SlnFile.FullName,
-    '/t:pjsua2_lib',
     '/p:Configuration=Release',
     '/p:Platform=x64',
     '/p:PlatformToolset=v143',  # Use VS 2022 toolset instead of v140 (VS 2015)
