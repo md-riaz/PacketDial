@@ -17,9 +17,10 @@ class RegistrationResult {
   const RegistrationResult({required this.success, this.errorReason});
 }
 
-final accountServiceProvider = Provider((ref) => AccountService(ref));
+final accountServiceProvider =
+    ChangeNotifierProvider((ref) => AccountService(ref));
 
-class AccountService {
+class AccountService extends ChangeNotifier {
   final Ref _ref;
   Isar? isar;
 
@@ -191,6 +192,7 @@ class AccountService {
         unregister(a.uuid);
       }
     }
+    notifyListeners();
   }
 
   Future<void> saveAccount(AccountSchema account) async {
@@ -207,12 +209,14 @@ class AccountService {
       }
       await isar!.accountSchemas.put(account);
     });
+    notifyListeners();
   }
 
   Future<void> deleteAccount(String uuid) async {
     await isar!.writeTxn(() async {
       await isar!.accountSchemas.filter().uuidEqualTo(uuid).deleteAll();
     });
+    notifyListeners();
   }
 
   // Registration bridge

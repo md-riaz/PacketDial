@@ -395,19 +395,28 @@ int pd_init(const char *user_agent,
         return (int)status;
     }
 
-    /* Fallback to null audio device if the system has no audio devices
-     * (e.g. headless Windows VMs). Otherwise pjsua_call_make_call fails
-     * with PJMEDIA_EAUD_NODEFDEV (420006). */
-    if (g_on_log) g_on_log(3, "Using null sound device to avoid PJMEDIA_EAUD_NODEFDEV on VMs");
-    pj_status_t aud_st = pjsua_set_null_snd_dev();
-    if (aud_st != PJ_SUCCESS && g_on_log) {
-        char err_msg[256];
-        pj_strerror(aud_st, err_msg, sizeof(err_msg));
-        char buf[512];
-        snprintf(buf, sizeof(buf), "pjsua_set_null_snd_dev failed: %d (%s)", aud_st, err_msg);
-        g_on_log(1, buf);
-    } else if (g_on_log) {
-        g_on_log(4, "Set pjsua_set_null_snd_dev() successfully");
+    /* Only fallback to null audio device if the system has no physical audio devices
+     * (e.g. headless Windows VMs). Forced null device on real hardware causes silence. */
+    pjmedia_aud_dev_info dummy_infos[1];
+    unsigned dev_count = 1;
+    pjsua_enum_aud_devs(dummy_infos, &dev_count);
+
+    if (dev_count == 0) {
+        if (g_on_log) g_on_log(3, "No audio devices found, using null sound device as fallback");
+        pj_status_t aud_st = pjsua_set_null_snd_dev();
+        if (aud_st != PJ_SUCCESS && g_on_log) {
+            char err_msg[256];
+            pj_strerror(aud_st, err_msg, sizeof(err_msg));
+            char buf[512];
+            snprintf(buf, sizeof(buf), "pjsua_set_null_snd_dev failed: %d (%s)", aud_st, err_msg);
+            g_on_log(1, buf);
+        }
+    } else {
+        if (g_on_log) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "Found %u audio devices, using default hardware device", dev_count);
+            g_on_log(4, buf);
+        }
     }
 
     return 0;

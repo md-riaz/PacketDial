@@ -14,7 +14,7 @@ import '../models/media_stats.dart';
 import '../providers/engine_provider.dart';
 
 final selectedAccountProvider = FutureProvider<AccountSchema?>((ref) {
-  return ref.read(accountServiceProvider).getSelectedAccount();
+  return ref.watch(accountServiceProvider).getSelectedAccount();
 });
 
 class DialerScreen extends ConsumerStatefulWidget {

@@ -6,7 +6,7 @@ import '../models/account_schema.dart';
 import '../providers/engine_provider.dart';
 
 final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
-  return ref.read(accountServiceProvider).getAllAccounts();
+  return ref.watch(accountServiceProvider).getAllAccounts();
 });
 
 class AccountsScreen extends ConsumerStatefulWidget {

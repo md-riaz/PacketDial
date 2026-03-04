@@ -1396,6 +1396,8 @@ fn cmd_call_hold(p: &serde_json::Value) -> EngineErrorCode {
                     }
                 } else {
                     call.state = CallState::InCall;
+                    // Fix: Reset resumed timestamp so the UI timer continues ticking
+                    call.last_resumed_at = Some(now_secs());
                 }
                 push_call_state(call);
                 call.pjsip_call_id
@@ -1480,6 +1482,25 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
         *AUDIO_DEVICES.lock().unwrap() = real_devices;
         SELECTED_INPUT.store(selected_in, Ordering::Relaxed);
         SELECTED_OUTPUT.store(selected_out, Ordering::Relaxed);
+    }
+
+    // Ensure we have at least one input and one output for the UI's Pre-flight Checklist
+    {
+        let mut devices = AUDIO_DEVICES.lock().unwrap();
+        if !devices.iter().any(|d| d.kind == AudioDeviceKind::Input) {
+            devices.push(AudioDevice {
+                id: 998,
+                name: "Default Input".to_owned(),
+                kind: AudioDeviceKind::Input,
+            });
+        }
+        if !devices.iter().any(|d| d.kind == AudioDeviceKind::Output) {
+            devices.push(AudioDevice {
+                id: 999,
+                name: "Default Output".to_owned(),
+                kind: AudioDeviceKind::Output,
+            });
+        }
     }
 
     // Build and push the event (shared by both paths)
