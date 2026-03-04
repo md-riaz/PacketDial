@@ -46,7 +46,7 @@ class WindowPrefs {
   Future<void> restoreGeometry() async {
     if (!hasSavedGeometry) return;
     final w = _prefs.getDouble(_kW) ?? 360;
-    final h = _prefs.getDouble(_kH) ?? 640;
+    final h = _prefs.getDouble(_kH) ?? 760;
     final x = _prefs.getDouble(_kX);
     final y = _prefs.getDouble(_kY);
 

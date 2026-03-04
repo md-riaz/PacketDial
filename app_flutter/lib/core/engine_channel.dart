@@ -341,9 +341,8 @@ class EngineChannel {
             state: state,
             muted: payload['muted'] as bool? ?? false,
             onHold: payload['on_hold'] as bool? ?? false,
-            startedAt: (state == CallState.inCall)
-                ? DateTime.now()
-                : activeCall?.startedAt,
+            startedAt: activeCall?.startedAt ??
+                ((state == CallState.inCall) ? DateTime.now() : null),
           );
         }
 

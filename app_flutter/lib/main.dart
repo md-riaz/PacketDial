@@ -59,7 +59,7 @@ void main(List<String> args) async {
   await windowPrefs.init();
 
   WindowOptions windowOptions = const WindowOptions(
-    size: Size(360, 640),
+    size: Size(360, 760),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -120,8 +120,8 @@ void main(List<String> args) async {
 
   // Initialize Bitsdojo Window
   doWhenWindowReady(() {
-    const initialSize = Size(360, 640);
-    appWindow.minSize = const Size(320, 480);
+    const initialSize = Size(360, 760);
+    appWindow.minSize = const Size(320, 700);
     appWindow.size = initialSize;
     appWindow.alignment = Alignment.center;
     appWindow.title = "PacketDial";
@@ -152,9 +152,9 @@ class _AppState extends State<App>
   bool _alwaysOnTop = false;
 
   static final _screens = [
-    const AccountsScreen(),
     const DialerScreen(),
     const HistoryScreen(),
+    const AccountsScreen(),
     const DiagnosticsScreen(),
   ];
 
@@ -505,11 +505,6 @@ class _AppState extends State<App>
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.manage_accounts_outlined),
-            selectedIcon: Icon(Icons.manage_accounts),
-            label: 'Accounts',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.dialpad_outlined),
             selectedIcon: Icon(Icons.dialpad),
             label: 'Dialer',
@@ -518,6 +513,11 @@ class _AppState extends State<App>
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.manage_accounts_outlined),
+            selectedIcon: Icon(Icons.manage_accounts),
+            label: 'Accounts',
           ),
           NavigationDestination(
             icon: Icon(Icons.bug_report_outlined),
