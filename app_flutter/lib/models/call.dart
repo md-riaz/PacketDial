@@ -39,6 +39,8 @@ class ActiveCall {
   final bool muted;
   final bool onHold;
   final DateTime? startedAt;
+  final int accumulatedSeconds;
+  final DateTime? lastResumedAt;
 
   const ActiveCall({
     required this.callId,
@@ -49,6 +51,8 @@ class ActiveCall {
     required this.muted,
     required this.onHold,
     this.startedAt,
+    this.accumulatedSeconds = 0,
+    this.lastResumedAt,
   });
 
   ActiveCall copyWith({
@@ -56,6 +60,8 @@ class ActiveCall {
     bool? muted,
     bool? onHold,
     DateTime? startedAt,
+    int? accumulatedSeconds,
+    DateTime? lastResumedAt,
   }) =>
       ActiveCall(
         callId: callId,
@@ -66,5 +72,7 @@ class ActiveCall {
         muted: muted ?? this.muted,
         onHold: onHold ?? this.onHold,
         startedAt: startedAt ?? this.startedAt,
+        accumulatedSeconds: accumulatedSeconds ?? this.accumulatedSeconds,
+        lastResumedAt: lastResumedAt ?? this.lastResumedAt,
       );
 }

@@ -343,6 +343,11 @@ class EngineChannel {
             onHold: payload['on_hold'] as bool? ?? false,
             startedAt: activeCall?.startedAt ??
                 ((state == CallState.inCall) ? DateTime.now() : null),
+            accumulatedSeconds: payload['accumulated_active_secs'] as int? ?? 0,
+            lastResumedAt: payload['last_resumed_at'] != null
+                ? DateTime.fromMillisecondsSinceEpoch(
+                    (payload['last_resumed_at'] as int) * 1000)
+                : null,
           );
         }
 

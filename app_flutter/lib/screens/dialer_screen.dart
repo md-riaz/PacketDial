@@ -616,7 +616,11 @@ class _ActiveCallCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _TimerWidget(startTime: call.startedAt),
+              _TimerWidget(
+                startTime: call.startedAt,
+                accumulatedSeconds: call.accumulatedSeconds,
+                lastResumedAt: call.lastResumedAt,
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -756,7 +760,14 @@ class _CallControlButton extends StatelessWidget {
 // ── Call Timer Widget ────────────────────────────────────────────────────
 class _TimerWidget extends StatefulWidget {
   final DateTime? startTime;
-  const _TimerWidget({this.startTime});
+  final int accumulatedSeconds;
+  final DateTime? lastResumedAt;
+
+  const _TimerWidget({
+    this.startTime,
+    this.accumulatedSeconds = 0,
+    this.lastResumedAt,
+  });
 
   @override
   State<_TimerWidget> createState() => _TimerWidgetState();
@@ -775,7 +786,9 @@ class _TimerWidgetState extends State<_TimerWidget> {
   @override
   void didUpdateWidget(_TimerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.startTime != widget.startTime) {
+    if (oldWidget.startTime != widget.startTime ||
+        oldWidget.lastResumedAt != widget.lastResumedAt ||
+        oldWidget.accumulatedSeconds != widget.accumulatedSeconds) {
       _startTimer();
     }
   }
@@ -794,13 +807,20 @@ class _TimerWidgetState extends State<_TimerWidget> {
     }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _duration = DateTime.now().difference(widget.startTime!);
-      });
+      _updateDuration();
     });
     // Initial sync
+    _updateDuration();
+  }
+
+  void _updateDuration() {
     setState(() {
-      _duration = DateTime.now().difference(widget.startTime!);
+      if (widget.lastResumedAt != null) {
+        _duration = Duration(seconds: widget.accumulatedSeconds) +
+            DateTime.now().difference(widget.lastResumedAt!);
+      } else {
+        _duration = Duration(seconds: widget.accumulatedSeconds);
+      }
     });
   }
 

@@ -190,6 +190,10 @@ struct Call {
     muted: bool,
     on_hold: bool,
     started_at: u64,
+    /// Accumulated active duration (talk time) in seconds.
+    accumulated_active_secs: u64,
+    /// Timestamp of the last time the call was resumed/started.
+    last_resumed_at: Option<u64>,
     /// PJSIP call id used for shim operations
     /// (None before the call is wired to PJSIP).
     pjsip_call_id: Option<i32>,
@@ -469,6 +473,8 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
         muted: false,
         on_hold: false,
         started_at: now_secs(),
+        accumulated_active_secs: 0,
+        last_resumed_at: None,
         pjsip_call_id: Some(pj_call_id),
     };
 
@@ -518,29 +524,41 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
     {
         let mut calls = CALLS.lock().unwrap();
         if let Some(call) = calls.iter_mut().find(|c| c.id == our_call_id) {
+            let old_state = call.state.clone();
             call.state = new_state.clone();
+
+            // Transition logic for duration tracking
+            if new_state == CallState::InCall && old_state != CallState::InCall {
+                call.last_resumed_at = Some(now_secs());
+            } else if (new_state == CallState::Ended || new_state == CallState::OnHold)
+                && old_state == CallState::InCall
+            {
+                if let Some(resumed_at) = call.last_resumed_at.take() {
+                    call.accumulated_active_secs += now_secs().saturating_sub(resumed_at);
+                }
+            }
+
             push_call_state(call);
+
+            if should_record_history {
+                let ended_at = now_secs();
+                let entry = CallHistoryEntry {
+                    call_id: call.id,
+                    account_id: call.account_id.clone(),
+                    uri: call.uri.clone(),
+                    direction: call.direction.variant_name().to_owned(),
+                    started_at: call.started_at,
+                    ended_at,
+                    duration_secs: call.accumulated_active_secs,
+                    end_state: "Ended".to_owned(),
+                };
+                CALL_HISTORY.lock().unwrap().push(entry);
+                MEDIA_STATS.lock().unwrap().remove(&our_call_id);
+            }
         }
     }
 
     if should_record_history {
-        let mut calls = CALLS.lock().unwrap();
-        if let Some(call) = calls.iter_mut().find(|c| c.id == our_call_id) {
-            let ended_at = now_secs();
-            let duration = ended_at.saturating_sub(call.started_at);
-            let entry = CallHistoryEntry {
-                call_id: call.id,
-                account_id: call.account_id.clone(),
-                uri: call.uri.clone(),
-                direction: call.direction.variant_name().to_owned(),
-                started_at: call.started_at,
-                ended_at,
-                duration_secs: duration,
-                end_state: "Ended".to_owned(),
-            };
-            CALL_HISTORY.lock().unwrap().push(entry);
-            MEDIA_STATS.lock().unwrap().remove(&our_call_id);
-        }
         // Remove from PJSIP call map
         PJSIP_CALL_MAP.lock().unwrap().remove(&pj_call_id);
     }
@@ -556,26 +574,41 @@ extern "C" fn pjsip_on_call_media(pj_call_id: i32, active: i32) {
     };
 
     if let Some(cid) = our_call_id {
-        // Update hold state based on media activity
-        let on_hold = active == 0;
-        {
-            let mut calls = CALLS.lock().unwrap();
-            if let Some(call) = calls.iter_mut().find(|c| c.id == cid) {
-                if call.state == CallState::InCall || call.state == CallState::OnHold {
-                    call.on_hold = on_hold;
-                    if on_hold {
-                        call.state = CallState::OnHold;
-                    } else {
-                        call.state = CallState::InCall;
+        let mut calls = CALLS.lock().unwrap();
+        if let Some(call) = calls.iter_mut().find(|c| c.id == cid) {
+            let old_on_hold = call.on_hold;
+
+            if active != 0 {
+                // Media is active
+                // Sticky behavior: re-apply mute if user set it before stream was ready
+                if call.muted {
+                    unsafe { pd_call_set_mute(pj_call_id, 1) };
+                }
+
+                if call.on_hold {
+                    // User wanted hold, but media just became active (e.g. call connected)
+                    // Re-apply hold to stay in hold state
+                    unsafe { pd_call_hold(pj_call_id, 1) };
+                    call.state = CallState::OnHold;
+                } else {
+                    call.state = CallState::InCall;
+                    if old_on_hold {
+                        call.last_resumed_at = Some(now_secs());
                     }
-                    push_call_state(call);
+                }
+            } else {
+                // Media is inactive (On Hold)
+                call.on_hold = true;
+                call.state = CallState::OnHold;
+                if let Some(resumed_at) = call.last_resumed_at.take() {
+                    call.accumulated_active_secs += now_secs().saturating_sub(resumed_at);
                 }
             }
+            push_call_state(call);
         }
     }
 
     if active != 0 {
-        // Poll initial media stats
         pjsip_poll_media_stats(pj_call_id);
     }
 }
@@ -839,15 +872,21 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
 }
 
 fn push_call_state(call: &Call) {
+    let last_resumed_at_val = call
+        .last_resumed_at
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "null".to_owned());
     push_event(format!(
-        r#"{{"type":"CallStateChanged","payload":{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","state":"{}","muted":{},"on_hold":{}}}}}"#,
+        r#"{{"type":"CallStateChanged","payload":{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","state":"{}","muted":{},"on_hold":{},"accumulated_active_secs":{},"last_resumed_at":{}}}}}"#,
         call.id,
         call.account_id,
         call.uri,
         call.direction.variant_name(),
         call.state.variant_name(),
         call.muted,
-        call.on_hold
+        call.on_hold,
+        call.accumulated_active_secs,
+        last_resumed_at_val
     ));
 }
 
@@ -1201,6 +1240,8 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             muted: false,
             on_hold: false,
             started_at: now_secs(),
+            accumulated_active_secs: 0,
+            last_resumed_at: None,
             pjsip_call_id: Some(pj_call_id),
         };
         push_call_state(&call);
@@ -1262,126 +1303,111 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_call_hangup(p: &serde_json::Value) -> EngineErrorCode {
-    let mut calls_guard = CALLS.lock().unwrap();
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => Some(n as u32),
-        None => {
-            // Find first active call
-            calls_guard
+    let pj_id = {
+        let calls_guard = CALLS.lock().unwrap();
+        let call_id = match p["call_id"].as_u64() {
+            Some(n) => Some(n as u32),
+            None => calls_guard
                 .iter()
                 .find(|c| c.state != CallState::Ended)
-                .map(|c| c.id)
+                .map(|c| c.id),
+        };
+        match call_id {
+            Some(id) => calls_guard
+                .iter()
+                .find(|c| c.id == id)
+                .and_then(|c| c.pjsip_call_id),
+            None => return EngineErrorCode::NotFound,
         }
     };
-    let call_id = match call_id {
-        Some(id) => id,
-        None => return EngineErrorCode::NotFound,
-    };
 
-    match calls_guard.iter_mut().find(|c| c.id == call_id) {
-        None => EngineErrorCode::NotFound,
-        Some(call) => {
-            // Hang up via PJSIP shim
-            match call.pjsip_call_id {
-                Some(pj_id) => {
-                    let rc = unsafe { pd_call_hangup(pj_id) };
-                    if rc != 0 {
-                        log_engine(
-                            LogLevel::Warn,
-                            &format!("CallHangup: pd_call_hangup({pj_id}) rc={rc}"),
-                        );
-                    }
-                    // on_call_state(DISCONNECTED) callback will record history
-                    EngineErrorCode::Ok
-                }
-                None => {
-                    log_engine(
-                        LogLevel::Error,
-                        &format!("CallHangup: call {call_id} has no PJSIP call id"),
-                    );
-                    EngineErrorCode::NotFound
-                }
+    match pj_id {
+        Some(pj_id) => {
+            // Hang up via PJSIP shim - NO LOCK HELD during external call
+            let rc = unsafe { pd_call_hangup(pj_id) };
+            if rc != 0 {
+                log_engine(
+                    LogLevel::Warn,
+                    &format!("CallHangup: pd_call_hangup({pj_id}) rc={rc}"),
+                );
             }
+            EngineErrorCode::Ok
+        }
+        None => {
+            // If we found a call_id but no pjsip_id, it might already be ended or not yet wired
+            EngineErrorCode::NotFound
         }
     }
 }
 
 fn cmd_call_mute(p: &serde_json::Value) -> EngineErrorCode {
     let muted = p["muted"].as_bool().unwrap_or(true);
-    let mut calls_guard = CALLS.lock().unwrap();
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => Some(n as u32),
-        None => {
-            // Use first active call
-            calls_guard
+    let pj_id_opt = {
+        let mut calls_guard = CALLS.lock().unwrap();
+        let call_id = match p["call_id"].as_u64() {
+            Some(n) => Some(n as u32),
+            None => calls_guard
                 .iter()
                 .find(|c| c.state != CallState::Ended)
-                .map(|c| c.id)
+                .map(|c| c.id),
         }
-    };
-    let call_id = match call_id {
-        Some(id) => id,
-        None => return EngineErrorCode::NotFound,
+        .unwrap_or(0); // fallback or error
+
+        match calls_guard.iter_mut().find(|c| c.id == call_id) {
+            None => return EngineErrorCode::NotFound,
+            Some(call) => {
+                call.muted = muted;
+                let pj_id = call.pjsip_call_id;
+                push_call_state(call);
+                pj_id
+            }
+        }
     };
 
-    match calls_guard.iter_mut().find(|c| c.id == call_id) {
-        None => EngineErrorCode::NotFound,
-        Some(call) => {
-            // Mute via PJSIP conference bridge
-            if let Some(pj_id) = call.pjsip_call_id {
-                unsafe { pd_call_set_mute(pj_id, if muted { 1 } else { 0 }) };
-            }
-            call.muted = muted;
-            push_call_state(call);
-            EngineErrorCode::Ok
-        }
+    if let Some(pj_id) = pj_id_opt {
+        // Mute via PJSIP - NO LOCK HELD
+        unsafe { pd_call_set_mute(pj_id, if muted { 1 } else { 0 }) };
     }
+    EngineErrorCode::Ok
 }
 
 fn cmd_call_hold(p: &serde_json::Value) -> EngineErrorCode {
     let hold = p["hold"].as_bool().unwrap_or(true);
-    let mut calls_guard = CALLS.lock().unwrap();
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => Some(n as u32),
-        None => {
-            // Use first active call
-            calls_guard
+    let pj_id_opt = {
+        let mut calls_guard = CALLS.lock().unwrap();
+        let call_id = match p["call_id"].as_u64() {
+            Some(n) => Some(n as u32),
+            None => calls_guard
                 .iter()
                 .find(|c| c.state != CallState::Ended)
-                .map(|c| c.id)
+                .map(|c| c.id),
         }
-    };
-    let call_id = match call_id {
-        Some(id) => id,
-        None => return EngineErrorCode::NotFound,
-    };
+        .unwrap_or(0);
 
-    match calls_guard.iter_mut().find(|c| c.id == call_id) {
-        None => EngineErrorCode::NotFound,
-        Some(call) => {
-            // Hold via PJSIP re-INVITE
-            match call.pjsip_call_id {
-                Some(pj_id) => {
-                    let rc = unsafe { pd_call_hold(pj_id, if hold { 1 } else { 0 }) };
-                    if rc != 0 {
-                        log_engine(
-                            LogLevel::Warn,
-                            &format!("CallHold: pd_call_hold({pj_id}, hold={hold}) rc={rc}"),
-                        );
+        match calls_guard.iter_mut().find(|c| c.id == call_id) {
+            None => return EngineErrorCode::NotFound,
+            Some(call) => {
+                call.on_hold = hold;
+                // Immediate state update for UI responsiveness
+                if hold {
+                    call.state = CallState::OnHold;
+                    if let Some(resumed_at) = call.last_resumed_at.take() {
+                        call.accumulated_active_secs += now_secs().saturating_sub(resumed_at);
                     }
-                    // on_call_media callback will update the hold state
-                    EngineErrorCode::Ok
+                } else {
+                    call.state = CallState::InCall;
                 }
-                None => {
-                    log_engine(
-                        LogLevel::Error,
-                        &format!("CallHold: call {call_id} has no PJSIP call id"),
-                    );
-                    EngineErrorCode::NotFound
-                }
+                push_call_state(call);
+                call.pjsip_call_id
             }
         }
+    };
+
+    if let Some(pj_id) = pj_id_opt {
+        // Hold via PJSIP re-INVITE - NO LOCK HELD
+        unsafe { pd_call_hold(pj_id, if hold { 1 } else { 0 }) };
     }
+    EngineErrorCode::Ok
 }
 
 fn cmd_media_stats_update(p: &serde_json::Value) -> EngineErrorCode {
