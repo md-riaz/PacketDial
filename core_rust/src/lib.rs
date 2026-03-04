@@ -1842,11 +1842,6 @@ pub extern "C" fn engine_shutdown() -> i32 {
         }
         log_engine(LogLevel::Info, "Engine shutting down");
 
-        // Remove all PJSIP accounts to ensure clean unregistration
-        let pj_acc_ids: Vec<i32> = PJSIP_ACC_MAP.lock().unwrap().keys().copied().collect();
-        for pj_id in pj_acc_ids {
-            unsafe { pd_acc_remove(pj_id) };
-        }
         PJSIP_ACC_MAP.lock().unwrap().clear();
         PJSIP_CALL_MAP.lock().unwrap().clear();
         unsafe { pd_shutdown() };

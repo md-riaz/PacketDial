@@ -305,6 +305,8 @@ class _AppState extends State<App>
     }
     // Save window geometry before closing
     await widget.windowPrefs.saveGeometry();
+    // Hide immediately so the app feels instant while cleanup happens
+    await windowManager.hide();
     await windowManager.destroy();
   }
 
