@@ -38,7 +38,10 @@ jobs:
       - name: Package release artifact
         shell: pwsh
         run: |
-          subst X: "$env:GITHUB_WORKSPACE"
+          # Check if X: is already mapped, if not map it
+          if (-not (Test-Path X:)) {
+            subst X: "$env:GITHUB_WORKSPACE"
+          }
           X:
           .\scripts\package.ps1
 

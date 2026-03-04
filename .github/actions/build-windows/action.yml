@@ -11,7 +11,10 @@ runs:
     - name: Map workspace to short path
       shell: pwsh
       run: |
-        subst X: "$env:GITHUB_WORKSPACE"
+        # Check if X: is already mapped, if not map it
+        if (-not (Test-Path X:)) {
+          subst X: "$env:GITHUB_WORKSPACE"
+        }
         Write-Host "Mapped workspace to X:"
 
     - name: Install Rust
