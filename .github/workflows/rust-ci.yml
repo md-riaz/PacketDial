@@ -7,7 +7,7 @@ on:
 jobs:
   test:
     name: Rust tests & lint
-    runs-on: ubuntu-latest
+    runs-on: windows-2025
     permissions:
       contents: read
     defaults:
@@ -25,9 +25,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            core_rust/target
+            ~\.cargo\registry
+            ~\.cargo\git
+            core_rust\target
           key: ${{ runner.os }}-cargo-${{ hashFiles('core_rust/Cargo.lock') }}
 
       - name: cargo test (core_rust)
