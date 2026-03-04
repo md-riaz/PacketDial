@@ -264,11 +264,35 @@ static pjsip_module pd_sip_capture_mod = {
 };
 
 /* -----------------------------------------------------------------------
+ * Configuration
+ * ----------------------------------------------------------------------- */
+
+void pd_config_default(PdConfig *cfg)
+{
+    if (!cfg) return;
+
+    cfg->user_agent      = NULL;
+    cfg->stun_server     = NULL;
+    cfg->max_calls       = 0;      /* Use PJSIP default (4) */
+
+    cfg->clock_rate      = 0;      /* Use default (16000) */
+    cfg->snd_clock_rate  = 0;      /* Follow clock_rate */
+    cfg->ec_tail_len     = 0;      /* Use default (200) */
+    cfg->no_vad          = 0;      /* Enable VAD */
+
+    cfg->log_level       = 0;      /* Use default (4) */
+    cfg->console_level   = 0;      /* Suppress console output */
+    cfg->msg_logging     = 1;      /* Enable SIP message logging */
+
+    cfg->udp_port        = 0;      /* OS-assigned */
+    cfg->tcp_port        = 0;      /* OS-assigned */
+}
+
+/* -----------------------------------------------------------------------
  * pd_init
  * ----------------------------------------------------------------------- */
 
-int pd_init(const char *user_agent,
-            const char *stun_server,
+int pd_init(const PdConfig   *cfg,
             PdOnRegState     on_reg,
             PdOnIncomingCall on_incoming,
             PdOnCallState    on_call,
@@ -277,6 +301,8 @@ int pd_init(const char *user_agent,
             PdOnSipMsg       on_sip_msg)
 {
     pj_status_t status;
+
+    if (!cfg) return PJ_EINVAL;
 
     /* Save callbacks */
     g_on_reg      = on_reg;
@@ -293,10 +319,10 @@ int pd_init(const char *user_agent,
     /* Logging config */
     pjsua_logging_config log_cfg;
     pjsua_logging_config_default(&log_cfg);
-    log_cfg.level      = 4;          /* capture up to debug from pjsip */
-    log_cfg.console_level = 0;       /* suppress console output */
-    log_cfg.cb         = pj_log_writer;
-    log_cfg.msg_logging = PJ_TRUE;   /* enable SIP message logging */
+    log_cfg.level         = cfg->log_level > 0 ? cfg->log_level : 4;
+    log_cfg.console_level = cfg->console_level;
+    log_cfg.cb            = pj_log_writer;
+    log_cfg.msg_logging   = cfg->msg_logging ? PJ_TRUE : PJ_FALSE;
 
     /* UA config */
     pjsua_config ua_cfg;
@@ -307,15 +333,15 @@ int pd_init(const char *user_agent,
     ua_cfg.cb.on_call_media_state = on_call_media_state;
     ua_cfg.cb.on_call_tsx_state = on_call_tsx_state;
 
-    if (user_agent && user_agent[0] != '\0') {
-        ua_cfg.user_agent = S(user_agent);
+    if (cfg->user_agent && cfg->user_agent[0] != '\0') {
+        ua_cfg.user_agent = S(cfg->user_agent);
     }
 
-    ua_cfg.max_calls            = 8;
+    ua_cfg.max_calls = cfg->max_calls > 0 ? cfg->max_calls : 8;
 
-    if (stun_server && stun_server[0] != '\0') {
+    if (cfg->stun_server && cfg->stun_server[0] != '\0') {
         ua_cfg.stun_srv_cnt = 1;
-        ua_cfg.stun_srv[0]  = S(stun_server);
+        ua_cfg.stun_srv[0]  = S(cfg->stun_server);
     }
 
     /* Media config */
@@ -323,12 +349,12 @@ int pd_init(const char *user_agent,
     pjsua_media_config_default(&med_cfg);
     /* 16 kHz wideband audio: good balance of quality and bandwidth for VOIP.
      * Set to 8000 for narrowband (G.711) compatibility if needed. */
-    med_cfg.clock_rate     = 16000;
-    med_cfg.snd_clock_rate = 0;       /* follow clock_rate */
+    med_cfg.clock_rate     = cfg->clock_rate > 0 ? cfg->clock_rate : 16000;
+    med_cfg.snd_clock_rate = cfg->snd_clock_rate;
     /* 200 ms echo-canceller tail covers typical room acoustics; increase to
      * 500 ms for far-end echo on speaker-phone setups. */
-    med_cfg.ec_tail_len    = 200;
-    med_cfg.no_vad         = PJ_FALSE;
+    med_cfg.ec_tail_len    = cfg->ec_tail_len > 0 ? cfg->ec_tail_len : 200;
+    med_cfg.no_vad         = cfg->no_vad ? PJ_TRUE : PJ_FALSE;
 
     status = pjsua_init(&ua_cfg, &log_cfg, &med_cfg);
     if (status != PJ_SUCCESS) {
@@ -345,10 +371,10 @@ int pd_init(const char *user_agent,
         if (g_on_log) g_on_log(2, "Warning: SIP capture module registration failed");
     }
 
-    /* Create UDP transport (port 0 = OS-assigned) */
+    /* Create UDP transport */
     pjsua_transport_config tp_cfg;
     pjsua_transport_config_default(&tp_cfg);
-    tp_cfg.port = 0;
+    tp_cfg.port = cfg->udp_port;
 
     status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &tp_cfg, &g_udp_tp);
     if (status != PJ_SUCCESS) {
@@ -357,6 +383,7 @@ int pd_init(const char *user_agent,
     }
 
     /* Create TCP transport (optional — ignore failure) */
+    tp_cfg.port = cfg->tcp_port;
     status = pjsua_transport_create(PJSIP_TRANSPORT_TCP, &tp_cfg, &g_tcp_tp);
     if (status != PJ_SUCCESS) {
         g_tcp_tp = PJSUA_INVALID_ID; /* TCP unavailable — UDP only */

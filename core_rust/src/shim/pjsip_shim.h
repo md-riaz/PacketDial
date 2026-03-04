@@ -72,6 +72,43 @@ typedef void (*PdOnLog)(int level, const char *msg);
 typedef void (*PdOnSipMsg)(int call_id, int is_tx, const char *msg);
 
 /* -----------------------------------------------------------------------
+ * Configuration structures
+ * ----------------------------------------------------------------------- */
+
+/**
+ * PJSUA configuration parameters.
+ * All fields map to pjsua_config, pjsua_media_config, and pjsua_logging_config.
+ * Zero/NULL values will use PJSIP defaults.
+ */
+typedef struct PdConfig {
+    /* UA configuration (maps to pjsua_config) */
+    const char *user_agent;       /* User-Agent header value (NULL = default) */
+    const char *stun_server;      /* STUN server "host:port" (NULL = disabled) */
+    int         max_calls;        /* Maximum concurrent calls (0 = default 4) */
+
+    /* Media configuration (maps to pjsua_media_config) */
+    int         clock_rate;       /* Media clock rate in Hz (0 = default 16000) */
+    int         snd_clock_rate;   /* Sound device clock rate (0 = follow clock_rate) */
+    int         ec_tail_len;      /* Echo cancellation tail length in ms (0 = default 200) */
+    int         no_vad;           /* 1 to disable VAD, 0 to enable (default) */
+
+    /* Logging configuration (maps to pjsua_logging_config) */
+    int         log_level;        /* Log level 0-6 (0 = default 4) */
+    int         console_level;    /* Console log level (0 = suppress) */
+    int         msg_logging;      /* 1 to enable SIP message logging, 0 to disable */
+
+    /* Transport configuration */
+    int         udp_port;         /* UDP transport port (0 = OS-assigned) */
+    int         tcp_port;         /* TCP transport port (0 = OS-assigned) */
+} PdConfig;
+
+/**
+ * Initialize a PdConfig structure with default values.
+ * @param cfg  Pointer to PdConfig structure to initialize.
+ */
+void pd_config_default(PdConfig *cfg);
+
+/* -----------------------------------------------------------------------
  * Lifecycle
  * ----------------------------------------------------------------------- */
 
@@ -79,17 +116,16 @@ typedef void (*PdOnSipMsg)(int call_id, int is_tx, const char *msg);
  * Initialise pjsua, create transports, and start the worker thread.
  * Must be called once before any other pd_* function.
  *
- * @param stun_server  "host:port" string for STUN, or NULL to disable.
- * @param on_reg       Callback for registration state changes.
- * @param on_incoming  Callback for incoming calls.
- * @param on_call      Callback for call state changes.
- * @param on_media     Callback for call media state changes.
- * @param on_log       Callback for log messages.
- * @param on_sip_msg   Callback for raw SIP messages.
+ * @param cfg         Configuration parameters (use pd_config_default() to initialize).
+ * @param on_reg      Callback for registration state changes.
+ * @param on_incoming Callback for incoming calls.
+ * @param on_call     Callback for call state changes.
+ * @param on_media    Callback for call media state changes.
+ * @param on_log      Callback for log messages.
+ * @param on_sip_msg  Callback for raw SIP messages.
  * @return 0 on success, non-zero pj_status_t on error.
  */
-int pd_init(const char *user_agent,
-            const char *stun_server,
+int pd_init(const PdConfig   *cfg,
             PdOnRegState     on_reg,
             PdOnIncomingCall on_incoming,
             PdOnCallState    on_call,

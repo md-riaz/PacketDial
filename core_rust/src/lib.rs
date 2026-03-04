@@ -289,10 +289,47 @@ fn now_secs() -> u64 {
 // every call from Rust goes through a thin, stable C boundary.
 // ---------------------------------------------------------------------------
 
+/// PdConfig structure matching the C definition in pjsip_shim.h
+#[repr(C)]
+#[derive(Debug, Clone)]
+struct PdConfig {
+    user_agent: *const c_char,
+    stun_server: *const c_char,
+    max_calls: i32,
+    clock_rate: i32,
+    snd_clock_rate: i32,
+    ec_tail_len: i32,
+    no_vad: i32,
+    log_level: i32,
+    console_level: i32,
+    msg_logging: i32,
+    udp_port: i32,
+    tcp_port: i32,
+}
+
+impl Default for PdConfig {
+    fn default() -> Self {
+        Self {
+            user_agent: std::ptr::null(),
+            stun_server: std::ptr::null(),
+            max_calls: 8,
+            clock_rate: 16000,
+            snd_clock_rate: 0,
+            ec_tail_len: 200,
+            no_vad: 0,
+            log_level: 4,
+            console_level: 0,
+            msg_logging: 1,
+            udp_port: 0,
+            tcp_port: 0,
+        }
+    }
+}
+
 extern "C" {
+    fn pd_config_default(cfg: *mut PdConfig);
     fn pd_init(
-        user_agent: *const c_char,
-        stun_server: *const c_char,
+        cfg: *const PdConfig,
         on_reg: extern "C" fn(i32, i32, i32, *const c_char),
         on_incoming: extern "C" fn(i32, i32, *const c_char),
         on_call: extern "C" fn(i32, i32, i32),
@@ -1751,10 +1788,14 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
             return EngineErrorCode::AlreadyInitialized as i32;
         }
 
+        // Create and populate PdConfig structure
+        let mut config = PdConfig::default();
+        config.user_agent = user_agent;
+        config.stun_server = std::ptr::null(); // no global STUN; set per-account
+
         let rc = unsafe {
             pd_init(
-                user_agent,
-                std::ptr::null(), // no global STUN; set per-account
+                &config,
                 pjsip_on_reg_state,
                 pjsip_on_incoming_call,
                 pjsip_on_call_state,
