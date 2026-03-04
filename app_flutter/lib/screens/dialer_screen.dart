@@ -628,25 +628,33 @@ class _ActiveCallCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _CallControlButton(
-                  icon: call.muted ? Icons.mic_off : Icons.mic,
-                  label: 'MUTE',
-                  active: call.muted,
-                  onTap: () => EngineChannel.instance.setMute(!call.muted)),
+                icon: call.muted ? Icons.mic_off : Icons.mic,
+                label: 'MUTE',
+                active: call.muted,
+                enabled: call.state != CallState.ringing,
+                onTap: () => EngineChannel.instance.setMute(!call.muted),
+              ),
               _CallControlButton(
-                  icon: Icons.pause_circle_outline,
-                  label: 'HOLD',
-                  active: call.onHold,
-                  onTap: () => EngineChannel.instance.setHold(!call.onHold)),
+                icon: Icons.pause_circle_outline,
+                label: 'HOLD',
+                active: call.onHold,
+                enabled: call.state != CallState.ringing,
+                onTap: () => EngineChannel.instance.setHold(!call.onHold),
+              ),
               _CallControlButton(
-                  icon: Icons.grid_on,
-                  label: 'KEYPAD',
-                  active: false,
-                  onTap: () {}),
+                icon: Icons.grid_on,
+                label: 'KEYPAD',
+                active: false,
+                enabled: call.state != CallState.ringing,
+                onTap: () {},
+              ),
               _CallControlButton(
-                  icon: Icons.swap_horiz,
-                  label: 'XFER',
-                  active: false,
-                  onTap: () {}),
+                icon: Icons.swap_horiz,
+                label: 'XFER',
+                active: false,
+                enabled: call.state != CallState.ringing,
+                onTap: () {},
+              ),
             ],
           ),
         ],
@@ -714,44 +722,59 @@ class _CallControlButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
+  final bool enabled;
   final VoidCallback onTap;
-  const _CallControlButton(
-      {required this.icon,
-      required this.label,
-      required this.active,
-      required this.onTap});
+  const _CallControlButton({
+    required this.icon,
+    required this.label,
+    required this.active,
+    this.enabled = true,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppTheme.warningAmber : AppTheme.primary;
+    if (!enabled) {
+      return Opacity(
+        opacity: 0.4,
+        child: _buildBody(),
+      );
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
+      child: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    final color = active ? AppTheme.warningAmber : AppTheme.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: active
+            ? AppTheme.warningAmber.withValues(alpha: 0.1)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
           color: active
-              ? AppTheme.warningAmber.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: active
-                ? AppTheme.warningAmber.withValues(alpha: 0.3)
-                : AppTheme.border.withValues(alpha: 0.3),
+              ? AppTheme.warningAmber.withValues(alpha: 0.3)
+              : AppTheme.border.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                color: color,
+                letterSpacing: 0.5),
           ),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(height: 3),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                    letterSpacing: 0.5)),
-          ],
-        ),
+        ],
       ),
     );
   }
