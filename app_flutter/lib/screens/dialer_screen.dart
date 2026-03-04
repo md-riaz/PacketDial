@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/app_theme.dart';
+import '../core/sip_uri_utils.dart';
 import '../core/engine_channel.dart';
 import '../core/account_service.dart';
 import '../models/account_schema.dart';
@@ -75,6 +77,19 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   void _hangup() => EngineChannel.instance.engine.hangup();
 
+  // Sub-labels for numpad keys
+  static const _subLabels = {
+    '2': 'ABC',
+    '3': 'DEF',
+    '4': 'GHI',
+    '5': 'JKL',
+    '6': 'MNO',
+    '7': 'PQRS',
+    '8': 'TUV',
+    '9': 'WXYZ',
+    '0': '+',
+  };
+
   @override
   Widget build(BuildContext context) {
     final activeAccountAsync = ref.watch(selectedAccountProvider);
@@ -102,49 +117,50 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         },
         child: Focus(
           autofocus: true,
-          child: Scaffold(
-            body: activeAccountAsync.when(
-              data: (activeAccount) => Padding(
-                padding: const EdgeInsets.all(8.0), // Spec 5.1 Density
-                child: Column(
-                  children: [
-                    // 1. High-Density Status Header
-                    _buildCompactHeader(activeAccount),
-                    const SizedBox(height: 8),
+          child: activeAccountAsync.when(
+            data: (activeAccount) => Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: [
+                  // 1. Compact Header
+                  _buildCompactHeader(activeAccount),
+                  const SizedBox(height: 10),
 
-                    // 2. Active Call Panel (Stack-ready)
-                    if (activeCall != null)
-                      _ActiveCallCard(
-                          call: activeCall, stats: stats, onHangup: _hangup)
-                    else
-                      const SizedBox(
-                          height: 100,
-                          child: Center(
-                              child: Text('READY',
-                                  style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 10,
-                                      letterSpacing: 2)))),
+                  // 2. Active Call Panel
+                  if (activeCall != null)
+                    _ActiveCallCard(
+                        call: activeCall, stats: stats, onHangup: _hangup)
+                  else
+                    _buildReadyIndicator(),
 
-                    const Divider(height: 16),
+                  const SizedBox(height: 10),
 
-                    // 3. Dialing Input
-                    _buildDialInput(),
+                  // 3. Dialing Input
+                  _buildDialInput(),
 
-                    const SizedBox(height: 8),
+                  const SizedBox(height: 10),
 
-                    // 4. Integrated Numpad & Controls
-                    Expanded(child: _buildNumpadGrid(activeCall)),
+                  // 4. Integrated Numpad
+                  Expanded(child: _buildNumpadGrid(activeCall)),
 
-                    const SizedBox(height: 8),
+                  const SizedBox(height: 10),
 
-                    // 5. Action Bar
-                    _buildMainActionBar(activeAccount, activeCall),
-                  ],
+                  // 5. Action Bar
+                  _buildMainActionBar(activeAccount, activeCall),
+                ],
+              ),
+            ),
+            loading: () => Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation(
+                  AppTheme.primary.withValues(alpha: 0.6),
                 ),
               ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+            ),
+            error: (e, _) => Center(
+              child: Text('Error: $e',
+                  style: const TextStyle(color: AppTheme.errorRed)),
             ),
           ),
         ),
@@ -154,30 +170,79 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   Widget _buildCompactHeader(AccountSchema? account) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.indigo.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(4),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: AppTheme.glassCard(borderRadius: 8),
       child: Row(
         children: [
-          const Icon(Icons.account_box, size: 14, color: Colors.indigo),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(Icons.account_circle,
+                size: 16, color: AppTheme.primary),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               account?.displayName ?? 'No Active Account',
               style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.indigo),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Icon(Icons.keyboard, size: 12, color: Colors.grey),
-          const SizedBox(width: 4),
-          const Text('KBD ON',
-              style: TextStyle(fontSize: 9, color: Colors.grey)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.keyboard, size: 10, color: AppTheme.accent),
+                SizedBox(width: 3),
+                Text('KBD',
+                    style: TextStyle(
+                        fontSize: 8,
+                        color: AppTheme.accent,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5)),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildReadyIndicator() {
+    return Container(
+      height: 80,
+      decoration: AppTheme.glassCard(
+        borderRadius: 10,
+        color: AppTheme.surfaceCard.withValues(alpha: 0.4),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.phone_enabled,
+                size: 24, color: AppTheme.callGreen.withValues(alpha: 0.5)),
+            const SizedBox(height: 4),
+            Text('READY',
+                style: TextStyle(
+                  color: AppTheme.textTertiary.withValues(alpha: 0.7),
+                  fontSize: 10,
+                  letterSpacing: 3,
+                  fontWeight: FontWeight.w600,
+                )),
+          ],
+        ),
       ),
     );
   }
@@ -187,30 +252,52 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       controller: _uriCtrl,
       focusNode: _focusNode,
       style: const TextStyle(
-          fontSize: 22, fontWeight: FontWeight.normal, letterSpacing: 1),
+        fontSize: 24,
+        fontWeight: FontWeight.w300,
+        letterSpacing: 2,
+        color: AppTheme.textPrimary,
+        fontFamily: 'monospace',
+      ),
       textAlign: TextAlign.center,
       decoration: InputDecoration(
         hintText: 'Enter number or URI',
-        hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
-        isDense: true,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
-        suffixIcon: IconButton(
-          icon: const Icon(Icons.backspace_outlined, size: 18),
-          onPressed: _backspace,
+        hintStyle: TextStyle(
+          fontSize: 14,
+          color: AppTheme.textTertiary.withValues(alpha: 0.5),
+          letterSpacing: 0,
         ),
+        filled: true,
+        fillColor: AppTheme.surfaceCard.withValues(alpha: 0.6),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.border.withValues(alpha: 0.4)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+        ),
+        suffixIcon: _uriCtrl.text.isNotEmpty
+            ? IconButton(
+                icon: Icon(Icons.backspace_outlined,
+                    size: 18, color: AppTheme.textTertiary),
+                onPressed: _backspace,
+              )
+            : null,
       ),
-      onSubmitted: (_) => _call(null), // Handled by Actions
+      onSubmitted: (_) => _call(null),
     );
   }
 
   Widget _buildNumpadGrid(ActiveCall? activeCall) {
     return GridView.count(
       crossAxisCount: 3,
-      childAspectRatio: 1.8,
-      mainAxisSpacing: 4,
-      crossAxisSpacing: 4,
+      childAspectRatio: 1.6,
+      mainAxisSpacing: 6,
+      crossAxisSpacing: 6,
       children: [
         for (final label in [
           '1',
@@ -227,61 +314,132 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           '#'
         ])
           _NumpadButton(
-              label: label, onTap: () => _dialKey(label, activeCall != null)),
+            label: label,
+            subLabel: _subLabels[label],
+            onTap: () => _dialKey(label, activeCall != null),
+          ),
       ],
     );
   }
 
   Widget _buildMainActionBar(AccountSchema? account, ActiveCall? call) {
     bool isCall = call != null;
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton(
-            onPressed: isCall ? _hangup : () => _call(account),
-            style: FilledButton.styleFrom(
-              backgroundColor:
-                  isCall ? Colors.red.shade600 : Colors.green.shade600,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(isCall ? Icons.call_end : Icons.call, size: 18),
-                const SizedBox(width: 8),
-                Text(isCall ? 'HANG UP (Esc)' : 'DIAL (Enter)',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-              ],
-            ),
+    return Container(
+      width: double.infinity,
+      height: 48,
+      decoration: BoxDecoration(
+        gradient: isCall
+            ? AppTheme.hangupButtonGradient
+            : AppTheme.callButtonGradient,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: (isCall ? AppTheme.hangupRed : AppTheme.callGreen)
+                .withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isCall ? _hangup : () => _call(account),
+          borderRadius: BorderRadius.circular(12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(isCall ? Icons.call_end : Icons.call,
+                  size: 20, color: Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                isCall ? 'HANG UP (Esc)' : 'DIAL (Enter)',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
-class _NumpadButton extends StatelessWidget {
+// ── Numpad Button ─────────────────────────────────────────────────────────
+class _NumpadButton extends StatefulWidget {
   final String label;
+  final String? subLabel;
   final VoidCallback onTap;
-  const _NumpadButton({required this.label, required this.onTap});
+  const _NumpadButton(
+      {required this.label, this.subLabel, required this.onTap});
+
+  @override
+  State<_NumpadButton> createState() => _NumpadButtonState();
+}
+
+class _NumpadButtonState extends State<_NumpadButton> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        padding: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-        side: BorderSide(color: Colors.grey.shade300),
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: AppTheme.numpadGradient,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _pressed
+                  ? AppTheme.primary.withValues(alpha: 0.5)
+                  : AppTheme.border.withValues(alpha: 0.4),
+              width: _pressed ? 1.5 : 1,
+            ),
+            boxShadow: _pressed
+                ? AppTheme.glowShadow(AppTheme.primary, blur: 8)
+                : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w400,
+                  color: _pressed ? AppTheme.primary : AppTheme.textPrimary,
+                ),
+              ),
+              if (widget.subLabel != null) ...[
+                const SizedBox(height: 1),
+                Text(
+                  widget.subLabel!,
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textTertiary.withValues(alpha: 0.6),
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
-      child: Text(label,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w400)),
     );
   }
 }
 
+// ── Active Call Card ──────────────────────────────────────────────────────
 class _ActiveCallCard extends StatelessWidget {
   final ActiveCall call;
   final MediaStats? stats;
@@ -292,55 +450,59 @@ class _ActiveCallCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.shade200),
+      padding: const EdgeInsets.all(14),
+      decoration: AppTheme.glassCard(
+        color: AppTheme.accent.withValues(alpha: 0.08),
+        borderColor: AppTheme.accent.withValues(alpha: 0.25),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const CircleAvatar(
-                  radius: 16, child: Icon(Icons.person, size: 18)),
+              // Pulsing avatar
+              _PulsingAvatar(color: AppTheme.accent),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(call.uri,
+                    Text(SipUriUtils.friendlyName(call.uri),
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: AppTheme.textPrimary)),
+                    const SizedBox(height: 2),
                     Text(call.state.label,
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.blueGrey)),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.accent.withValues(alpha: 0.8),
+                            fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
               _TimerWidget(startTime: call.startedAt),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _IconButton(
+              _CallControlButton(
                   icon: call.muted ? Icons.mic_off : Icons.mic,
                   label: 'MUTE',
                   active: call.muted,
                   onTap: () => EngineChannel.instance.setMute(!call.muted)),
-              _IconButton(
-                  icon: Icons.pause,
+              _CallControlButton(
+                  icon: Icons.pause_circle_outline,
                   label: 'HOLD',
                   active: call.onHold,
                   onTap: () => EngineChannel.instance.setHold(!call.onHold)),
-              _IconButton(
+              _CallControlButton(
                   icon: Icons.grid_on,
                   label: 'KEYPAD',
                   active: false,
                   onTap: () {}),
-              _IconButton(
+              _CallControlButton(
                   icon: Icons.swap_horiz,
                   label: 'XFER',
                   active: false,
@@ -353,12 +515,67 @@ class _ActiveCallCard extends StatelessWidget {
   }
 }
 
-class _IconButton extends StatelessWidget {
+// ── Pulsing Avatar ───────────────────────────────────────────────────────
+class _PulsingAvatar extends StatefulWidget {
+  final Color color;
+  const _PulsingAvatar({required this.color});
+
+  @override
+  State<_PulsingAvatar> createState() => _PulsingAvatarState();
+}
+
+class _PulsingAvatarState extends State<_PulsingAvatar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1500))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, child) => Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.2 + _ctrl.value * 0.3),
+              blurRadius: 8 + _ctrl.value * 8,
+              spreadRadius: _ctrl.value * 2,
+            ),
+          ],
+        ),
+        child: child,
+      ),
+      child: CircleAvatar(
+        radius: 18,
+        backgroundColor: widget.color.withValues(alpha: 0.2),
+        child: Icon(Icons.person, size: 20, color: widget.color),
+      ),
+    );
+  }
+}
+
+// ── Call Control Button ──────────────────────────────────────────────────
+class _CallControlButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const _IconButton(
+  const _CallControlButton(
       {required this.icon,
       required this.label,
       required this.active,
@@ -366,23 +583,41 @@ class _IconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = active ? AppTheme.warningAmber : AppTheme.primary;
     return InkWell(
       onTap: onTap,
-      child: Column(
-        children: [
-          Icon(icon, size: 18, color: active ? Colors.orange : Colors.indigo),
-          const SizedBox(height: 2),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: active ? Colors.orange : Colors.indigo)),
-        ],
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? AppTheme.warningAmber.withValues(alpha: 0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active
+                ? AppTheme.warningAmber.withValues(alpha: 0.3)
+                : AppTheme.border.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 3),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: 0.5)),
+          ],
+        ),
       ),
     );
   }
 }
 
+// ── Call Timer Widget ────────────────────────────────────────────────────
 class _TimerWidget extends StatefulWidget {
   final DateTime? startTime;
   const _TimerWidget({this.startTime});
@@ -445,13 +680,20 @@ class _TimerWidgetState extends State<_TimerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      _formatDuration(_duration),
-      style: const TextStyle(
-          fontFamily: 'monospace',
-          fontWeight: FontWeight.bold,
-          fontSize: 13,
-          color: Colors.blue),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        _formatDuration(_duration),
+        style: const TextStyle(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            color: AppTheme.accentBright),
+      ),
     );
   }
 }

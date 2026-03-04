@@ -7,12 +7,16 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'dart:io';
 import 'dart:async';
-import 'dart:developer';
-
+import 'dart:convert';
+import 'core/app_theme.dart';
+import 'core/sip_uri_utils.dart';
 import 'core/engine_channel.dart';
 import 'core/account_service.dart';
+import 'core/incoming_call_controller.dart';
+import 'core/window_prefs.dart';
 import 'models/account_schema.dart';
 import 'models/call_history_schema.dart';
 import 'ffi/engine.dart';
@@ -21,12 +25,38 @@ import 'screens/accounts_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/incoming_call_popup.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Multi-window routing ────────────────────────────────────────────────
+  // If launched as a sub-window, route to the appropriate popup.
+  final windowController = await WindowController.fromCurrentEngine();
+  final windowArgs = windowController.arguments;
+  if (windowArgs.startsWith('incoming_call|')) {
+    // Parse call info and launch the incoming call popup
+    final jsonStr = windowArgs.substring('incoming_call|'.length);
+    Map<String, dynamic> callInfo = {};
+    try {
+      callInfo = jsonDecode(jsonStr) as Map<String, dynamic>;
+    } catch (_) {}
+    await windowManager.ensureInitialized();
+    await windowManager.setAlwaysOnTop(true);
+    runApp(IncomingCallPopup(
+      windowController: windowController,
+      callInfo: callInfo,
+    ));
+    return;
+  }
+  // ── Main window continues below ────────────────────────────────────────
 
   // Initialize Window Manager
   await windowManager.ensureInitialized();
+
+  // Initialize window preferences (position, always-on-top)
+  final windowPrefs = WindowPrefs();
+  await windowPrefs.init();
 
   WindowOptions windowOptions = const WindowOptions(
     size: Size(360, 640),
@@ -37,6 +67,9 @@ void main() async {
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // Restore saved position/size before showing
+    await windowPrefs.restoreGeometry();
+    await windowPrefs.applyAlwaysOnTop();
     await windowManager.show();
     await windowManager.focus();
     await windowManager.setIcon('assets/app_icon.png');
@@ -77,7 +110,11 @@ void main() async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: App(isar: isar, accountService: accountService),
+      child: App(
+        isar: isar,
+        accountService: accountService,
+        windowPrefs: windowPrefs,
+      ),
     ),
   );
 
@@ -95,16 +132,24 @@ void main() async {
 class App extends StatefulWidget {
   final Isar isar;
   final AccountService accountService;
-  const App({super.key, required this.isar, required this.accountService});
+  final WindowPrefs windowPrefs;
+  const App({
+    super.key,
+    required this.isar,
+    required this.accountService,
+    required this.windowPrefs,
+  });
 
   @override
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> {
+class _AppState extends State<App>
+    with SingleTickerProviderStateMixin, WindowListener {
   int _selectedIndex = 0;
   String _status = 'Initializing…';
   bool _ready = false;
+  bool _alwaysOnTop = false;
 
   static final _screens = [
     const AccountsScreen(),
@@ -113,9 +158,26 @@ class _AppState extends State<App> {
     const DiagnosticsScreen(),
   ];
 
+  late final AnimationController _splashCtrl;
+  late final Animation<double> _splashFade;
+  late final Animation<double> _splashScale;
+
   @override
   void initState() {
     super.initState();
+    _splashCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _splashFade = CurvedAnimation(parent: _splashCtrl, curve: Curves.easeOut);
+    _splashScale = Tween<double>(begin: 0.7, end: 1.0).animate(
+      CurvedAnimation(parent: _splashCtrl, curve: Curves.elasticOut),
+    );
+    _splashCtrl.forward();
+    _alwaysOnTop = widget.windowPrefs.alwaysOnTop;
+    windowManager.addListener(this);
+    // Prevent default close — we handle it in onWindowClose
+    windowManager.setPreventClose(true);
     _boot();
   }
 
@@ -148,6 +210,9 @@ class _AppState extends State<App> {
       // Auto-register saved accounts AFTER the callback is attached
       if (engineOk) {
         await widget.accountService.autoRegisterAll();
+
+        // Initialize incoming call popup controller
+        IncomingCallController.instance.init();
 
         // Listen for registration failures → auto-show edit dialog
         _regFailureSub = EngineChannel.instance.eventStream.listen((event) {
@@ -205,9 +270,65 @@ class _AppState extends State<App> {
     _regFailureSub?.cancel();
   }
 
+  // ── WindowListener callbacks ──────────────────────────────────────────
+
+  @override
+  void onWindowClose() async {
+    // Check if there's an active call
+    final hasActiveCall = EngineChannel.instance.activeCall != null;
+    if (hasActiveCall && mounted) {
+      final shouldClose = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('Active Call in Progress'),
+          content: const Text(
+            'You have an active call. Are you sure you want to close PacketDial?\n\n'
+            'The call will be disconnected.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.errorRed,
+              ),
+              child: const Text('Close Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (shouldClose != true) return;
+    }
+    // Save window geometry before closing
+    await widget.windowPrefs.saveGeometry();
+    await windowManager.destroy();
+  }
+
+  @override
+  void onWindowMoved() async {
+    await widget.windowPrefs.saveGeometry();
+  }
+
+  @override
+  void onWindowResized() async {
+    await widget.windowPrefs.saveGeometry();
+  }
+
+  void _toggleAlwaysOnTop() async {
+    final newValue = !_alwaysOnTop;
+    await widget.windowPrefs.setAlwaysOnTop(newValue);
+    setState(() => _alwaysOnTop = newValue);
+  }
+
   @override
   void dispose() {
+    windowManager.removeListener(this);
     _regFailureSub?.cancel();
+    _splashCtrl.dispose();
     EngineChannel.instance.dispose();
     super.dispose();
   }
@@ -217,74 +338,194 @@ class _AppState extends State<App> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'PacketDial',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          filled: false,
-          border: UnderlineInputBorder(),
+      theme: AppTheme.dark,
+      home: _ready ? _buildMainShell() : _buildSplashScreen(),
+    );
+  }
+
+  // ── Splash / Loading Screen ─────────────────────────────────────────────
+  Widget _buildSplashScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D0D1A), Color(0xFF1A1040)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
-      ),
-      home: _ready
-          ? Scaffold(
-              body: Column(
+        child: Center(
+          child: FadeTransition(
+            opacity: _splashFade,
+            child: ScaleTransition(
+              scale: _splashScale,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Custom Title Bar
-                  WindowTitleBarBox(
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 8),
-                        Image.asset('assets/app_icon.png',
-                            width: 16, height: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          'PacketDial',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.indigo.shade900,
-                          ),
+                  // App Icon with glow
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primary.withValues(alpha: 0.3),
+                          blurRadius: 40,
+                          spreadRadius: 8,
                         ),
-                        Expanded(child: MoveWindow()),
-                        const WindowButtons(),
                       ],
                     ),
+                    child: Image.asset('assets/app_icon.png',
+                        width: 72, height: 72),
                   ),
-                  Expanded(child: _screens[_selectedIndex]),
-                  const CockpitFooter(),
+                  const SizedBox(height: 24),
+                  Text(
+                    'PacketDial',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: AppTheme.textPrimary,
+                          letterSpacing: 1.5,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _status,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textTertiary,
+                        ),
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation(
+                        AppTheme.primary.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              bottomNavigationBar: NavigationBar(
-                height: 60,
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (i) =>
-                    setState(() => _selectedIndex = i),
-                destinations: const [
-                  NavigationDestination(
-                      icon: Icon(Icons.manage_accounts, size: 20),
-                      label: 'Accounts'),
-                  NavigationDestination(
-                      icon: Icon(Icons.dialpad, size: 20), label: 'Dialer'),
-                  NavigationDestination(
-                      icon: Icon(Icons.history, size: 20), label: 'History'),
-                  NavigationDestination(
-                      icon: Icon(Icons.bug_report, size: 20),
-                      label: 'Diagnostics'),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Main App Shell ──────────────────────────────────────────────────────
+  Widget _buildMainShell() {
+    return Scaffold(
+      body: Column(
+        children: [
+          // Custom Title Bar
+          _buildTitleBar(),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _screens[_selectedIndex],
+            ),
+          ),
+          const CockpitFooter(),
+        ],
+      ),
+      bottomNavigationBar: _buildNavBar(),
+    );
+  }
+
+  Widget _buildTitleBar() {
+    return WindowTitleBarBox(
+      child: Container(
+        decoration: const BoxDecoration(gradient: AppTheme.titleBarGradient),
+        child: Row(
+          children: [
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                  ),
                 ],
               ),
-            )
-          : Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Text(_status),
-                  ],
+              child: Image.asset('assets/app_icon.png', width: 16, height: 16),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'PacketDial',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary.withValues(alpha: 0.9),
+                letterSpacing: 0.5,
+              ),
+            ),
+            Expanded(child: MoveWindow()),
+            // Always-on-top toggle
+            Tooltip(
+              message: _alwaysOnTop ? 'Unpin from top' : 'Pin on top',
+              child: InkWell(
+                onTap: _toggleAlwaysOnTop,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    _alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+                    size: 14,
+                    color:
+                        _alwaysOnTop ? AppTheme.primary : AppTheme.textTertiary,
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 4),
+            const WindowButtons(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariant,
+        border: Border(
+          top: BorderSide(
+            color: AppTheme.border.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: NavigationBar(
+        height: 64,
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.manage_accounts_outlined),
+            selectedIcon: Icon(Icons.manage_accounts),
+            label: 'Accounts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.dialpad_outlined),
+            selectedIcon: Icon(Icons.dialpad),
+            label: 'Dialer',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bug_report_outlined),
+            selectedIcon: Icon(Icons.bug_report),
+            label: 'Diagnostics',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -295,17 +536,17 @@ class WindowButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buttonColors = WindowButtonColors(
-      iconNormal: Colors.indigo,
-      mouseOver: Colors.indigo.withValues(alpha: 0.1),
-      mouseDown: Colors.indigo.withValues(alpha: 0.2),
-      iconMouseOver: Colors.indigo,
-      iconMouseDown: Colors.indigo,
+      iconNormal: AppTheme.textSecondary,
+      mouseOver: AppTheme.primary.withValues(alpha: 0.15),
+      mouseDown: AppTheme.primary.withValues(alpha: 0.25),
+      iconMouseOver: AppTheme.textPrimary,
+      iconMouseDown: AppTheme.textPrimary,
     );
 
     final closeButtonColors = WindowButtonColors(
       mouseOver: const Color(0xFFD32F2F),
       mouseDown: const Color(0xFFB71C1C),
-      iconNormal: Colors.indigo,
+      iconNormal: AppTheme.textSecondary,
       iconMouseOver: Colors.white,
     );
 
@@ -316,8 +557,8 @@ class WindowButtons extends StatelessWidget {
         CloseWindowButton(
           colors: closeButtonColors,
           onPressed: () {
-            // Minimize to tray
-            windowManager.hide();
+            // Trigger the onWindowClose handler (which checks for active calls)
+            windowManager.close();
           },
         ),
       ],
@@ -338,26 +579,27 @@ class CockpitFooter extends ConsumerWidget {
     bool isFailed = regState.startsWith('Registration Failed');
     bool hasCall = activeCall != null;
 
+    final statusColor = isRegistered
+        ? AppTheme.callGreen
+        : (isFailed ? AppTheme.errorRed : AppTheme.warningAmber);
+
     return Container(
-      height: 24,
+      height: 28,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        color: AppTheme.surfaceVariant,
+        border: Border(
+          top: BorderSide(
+            color: AppTheme.border.withValues(alpha: 0.3),
+          ),
+        ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
-          // Registration Status
-          Icon(
-            isRegistered
-                ? Icons.check_circle
-                : (isFailed ? Icons.error : Icons.radio_button_unchecked),
-            size: 12,
-            color: isRegistered
-                ? Colors.green
-                : (isFailed ? Colors.red : Colors.orange),
-          ),
+          // Registration Status with glow dot
+          AppTheme.statusDot(statusColor),
+          const SizedBox(width: 6),
           Flexible(
             child: Text(
               account != null ? '${account.username}: $regState' : regState,
@@ -366,40 +608,47 @@ class CockpitFooter extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
-                color: isRegistered
-                    ? Colors.green.shade700
-                    : (isFailed ? Colors.red.shade700 : Colors.grey.shade700),
+                color: statusColor.withValues(alpha: 0.9),
               ),
             ),
           ),
-          const VerticalDivider(width: 16, indent: 4, endIndent: 4),
+          Container(
+            width: 1,
+            height: 12,
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            color: AppTheme.border.withValues(alpha: 0.4),
+          ),
 
           // Network / Call Status
           if (hasCall) ...[
-            const Icon(Icons.call, size: 10, color: Colors.blue),
+            const Icon(Icons.call, size: 10, color: AppTheme.accentBright),
+            const SizedBox(width: 4),
             Flexible(
               child: Text(
-                'Call: ${activeCall.state.label} (${activeCall.uri})',
+                'Call: ${activeCall.state.label} (${SipUriUtils.friendlyName(activeCall.uri)})',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
                 style: const TextStyle(
                     fontSize: 10,
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold),
+                    color: AppTheme.accentBright,
+                    fontWeight: FontWeight.w600),
               ),
             ),
           ] else ...[
-            const Icon(Icons.network_check, size: 10, color: Colors.grey),
+            const Icon(Icons.wifi, size: 10, color: AppTheme.textTertiary),
             const SizedBox(width: 4),
             const Text('Network: OK',
-                style: TextStyle(fontSize: 10, color: Colors.grey)),
+                style: TextStyle(fontSize: 10, color: AppTheme.textTertiary)),
           ],
 
           const Spacer(),
 
           // App Version
-          const Text('v1.0.0',
-              style: TextStyle(fontSize: 9, color: Colors.grey)),
+          Text('v1.0.0',
+              style: TextStyle(
+                  fontSize: 9,
+                  color: AppTheme.textTertiary.withValues(alpha: 0.6),
+                  letterSpacing: 0.5)),
         ],
       ),
     );

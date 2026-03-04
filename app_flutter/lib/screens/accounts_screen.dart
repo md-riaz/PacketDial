@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/app_theme.dart';
 import '../core/account_service.dart';
 import '../models/account_schema.dart';
 import '../providers/engine_provider.dart';
@@ -36,90 +37,282 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Accounts')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAccountDialog(),
-        mini: true,
-        child: const Icon(Icons.add),
+      appBar: AppBar(
+        title: const Text('Accounts'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 22),
+            tooltip: 'Add Account',
+            onPressed: () => _showAccountDialog(),
+          ),
+        ],
       ),
       body: accountsAsync.when(
         data: (accounts) => accounts.isEmpty
-            ? const Center(child: Text('No accounts. Add one using +.'))
-            : ListView.separated(
-                padding: const EdgeInsets.all(8),
+            ? _buildEmptyState()
+            : ListView.builder(
+                padding: const EdgeInsets.all(10),
                 itemCount: accounts.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (_, i) {
-                  final a = accounts[i];
-                  // Registration state is handled in-memory by EngineChannel for now,
-                  // but we display it here.
-                  final isSelected = a.isSelected;
-                  return ListTile(
-                    dense: true,
-                    selected: isSelected,
-                    selectedTileColor: Colors.indigo.withValues(alpha: 0.05),
-                    leading: Icon(
-                      isSelected ? Icons.check_circle : Icons.circle_outlined,
-                      color: isSelected ? Colors.green : Colors.grey,
-                    ),
-                    title: Text(a.accountName,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal)),
-                    subtitle: Text(
-                        a.displayName.isNotEmpty
-                            ? '${a.displayName} (${a.username}@${a.server})'
-                            : '${a.username}@${a.server}',
-                        overflow: TextOverflow.ellipsis),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!isSelected)
-                          TextButton(
-                            onPressed: () async {
-                              await ref
-                                  .read(accountServiceProvider)
-                                  .setSelectedAccount(a.uuid);
-                              ref.invalidate(accountsListProvider);
-                            },
-                            child: const Text('Select'),
-                          )
-                        else
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('Active',
-                                style: TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12)),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 18),
-                          onPressed: () => _showAccountDialog(a),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, size: 18),
-                          onPressed: () async {
-                            await ref
-                                .read(accountServiceProvider)
-                                .deleteAccount(a.uuid);
-                            ref.invalidate(accountsListProvider);
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                itemBuilder: (_, i) =>
+                    _AccountCard(account: accounts[i], parent: this),
               ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        loading: () => Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor:
+                AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.6)),
+          ),
+        ),
+        error: (e, _) => Center(
+          child: Text('Error: $e',
+              style: const TextStyle(color: AppTheme.errorRed)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.primary.withValues(alpha: 0.08),
+            ),
+            child: Icon(Icons.person_add_outlined,
+                size: 48, color: AppTheme.primary.withValues(alpha: 0.5)),
+          ),
+          const SizedBox(height: 16),
+          const Text('No SIP Accounts',
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary)),
+          const SizedBox(height: 6),
+          Text('Tap + to add your first SIP account',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textTertiary.withValues(alpha: 0.7))),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () => _showAccountDialog(),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Account'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+// ── Account Card ─────────────────────────────────────────────────────────
+class _AccountCard extends ConsumerWidget {
+  final AccountSchema account;
+  final _AccountsScreenState parent;
+  const _AccountCard({required this.account, required this.parent});
+
+  Color _statusColor(AccountSchema a) {
+    if (a.isSelected) return AppTheme.callGreen;
+    return AppTheme.textTertiary;
+  }
+
+  String _statusLabel(AccountSchema a) {
+    if (a.isSelected) return 'Active';
+    return 'Inactive';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSelected = account.isSelected;
+    final statusColor = _statusColor(account);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected
+              ? AppTheme.callGreen.withValues(alpha: 0.3)
+              : AppTheme.border.withValues(alpha: 0.4),
+        ),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: AppTheme.callGreen.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  spreadRadius: 0,
+                )
+              ]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => parent._showAccountDialog(account),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                // Avatar with status indicator
+                Stack(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          account.accountName.isNotEmpty
+                              ? account.accountName[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                          border:
+                              Border.all(color: AppTheme.surfaceCard, width: 2),
+                          boxShadow: AppTheme.glowShadow(statusColor, blur: 4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                // Account info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        account.accountName,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color: AppTheme.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        account.displayName.isNotEmpty
+                            ? '${account.displayName} (${account.username}@${account.server})'
+                            : '${account.username}@${account.server}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textTertiary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // Status badge & actions
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _statusLabel(account),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isSelected)
+                          _TinyAction(
+                            icon: Icons.check_circle_outline,
+                            color: AppTheme.accent,
+                            onTap: () async {
+                              await ref
+                                  .read(accountServiceProvider)
+                                  .setSelectedAccount(account.uuid);
+                              ref.invalidate(accountsListProvider);
+                            },
+                          ),
+                        _TinyAction(
+                          icon: Icons.delete_outline,
+                          color: AppTheme.errorRed.withValues(alpha: 0.7),
+                          onTap: () async {
+                            await ref
+                                .read(accountServiceProvider)
+                                .deleteAccount(account.uuid);
+                            ref.invalidate(accountsListProvider);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TinyAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _TinyAction(
+      {required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Icon(icon, size: 16, color: color),
+      ),
+    );
+  }
+}
+
+// ── Account Dialog ───────────────────────────────────────────────────────
 class _AccountDialogBody extends ConsumerStatefulWidget {
   final AccountSchema? existing;
   const _AccountDialogBody({this.existing});
@@ -171,7 +364,24 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.existing == null ? 'Add SIP Account' : 'Edit Account'),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              widget.existing == null ? Icons.person_add : Icons.edit,
+              size: 18,
+              color: AppTheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(widget.existing == null ? 'Add SIP Account' : 'Edit Account'),
+        ],
+      ),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 400,
@@ -180,77 +390,91 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
             children: [
               if (registrationError != null)
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.red.shade200),
+                    color: AppTheme.errorRed.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppTheme.errorRed.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
                       const Icon(Icons.error_outline,
-                          color: Colors.red, size: 16),
+                          color: AppTheme.errorRed, size: 16),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           registrationError!,
                           style: TextStyle(
-                              color: Colors.red.shade900, fontSize: 12),
+                              color: AppTheme.errorRed.withValues(alpha: 0.9),
+                              fontSize: 12),
                         ),
                       ),
                     ],
                   ),
                 ),
+              // Section: Identity
+              _sectionLabel('Identity'),
               TextField(
                 controller: nameCtrl,
                 enabled: !isRegistering,
                 decoration: const InputDecoration(
                   labelText: 'Account Label (e.g. Work)',
                   hintText: 'My Office Number',
+                  prefixIcon: Icon(Icons.label_outline, size: 18),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               TextField(
                 controller: displayCtrl,
                 enabled: !isRegistering,
                 decoration: const InputDecoration(
                   labelText: 'Display Name (Optional)',
                   hintText: 'John Doe',
+                  prefixIcon: Icon(Icons.person_outline, size: 18),
                 ),
               ),
-              const Divider(height: 32),
+              const SizedBox(height: 16),
+              // Section: Server
+              _sectionLabel('Server'),
               TextField(
                 controller: serverCtrl,
                 enabled: !isRegistering,
                 decoration: const InputDecoration(
                   labelText: 'SIP Server / Registrar',
                   hintText: 'sip.provider.com',
+                  prefixIcon: Icon(Icons.dns_outlined, size: 18),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               TextField(
                 controller: userCtrl,
                 enabled: !isRegistering,
                 decoration: const InputDecoration(
                   labelText: 'Username',
                   hintText: '1000',
+                  prefixIcon: Icon(Icons.account_circle_outlined, size: 18),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               TextField(
                 controller: passCtrl,
                 enabled: !isRegistering,
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'Password',
+                  prefixIcon: Icon(Icons.lock_outline, size: 18),
                 ),
               ),
               const SizedBox(height: 16),
               ExpansionTile(
                 title: const Text('Advanced Settings',
-                    style: TextStyle(fontSize: 13)),
+                    style:
+                        TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
                 tilePadding: EdgeInsets.zero,
+                iconColor: AppTheme.textTertiary,
+                collapsedIconColor: AppTheme.textTertiary,
                 children: [
                   TextField(
                     controller: authUserCtrl,
@@ -280,6 +504,7 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
                   DropdownButtonFormField<String>(
                     initialValue: transport,
                     decoration: const InputDecoration(labelText: 'Transport'),
+                    dropdownColor: AppTheme.surfaceVariant,
                     items: const [
                       DropdownMenuItem(value: 'udp', child: Text('UDP')),
                       DropdownMenuItem(value: 'tcp', child: Text('TCP')),
@@ -303,7 +528,8 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Auto-register on startup',
-                    style: TextStyle(fontSize: 14)),
+                    style:
+                        TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
                 value: autoRegister,
                 onChanged: isRegistering
                     ? null
@@ -311,23 +537,44 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
               ),
               // Registering indicator
               if (isRegistering) ...[
-                const SizedBox(height: 12),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.15)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                    SizedBox(width: 12),
-                    Text('Verifying SIP credentials…',
-                        style: TextStyle(fontSize: 13, color: Colors.indigo)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'This may take several seconds',
-                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(
+                              AppTheme.primary.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Verifying SIP credentials…',
+                              style: TextStyle(
+                                  fontSize: 13, color: AppTheme.primary)),
+                          SizedBox(height: 2),
+                          Text(
+                            'This may take several seconds',
+                            style: TextStyle(
+                                fontSize: 10, color: AppTheme.textTertiary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ],
@@ -336,8 +583,9 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
       ),
       actions: [
         TextButton(
-            onPressed: isRegistering ? null : () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: isRegistering ? null : () => Navigator.pop(context),
+          child: Text('Cancel', style: TextStyle(color: AppTheme.textTertiary)),
+        ),
         FilledButton(
           onPressed: isRegistering
               ? null
@@ -415,9 +663,41 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
                   ref.invalidate(accountsListProvider);
                   if (mounted) Navigator.pop(context);
                 },
+          style: FilledButton.styleFrom(
+            backgroundColor: AppTheme.primary,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
           child: const Text('Save Account'),
         ),
       ],
+    );
+  }
+
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              gradient: AppTheme.accentGradient,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(text,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textTertiary,
+                letterSpacing: 1,
+              )),
+        ],
+      ),
     );
   }
 }

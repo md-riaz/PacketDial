@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/app_theme.dart';
 import '../core/engine_channel.dart';
 import '../models/log_entry.dart';
-import '../models/sip_message.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({super.key});
@@ -104,10 +104,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
   }
 
   Color _levelColor(LogLevel level) => switch (level) {
-        LogLevel.error => Colors.red.shade700,
-        LogLevel.warn => Colors.orange.shade700,
-        LogLevel.info => Colors.blue.shade700,
-        LogLevel.debug => Colors.grey.shade600,
+        LogLevel.error => AppTheme.errorRed,
+        LogLevel.warn => AppTheme.warningAmber,
+        LogLevel.info => AppTheme.primary,
+        LogLevel.debug => AppTheme.textTertiary,
       };
 
   @override
@@ -117,10 +117,49 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
         title: const Text('Diagnostics'),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(icon: Icon(Icons.list_alt), text: 'Events'),
-            Tab(icon: Icon(Icons.receipt_long), text: 'Logs'),
-            Tab(icon: Icon(Icons.message), text: 'SIP Messages'),
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.list_alt, size: 14),
+                  const SizedBox(width: 4),
+                  const Text('Events'),
+                  if (_channel.eventLog.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    _CountBadge(count: _channel.eventLog.length),
+                  ],
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.receipt_long, size: 14),
+                  const SizedBox(width: 4),
+                  const Text('Logs'),
+                  if (_channel.logBuffer.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    _CountBadge(count: _channel.logBuffer.length),
+                  ],
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.message, size: 14),
+                  const SizedBox(width: 4),
+                  const Text('SIP'),
+                  if (_channel.sipMessages.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    _CountBadge(count: _channel.sipMessages.length),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -143,43 +182,39 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
       children: [
         Expanded(
           child: log.isEmpty
-              ? const Center(child: Text('No events yet.'))
+              ? _buildTabEmpty(Icons.list_alt_outlined, 'No events yet',
+                  'Events from the SIP engine will appear here')
               : ListView.builder(
                   controller: _scrollEvent,
                   padding: const EdgeInsets.all(8),
                   itemCount: log.length,
-                  itemBuilder: (_, i) => SelectableText(
-                    log[i],
-                    style:
-                        const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  itemBuilder: (_, i) => Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    margin: const EdgeInsets.only(bottom: 2),
+                    decoration: BoxDecoration(
+                      color: i.isEven
+                          ? AppTheme.surfaceCard.withValues(alpha: 0.4)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SelectableText(
+                      log[i],
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
                   ),
                 ),
         ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _exportBundle,
-                  icon: const Icon(Icons.download),
-                  label: const Text('Export Debug Bundle'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.copy),
-                tooltip: 'Copy all',
-                onPressed: _copyAllEvents,
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Clear',
-                onPressed: _clearEvents,
-              ),
-            ],
-          ),
+        _buildTabActions(
+          onExport: _exportBundle,
+          onCopy: _copyAllEvents,
+          onClear: _clearEvents,
+          showExport: true,
         ),
       ],
     );
@@ -191,68 +226,53 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     final logs = _filteredLogs;
     return Column(
       children: [
-        // Controls row: engine level selector + view filter
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 0, 4),
+        // Controls row
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 4, 6),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard.withValues(alpha: 0.3),
+            border: Border(
+              bottom: BorderSide(color: AppTheme.border.withValues(alpha: 0.3)),
+            ),
+          ),
           child: Row(
             children: [
-              const Text('Engine:', style: TextStyle(fontSize: 11)),
-              const SizedBox(width: 4),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _engineLevel,
-                  isDense: true,
-                  style: const TextStyle(fontSize: 12, color: Colors.indigo),
-                  items: _engineLevels
-                      .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) _setEngineLevel(v);
-                  },
-                ),
+              _FilterChip(
+                label: 'Engine',
+                value: _engineLevel,
+                options: _engineLevels,
+                onChanged: _setEngineLevel,
               ),
               const SizedBox(width: 8),
-              const Text('Show:', style: TextStyle(fontSize: 11)),
-              const SizedBox(width: 4),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _filterLevel,
-                  isDense: true,
-                  style: const TextStyle(fontSize: 12, color: Colors.indigo),
-                  items: _levels
-                      .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => _filterLevel = v);
-                  },
-                ),
+              _FilterChip(
+                label: 'Show',
+                value: _filterLevel,
+                options: _levels,
+                onChanged: (v) => setState(() => _filterLevel = v),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 18),
-                visualDensity: VisualDensity.compact,
+              _MiniIconButton(
+                icon: Icons.refresh,
                 tooltip: 'Fetch from engine',
                 onPressed: () => _channel.getLogBuffer(),
               ),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                visualDensity: VisualDensity.compact,
+              _MiniIconButton(
+                icon: Icons.copy,
                 tooltip: 'Copy all',
                 onPressed: _copyAllLogs,
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
-                visualDensity: VisualDensity.compact,
+              _MiniIconButton(
+                icon: Icons.delete_outline,
                 tooltip: 'Clear',
                 onPressed: _clearLogs,
               ),
             ],
           ),
         ),
-        const Divider(height: 1),
         Expanded(
           child: logs.isEmpty
-              ? const Center(child: Text('No log entries.'))
+              ? _buildTabEmpty(Icons.receipt_long_outlined, 'No log entries',
+                  'Engine logs will stream here in real time')
               : ListView.builder(
                   controller: _scrollLog,
                   padding:
@@ -265,22 +285,37 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 48,
+                          // Level badge
+                          Container(
+                            width: 42,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
+                            margin: const EdgeInsets.only(right: 8, top: 1),
+                            decoration: BoxDecoration(
+                              color:
+                                  _levelColor(e.level).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             child: Text(
-                              e.level.label,
+                              e.level.label.toUpperCase(),
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
                                 color: _levelColor(e.level),
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ),
                           Expanded(
                             child: SelectableText(
                               e.message,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace', fontSize: 12),
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                                height: 1.4,
+                              ),
                             ),
                           ),
                         ],
@@ -306,120 +341,124 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     return Column(
       children: [
         // Controls row
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 0, 4),
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 4, 6),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard.withValues(alpha: 0.3),
+            border: Border(
+              bottom: BorderSide(color: AppTheme.border.withValues(alpha: 0.3)),
+            ),
+          ),
           child: Row(
             children: [
               Text(
                 '${messages.length} message${messages.length == 1 ? '' : 's'}',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                style:
+                    const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 18),
-                visualDensity: VisualDensity.compact,
+              _MiniIconButton(
+                icon: Icons.copy,
                 tooltip: 'Copy all',
                 onPressed: _copyAllSipMessages,
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
-                visualDensity: VisualDensity.compact,
+              _MiniIconButton(
+                icon: Icons.delete_outline,
                 tooltip: 'Clear',
                 onPressed: _clearSipMessages,
               ),
             ],
           ),
         ),
-        const Divider(height: 1),
         Expanded(
           child: messages.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.message_outlined,
-                          size: 48, color: Colors.grey),
-                      SizedBox(height: 12),
-                      Text('No SIP messages captured yet.',
-                          style: TextStyle(color: Colors.grey)),
-                      SizedBox(height: 4),
-                      Text(
-                        'Register an account or make a call to see\nSIP message traffic here.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 11, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildTabEmpty(
+                  Icons.message_outlined,
+                  'No SIP messages captured yet',
+                  'Register an account or make a call to\nsee SIP message traffic here')
               : ListView.builder(
                   controller: _scrollSip,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   itemCount: messages.length,
                   itemBuilder: (_, i) {
                     final m = messages[i];
-                    final arrow = m.isSend ? '→' : '←';
-                    final arrowColor =
-                        m.isSend ? Colors.blue.shade700 : Colors.green.shade700;
-                    final bgColor = m.isSend
-                        ? Colors.blue.withValues(alpha: 0.03)
-                        : Colors.green.withValues(alpha: 0.03);
+                    final isSend = m.isSend;
+                    final accentColor =
+                        isSend ? AppTheme.primary : AppTheme.callGreen;
 
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                          vertical: 2, horizontal: 2),
-                      elevation: 0,
-                      color: bgColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        side: BorderSide(
-                          color: arrowColor.withValues(alpha: 0.2),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceCard,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border(
+                          left: BorderSide(
+                            color: accentColor,
+                            width: 3,
+                          ),
                         ),
                       ),
                       child: ExpansionTile(
                         dense: true,
-                        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-                        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                        leading: Text(
-                          arrow,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: arrowColor,
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                        childrenPadding:
+                            const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                        iconColor: AppTheme.textTertiary,
+                        collapsedIconColor: AppTheme.textTertiary,
+                        leading: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isSend ? 'TX' : 'RX',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: accentColor,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
                         title: Text(
                           m.firstLine,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          '${m.isSend ? "Sent" : "Received"} at ${_formatTime(m.timestamp)}',
+                          '${isSend ? "Sent" : "Received"} at ${_formatTime(m.timestamp)}',
                           style: TextStyle(
                             fontSize: 9,
-                            color: Colors.grey.shade600,
+                            color: AppTheme.textTertiary.withValues(alpha: 0.6),
                           ),
                         ),
                         children: [
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.grey.shade300),
+                              color: AppTheme.surface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color:
+                                      AppTheme.border.withValues(alpha: 0.3)),
                             ),
                             child: SelectableText(
                               m.raw,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 10,
-                                height: 1.4,
+                                height: 1.5,
+                                color: AppTheme.textSecondary,
                               ),
                             ),
                           ),
@@ -430,6 +469,198 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                 ),
         ),
       ],
+    );
+  }
+
+  // ── Shared helpers ────────────────────────────────────────────────────────
+
+  Widget _buildTabEmpty(IconData icon, String title, String subtitle) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.primary.withValues(alpha: 0.05),
+            ),
+            child: Icon(icon,
+                size: 40, color: AppTheme.textTertiary.withValues(alpha: 0.4)),
+          ),
+          const SizedBox(height: 12),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textSecondary)),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.textTertiary.withValues(alpha: 0.6)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabActions({
+    VoidCallback? onExport,
+    required VoidCallback onCopy,
+    required VoidCallback onClear,
+    bool showExport = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard.withValues(alpha: 0.3),
+        border: Border(
+          top: BorderSide(color: AppTheme.border.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (showExport && onExport != null)
+            Expanded(
+              child: Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.accentGradient,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onExport,
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.download, size: 16, color: Colors.white),
+                        SizedBox(width: 6),
+                        Text('Export Debug Bundle',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (showExport) const SizedBox(width: 8),
+          _MiniIconButton(
+            icon: Icons.copy,
+            tooltip: 'Copy all',
+            onPressed: onCopy,
+          ),
+          _MiniIconButton(
+            icon: Icons.delete_outline,
+            tooltip: 'Clear',
+            onPressed: onClear,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Reusable Widgets ────────────────────────────────────────────────────────
+
+class _CountBadge extends StatelessWidget {
+  final int count;
+  const _CountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: AppTheme.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+  const _FilterChip({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 10, color: AppTheme.textTertiary)),
+        const SizedBox(width: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.border.withValues(alpha: 0.4)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isDense: true,
+              style: const TextStyle(fontSize: 11, color: AppTheme.primary),
+              dropdownColor: AppTheme.surfaceVariant,
+              items: options
+                  .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) onChanged(v);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  const _MiniIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 16),
+      visualDensity: VisualDensity.compact,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      color: AppTheme.textTertiary,
+      hoverColor: AppTheme.primary.withValues(alpha: 0.1),
     );
   }
 }
