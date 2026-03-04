@@ -200,7 +200,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                     ),
                     child: SelectableText(
                       log[i],
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 11,
                         color: AppTheme.textSecondary,
@@ -310,7 +310,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                           Expanded(
                             child: SelectableText(
                               e.message,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 11,
                                 color: AppTheme.textSecondary,
@@ -425,7 +425,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                         ),
                         title: Text(
                           m.firstLine,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -454,7 +454,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                             ),
                             child: SelectableText(
                               m.raw,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 10,
                                 height: 1.5,

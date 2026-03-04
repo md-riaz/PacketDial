@@ -225,7 +225,7 @@ class _AccountCard extends ConsumerWidget {
                         account.displayName.isNotEmpty
                             ? '${account.displayName} (${account.username}@${account.server})'
                             : '${account.username}@${account.server}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 11,
                           color: AppTheme.textTertiary,
                         ),
@@ -584,7 +584,8 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
       actions: [
         TextButton(
           onPressed: isRegistering ? null : () => Navigator.pop(context),
-          child: Text('Cancel', style: TextStyle(color: AppTheme.textTertiary)),
+          child: const Text('Cancel',
+              style: TextStyle(color: AppTheme.textTertiary)),
         ),
         FilledButton(
           onPressed: isRegistering
@@ -661,7 +662,7 @@ class _AccountDialogBodyState extends ConsumerState<_AccountDialogBody> {
                   ref.read(accountServiceProvider).register(schema);
 
                   ref.invalidate(accountsListProvider);
-                  if (mounted) Navigator.pop(context);
+                  if (context.mounted) Navigator.pop(context);
                 },
           style: FilledButton.styleFrom(
             backgroundColor: AppTheme.primary,

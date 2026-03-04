@@ -270,7 +270,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         fillColor: AppTheme.surfaceCard.withValues(alpha: 0.6),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppTheme.border),
+          borderSide: const BorderSide(color: AppTheme.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -282,7 +282,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ),
         suffixIcon: _uriCtrl.text.isNotEmpty
             ? IconButton(
-                icon: Icon(Icons.backspace_outlined,
+                icon: const Icon(Icons.backspace_outlined,
                     size: 18, color: AppTheme.textTertiary),
                 onPressed: _backspace,
               )
@@ -460,7 +460,7 @@ class _ActiveCallCard extends StatelessWidget {
           Row(
             children: [
               // Pulsing avatar
-              _PulsingAvatar(color: AppTheme.accent),
+              const _PulsingAvatar(color: AppTheme.accent),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

@@ -34,7 +34,7 @@ class HistoryScreen extends ConsumerWidget {
         title: const Text('Call History'),
         actions: [
           IconButton(
-            icon: Icon(Icons.delete_sweep_outlined,
+            icon: const Icon(Icons.delete_sweep_outlined,
                 size: 20, color: AppTheme.textTertiary),
             tooltip: 'Clear History',
             onPressed: () async {

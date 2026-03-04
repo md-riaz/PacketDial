@@ -111,7 +111,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.phone_callback,
+                      const Icon(Icons.phone_callback,
                           size: 12, color: AppTheme.callGreen),
                       const SizedBox(width: 6),
                       const Text(

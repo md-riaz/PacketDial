@@ -50,10 +50,10 @@ Set-StrictMode -Version Latest
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-function Write-Step  { param($m) Write-Host "`n>>> $m" -ForegroundColor Cyan }
-function Write-OK    { param($m) Write-Host "    [OK]   $m" -ForegroundColor Green }
-function Write-Info  { param($m) Write-Host "    [INFO] $m" -ForegroundColor Yellow }
-function Write-Fail  { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red }
+function Write-Step { param($m) Write-Host "`n>>> $m" -ForegroundColor Cyan }
+function Write-OK { param($m) Write-Host "    [OK]   $m" -ForegroundColor Green }
+function Write-Info { param($m) Write-Host "    [INFO] $m" -ForegroundColor Yellow }
+function Write-Fail { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red }
 
 function Test-Cmd($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 
@@ -68,7 +68,8 @@ function Invoke-Winget {
     )
     if ($Override) { $wargs += @('--override', $Override) }
     & winget @wargs
-    if ($LASTEXITCODE -notin @(0, -1978335189)) {   # 0=ok, -1978335189=already installed
+    if ($LASTEXITCODE -notin @(0, -1978335189)) {
+        # 0=ok, -1978335189=already installed
         Write-Fail "winget install $Id exited with code $LASTEXITCODE"
         exit 1
     }
@@ -76,7 +77,7 @@ function Invoke-Winget {
 
 function Refresh-Path {
     $machine = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
-    $user    = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    $user = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
     $env:PATH = "$machine;$user"
 }
 
@@ -105,9 +106,10 @@ Write-Host "======================================================" -ForegroundC
 Write-Step "Enabling Windows long-path support"
 try {
     Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
-                     -Name LongPathsEnabled -Value 1
+        -Name LongPathsEnabled -Value 1
     Write-OK "Registry: LongPathsEnabled = 1"
-} catch {
+}
+catch {
     Write-Info "Could not set registry key (may already be set): $_"
 }
 if (Test-Cmd 'git') {
@@ -135,7 +137,8 @@ if (-not $SkipInstall) {
     Write-Step "Installing Git for Windows"
     if (Test-Cmd 'git') {
         Write-OK "Already installed: $(git --version)"
-    } else {
+    }
+    else {
         Write-Info "Not found - installing via winget..."
         Invoke-Winget 'Git.Git'
         Refresh-Path
@@ -145,20 +148,21 @@ if (-not $SkipInstall) {
     # 2c. Visual Studio Build Tools 2022 with C++ Desktop workload
     Write-Step "Installing Visual Studio Build Tools 2022 (C++ Desktop workload)"
     $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    $hasCpp  = $false
+    $hasCpp = $false
     if (Test-Path $vsWhere) {
         $vsJson = & $vsWhere -products '*' `
-                             -requires 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' `
-                             -format json 2>$null
+            -requires 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' `
+            -format json 2>$null
         $hasCpp = ($vsJson | ConvertFrom-Json).Count -gt 0
     }
     if ($hasCpp) {
         Write-OK "Visual Studio C++ Build Tools already present"
-    } else {
+    }
+    else {
         Write-Info "Not found - installing via winget (this can take 10-20 minutes)..."
         $vsOverride = '--quiet --wait --norestart ' +
-                      '--add Microsoft.VisualStudio.Workload.VCTools ' +
-                      '--includeRecommended'
+        '--add Microsoft.VisualStudio.Workload.VCTools ' +
+        '--includeRecommended'
         Invoke-Winget 'Microsoft.VisualStudio.2022.BuildTools' $vsOverride
         Write-OK "Visual Studio Build Tools installed"
     }
@@ -167,15 +171,16 @@ if (-not $SkipInstall) {
     Write-Step "Installing Rust (rustup)"
     if (Test-Cmd 'cargo') {
         Write-OK "Already installed: $(rustc --version 2>$null)"
-    } else {
+    }
+    else {
         Write-Info "Not found - downloading rustup-init.exe..."
         $rustupExe = "$env:TEMP\rustup-init.exe"
         Invoke-WebRequest `
             -Uri 'https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe' `
             -OutFile $rustupExe -UseBasicParsing
         & $rustupExe -y --default-toolchain stable `
-                        --default-host x86_64-pc-windows-msvc `
-                        --no-modify-path
+            --default-host x86_64-pc-windows-msvc `
+            --no-modify-path
         Remove-Item $rustupExe -Force
         $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
         Write-OK "Rust installed: $(rustc --version 2>$null)"
@@ -191,36 +196,25 @@ if (-not $SkipInstall) {
     $flutterInstallDir = "$env:USERPROFILE\flutter"
     if (Test-Cmd 'flutter') {
         Write-OK "Already installed: $(flutter --version --machine 2>$null | ConvertFrom-Json | Select-Object -ExpandProperty frameworkVersion 2>$null)"
-    } else {
-        # Try winget first (easiest)
-        Write-Info "Trying winget install for Flutter..."
-        $wingetOk = $false
-        try {
-            Invoke-Winget 'Google.FlutterSDK'
-            Refresh-Path
-            if (Test-Cmd 'flutter') { $wingetOk = $true }
-        } catch { }
+    }
+    else {
+        Write-Info "Downloading Flutter $FlutterVersion directly..."
+        $zipUrl = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/" +
+        "flutter_windows_${FlutterVersion}-stable.zip"
+        $zipFile = "$env:TEMP\flutter.zip"
+        Write-Info "Downloading: $zipUrl"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
+        Write-Info "Extracting to $env:USERPROFILE..."
+        Expand-Archive -Path $zipFile -DestinationPath $env:USERPROFILE -Force
+        Remove-Item $zipFile -Force
 
-        if (-not $wingetOk) {
-            # Fallback: direct download of the exact CI version
-            Write-Info "winget Flutter not available - downloading Flutter $FlutterVersion directly..."
-            $zipUrl = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/" +
-                      "flutter_windows_${FlutterVersion}-stable.zip"
-            $zipFile = "$env:TEMP\flutter.zip"
-            Write-Info "Downloading: $zipUrl"
-            Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
-            Write-Info "Extracting to $env:USERPROFILE..."
-            Expand-Archive -Path $zipFile -DestinationPath $env:USERPROFILE -Force
-            Remove-Item $zipFile -Force
-
-            # Persist in user PATH
-            $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-            if ($userPath -notlike "*flutter*") {
-                [System.Environment]::SetEnvironmentVariable(
-                    'PATH', "$flutterInstallDir\bin;$userPath", 'User')
-            }
-            $env:PATH = "$flutterInstallDir\bin;$env:PATH"
+        # Persist in user PATH
+        $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+        if ($userPath -notlike "*flutter*") {
+            [System.Environment]::SetEnvironmentVariable(
+                'PATH', "$flutterInstallDir\bin;$userPath", 'User')
         }
+        $env:PATH = "$flutterInstallDir\bin;$env:PATH"
 
         Write-OK "Flutter installed"
     }
@@ -229,7 +223,8 @@ if (-not $SkipInstall) {
     flutter config --enable-windows-desktop
     Write-OK "flutter config --enable-windows-desktop done"
 
-} else {
+}
+else {
     Write-Info "-SkipInstall specified - skipping prerequisite installation."
 }
 
@@ -238,10 +233,11 @@ if (-not $SkipInstall) {
 # ---------------------------------------------------------------------------
 Write-Step "Verifying required tools"
 $missing = @()
-foreach ($tool in @('git','cargo','rustup','flutter')) {
+foreach ($tool in @('git', 'cargo', 'rustup', 'flutter')) {
     if (Test-Cmd $tool) {
         Write-OK "${tool}: found"
-    } else {
+    }
+    else {
         Write-Fail "${tool}: NOT found"
         $missing += $tool
     }
@@ -271,7 +267,8 @@ subst X: $RepoRoot 2>$null
 if (Test-Path 'X:\') {
     Set-Location X:\
     Write-OK "Mapped $RepoRoot -> X:"
-} else {
+}
+else {
     Write-Info "subst failed - continuing from $RepoRoot"
     Set-Location $RepoRoot
 }
@@ -282,11 +279,12 @@ if (Test-Path 'X:\') {
 Write-Step "Building pjproject 2.14.1"
 
 $pjOutDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'engine_pjsip\build\out'
-$pjStamp  = Join-Path $pjOutDir 'pjsip_build_stamp.txt'
+$pjStamp = Join-Path $pjOutDir 'pjsip_build_stamp.txt'
 
 if (Test-Path $pjStamp) {
     Write-OK "PJSIP already built: $(Get-Content $pjStamp -Raw)"
-} else {
+}
+else {
     & "$PSScriptRoot\build_pjsip.ps1"
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "PJSIP build failed (exit $LASTEXITCODE)."
@@ -301,7 +299,7 @@ if (Test-Path $pjStamp) {
 Write-Step "Building Rust core (voip_core.dll)"
 
 # Pass PJSIP paths to cargo so build.rs picks them up
-$env:PJSIP_LIB_DIR     = Join-Path (Resolve-Path .) 'engine_pjsip\build\out\lib'
+$env:PJSIP_LIB_DIR = Join-Path (Resolve-Path .) 'engine_pjsip\build\out\lib'
 $env:PJSIP_INCLUDE_DIR = Join-Path (Resolve-Path .) 'engine_pjsip\build\out\include'
 
 Set-Location core_rust
@@ -342,7 +340,8 @@ $flutterRelease = "app_flutter\build\windows\x64\runner\Release"
 if (Test-Path $dll) {
     Copy-Item $dll -Destination $flutterRelease -Force
     Write-OK "Copied voip_core.dll -> $flutterRelease"
-} else {
+}
+else {
     Write-Info "voip_core.dll not found - PJSIP integration pending, skipping copy."
 }
 
