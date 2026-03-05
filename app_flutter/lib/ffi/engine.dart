@@ -24,6 +24,10 @@ typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineGetLogBufferC = ffi.Int32 Function();
 typedef _EngineSendDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EnginePlayDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineTransferCallC = ffi.Int32 Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
+typedef _EngineStartAttendedXferC = ffi.Int32 Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
+typedef _EngineCompleteXferC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _EngineMergeConferenceC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineSendCommandC = ffi.Int32 Function(
     ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineSetEventCallbackC = ffi.Void Function(
@@ -49,6 +53,10 @@ abstract class EngineEventId {
   static const int logLevelSet = 14;
   static const int logBufferResult = 15;
   static const int engineLog = 16;
+  static const int callTransferInitiated = 17;
+  static const int callTransferStatus = 18;
+  static const int callTransferCompleted = 19;
+  static const int conferenceMerged = 20;
 }
 
 class VoipEngine {
@@ -107,6 +115,18 @@ class VoipEngine {
   late final int Function(ffi.Pointer<ffi.Int8>) _playDtmf = _lib
       .lookupFunction<_EnginePlayDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_play_dtmf');
+  late final int Function(ffi.Pointer<ffi.Int8>) _transferCall = _lib
+      .lookupFunction<_EngineTransferCallC, int Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>(
+          'engine_transfer_call');
+  late final int Function(ffi.Int32, ffi.Pointer<ffi.Int8>) _startAttendedXfer = _lib
+      .lookupFunction<_EngineStartAttendedXferC, int Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>(
+          'engine_start_attended_xfer');
+  late final int Function(ffi.Int32, ffi.Int32) _completeXfer = _lib
+      .lookupFunction<_EngineCompleteXferC, int Function(ffi.Int32, ffi.Int32)>(
+          'engine_complete_xfer');
+  late final int Function(ffi.Int32, ffi.Int32) _mergeConference = _lib
+      .lookupFunction<_EngineMergeConferenceC, int Function(ffi.Int32, ffi.Int32)>(
+          'engine_merge_conference');
   late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
       _sendCommand = _lib.lookupFunction<
           _EngineSendCommandC,
@@ -181,9 +201,9 @@ class VoipEngine {
     }
   }
 
-  /// Make an outgoing call.
-  /// [accountId] is the account ID to use for the call.
-  /// [number] is a SIP URI or phone number.
+  /// Make an outgoing call using a specific account.
+  /// [accountId] is the account UUID to use.
+  /// [number] is the destination SIP URI or phone number.
   /// Returns 0 on success, non-zero on error.
   int makeCall(String accountId, String number) {
     final accountIdPtr = _allocCString(accountId);
@@ -260,6 +280,49 @@ class VoipEngine {
     } finally {
       _freeNative(ptr);
     }
+  }
+
+  /// Initiate blind transfer of the active call.
+  /// [callId] is the call to transfer.
+  /// [destUri] is the destination SIP URI to transfer the call to.
+  /// Returns 0 on success, non-zero on error.
+  int transferCall(int callId, String destUri) {
+    final ptr = _allocCString(destUri);
+    try {
+      return _transferCall(callId, ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Start attended (consultative) transfer.
+  /// Puts current call on hold and initiates a consultation call.
+  /// [callId] is the call to put on hold.
+  /// [destUri] is the destination SIP URI to consult with.
+  /// Returns new consultation call ID on success, or negative error code.
+  int startAttendedXfer(int callId, String destUri) {
+    final ptr = _allocCString(destUri);
+    try {
+      return _startAttendedXfer(callId, ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Complete an attended transfer.
+  /// [callAId] is the original call (on hold).
+  /// [callBId] is the consultation call ID.
+  /// Returns 0 on success, non-zero on error.
+  int completeXfer(int callAId, int callBId) {
+    return _completeXfer(callAId, callBId);
+  }
+
+  /// Merge two calls into a 3-way conference.
+  /// [callAId] is the first call.
+  /// [callBId] is the second call.
+  /// Returns 0 on success, non-zero on error.
+  int mergeConference(int callAId, int callBId) {
+    return _mergeConference(callAId, callBId);
   }
 
   /// Send a structured command to the engine as JSON.

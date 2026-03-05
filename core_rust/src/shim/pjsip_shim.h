@@ -71,6 +71,16 @@ typedef void (*PdOnLog)(int level, const char *msg);
  */
 typedef void (*PdOnSipMsg)(int call_id, int is_tx, const char *msg);
 
+/**
+ * Call transfer status notification.
+ * @param call_id     PJSIP call id
+ * @param status_code SIP status code (200 = success, etc.)
+ * @param reason      NUL-terminated status text
+ * @param is_final    1 if this is the final notification, 0 otherwise
+ */
+typedef void (*PdOnCallTransferStatus)(int call_id, int status_code,
+                                        const char *reason, int is_final);
+
 /* -----------------------------------------------------------------------
  * Lifecycle
  * ----------------------------------------------------------------------- */
@@ -86,6 +96,7 @@ typedef void (*PdOnSipMsg)(int call_id, int is_tx, const char *msg);
  * @param on_media     Callback for call media state changes.
  * @param on_log       Callback for log messages.
  * @param on_sip_msg   Callback for raw SIP messages.
+ * @param on_transfer_status Callback for call transfer status notifications.
  * @return 0 on success, non-zero pj_status_t on error.
  */
 int pd_init(const char *user_agent,
@@ -95,7 +106,8 @@ int pd_init(const char *user_agent,
             PdOnCallState    on_call,
             PdOnCallMedia    on_media,
             PdOnLog          on_log,
-            PdOnSipMsg       on_sip_msg);
+            PdOnSipMsg       on_sip_msg,
+            PdOnCallTransferStatus on_transfer_status);
 
 /** Destroy pjsua and release all resources. */
 int pd_shutdown(void);
@@ -176,6 +188,44 @@ int pd_call_set_mute(int call_id, int mute);
  * @return 0 on success, non-zero on error.
  */
 int pd_call_send_dtmf(int call_id, const char *digits);
+
+/**
+ * Initiate blind call transfer to the specified destination.
+ * Sends SIP REFER request to transfer the call to dest_uri.
+ * @param call_id   pjsua_call_id of the call to transfer.
+ * @param dest_uri  Destination SIP URI to transfer the call to.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_call_transfer(int call_id, const char *dest_uri);
+
+/**
+ * Initiate attended (consultative) call transfer.
+ * First puts the current call on hold, then initiates a new call to the
+ * transfer target. After the target answers, call pd_call_complete_xfer()
+ * to complete the transfer.
+ * @param call_id   pjsua_call_id of the call to transfer (call A).
+ * @param dest_uri  Destination SIP URI to consult with.
+ * @return New pjsua_call_id for the consultation call (call B), or -1 on error.
+ */
+int pd_call_start_attended_xfer(int call_id, const char *dest_uri);
+
+/**
+ * Complete an attended transfer by transferring call A to call B's target.
+ * This connects the original caller directly to the consultation target.
+ * @param call_a    pjsua_call_id of the original call (on hold).
+ * @param call_b    pjsua_call_id of the consultation call.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_call_complete_xfer(int call_a, int call_b);
+
+/**
+ * Merge two calls into a 3-way conference.
+ * Both calls must be active (not on hold).
+ * @param call_a    pjsua_call_id of the first call.
+ * @param call_b    pjsua_call_id of the second call.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_call_merge_conference(int call_a, int call_b);
 
 /* -----------------------------------------------------------------------
  * Audio device management

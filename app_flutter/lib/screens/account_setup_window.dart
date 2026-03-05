@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:window_manager/window_manager.dart';
 import '../core/app_theme.dart';
 import '../models/account_schema.dart';
+import '../core/multi_window/window_controller_extension.dart';
 
 class AccountSetupWindow extends StatefulWidget {
   final WindowController windowController;
@@ -72,18 +72,15 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
           widget.existing == null ? 'Add SIP Account' : 'Edit Account';
     });
     
-    // Set up window method handler for close requests (desktop_multi_window pattern)
+    // Set up window method handler for close requests (non-blocking)
+    // Don't await - let it initialize in background
     _setupWindowHandler();
   }
 
-  Future<void> _setupWindowHandler() async {
-    await widget.windowController.setWindowMethodHandler((call) async {
-      debugPrint('[AccountSetupWindow] Method called: ${call.method}');
-      if (call.method == 'window_close') {
-        await windowManager.close();
-        return null;
-      }
-      throw MissingPluginException('Not implemented: ${call.method}');
+  void _setupWindowHandler() {
+    // Fire and forget - handler will be ready before any close request
+    widget.windowController.initWindowMethodHandler().catchError((e) {
+      debugPrint('[AccountSetupWindow] Handler setup error: $e');
     });
   }
 
@@ -92,8 +89,8 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
     _isClosing = true;
     try {
       debugPrint('[AccountSetupWindow] Closing window');
-      // Use invokeMethod('window_close') as per desktop_multi_window documentation
-      await widget.windowController.invokeMethod('window_close');
+      // Use the extension method to close (desktop_multi_window pattern)
+      await widget.windowController.closeWindow();
     } catch (e) {
       debugPrint('[AccountSetupWindow] Error closing window: $e');
     }

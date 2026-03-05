@@ -205,6 +205,14 @@ class EngineChannel {
         return 'LogBufferResult';
       case EngineEventId.engineLog:
         return 'EngineLog';
+      case EngineEventId.callTransferInitiated:
+        return 'CallTransferInitiated';
+      case EngineEventId.callTransferStatus:
+        return 'CallTransferStatus';
+      case EngineEventId.callTransferCompleted:
+        return 'CallTransferCompleted';
+      case EngineEventId.conferenceMerged:
+        return 'ConferenceMerged';
       default:
         return 'Unknown';
     }
@@ -250,6 +258,31 @@ class EngineChannel {
     _engine?.setHold(onHold);
   }
 
+  /// Initiate blind transfer of the active call to a destination URI.
+  /// Returns error code (0 = success).
+  int transferCall(int callId, String destUri) {
+    return _engine?.transferCall(callId, destUri) ?? -1;
+  }
+
+  /// Start attended (consultative) transfer.
+  /// Puts current call on hold and initiates a consultation call.
+  /// Returns consultation call ID on success, or negative error code.
+  int startAttendedXfer(int callId, String destUri) {
+    return _engine?.startAttendedXfer(callId, destUri) ?? -1;
+  }
+
+  /// Complete an attended transfer.
+  /// Returns error code (0 = success).
+  int completeXfer(int callAId, int callBId) {
+    return _engine?.completeXfer(callAId, callBId) ?? -1;
+  }
+
+  /// Merge two calls into a 3-way conference.
+  /// Returns error code (0 = success).
+  int mergeConference(int callAId, int callBId) {
+    return _engine?.mergeConference(callAId, callBId) ?? -1;
+  }
+
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     final payload =
@@ -277,8 +310,8 @@ class EngineChannel {
             uuid: id,
             accountName: accountName,
             displayName: displayName,
-            server: '',
-            username: '',
+            server: payload['server'] as String? ?? '',
+            username: payload['username'] as String? ?? '',
             password: '',
             registrationState: state,
             failureReason: reason,
@@ -287,6 +320,8 @@ class EngineChannel {
           accounts[id] = accounts[id]!.copyWith(
             accountName: accountName,
             displayName: displayName,
+            server: payload['server'] as String? ?? '',
+            username: payload['username'] as String? ?? '',
             registrationState: state,
             failureReason: reason,
           );
@@ -425,6 +460,34 @@ class EngineChannel {
         if (sipMessages.length > _kSipMessageMax) {
           sipMessages.removeAt(0);
         }
+
+      case 'CallTransferInitiated':
+        // Transfer initiated - UI already shows feedback via SnackBar
+        debugPrint('[EngineChannel] Call transfer initiated: $payload');
+
+      case 'CallTransferStatus':
+        // Handle transfer status updates from PJSIP
+        final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
+        final statusCode = (payload['status_code'] as num?)?.toInt() ?? 0;
+        final statusText = payload['status_text'] as String? ?? '';
+        final isFinal = payload['final'] as bool? ?? false;
+        debugPrint(
+            '[EngineChannel] Transfer status: call=$callId, code=$statusCode, text=$statusText, final=$isFinal');
+        if (isFinal && statusCode == 200) {
+          // Transfer successful - the call will be ended automatically
+          debugPrint('[EngineChannel] Transfer successful, call will be ended');
+        }
+
+      case 'CallTransferCompleted':
+        // Attended transfer completed successfully
+        debugPrint('[EngineChannel] Call transfer completed: $payload');
+
+      case 'ConferenceMerged':
+        // 3-way conference merged successfully
+        final callAId = (payload['call_a_id'] as num?)?.toInt() ?? 0;
+        final callBId = (payload['call_b_id'] as num?)?.toInt() ?? 0;
+        debugPrint(
+            '[EngineChannel] Conference merged: call A=$callAId, call B=$callBId');
     }
   }
 }

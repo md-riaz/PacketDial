@@ -137,10 +137,11 @@ class AccountSetupController {
     };
 
     final jsonStr = jsonEncode(payload);
-    
+
     try {
       final window = await WindowController.create(
         WindowConfiguration(
+          hiddenAtLaunch: false,
           arguments: '${WindowType.accountSetup.key}|$jsonStr',
         ),
       );
@@ -150,11 +151,6 @@ class AccountSetupController {
       _activeControllers[id] = this;
 
       _setupHandler(id);
-
-      // Initial show
-      await window.show().catchError((e) {
-        debugPrint('[AccountSetupController] Error showing new window: $e');
-      });
     } catch (e) {
       debugPrint('[AccountSetupController] Failed to create window: $e');
       _windowId = null;

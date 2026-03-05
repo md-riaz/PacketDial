@@ -210,7 +210,6 @@ cargo clippy -- -D warnings
 
 ## Known Limitations / TODOs
 
-- **Call transfer:** Not yet implemented (PJSIP `pjsua_call_xfer` integration pending)
 - **Conference calling:** Multi-party bridging not yet wired
 - **TLS/SRTP:** Config flags exist in PJSIP but are not surfaced in the UI
 - **Credential persistence:** Currently in-memory only — Windows Credential Manager integration planned

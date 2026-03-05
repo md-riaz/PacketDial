@@ -28,12 +28,65 @@ class DialerScreen extends ConsumerStatefulWidget {
 class _DialerScreenState extends ConsumerState<DialerScreen> {
   final _uriCtrl = TextEditingController();
   final _focusNode = FocusNode();
+  int? _consultationCallId;
+  String? _consultationUri;
 
   @override
   void initState() {
     super.initState();
-    // Auto-focus dialer on load (Spec 6.1)
     _focusNode.requestFocus();
+    EngineChannel.instance.events.listen(_handleCallEvent);
+  }
+
+  void _handleCallEvent(Map<String, dynamic> event) {
+    final type = event['type'] as String?;
+    final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
+    
+    if (type == 'CallStateChanged') {
+      final callId = (payload['call_id'] as num?)?.toInt();
+      final state = payload['state'] as String?;
+      final direction = payload['direction'] as String?;
+      final uri = payload['uri'] as String?;
+      
+      // Track consultation call: new outgoing call while another is on hold
+      if (callId != null && state == 'Ringing' && direction == 'Outgoing') {
+        final activeCall = EngineChannel.instance.activeCall;
+        if (activeCall != null && activeCall.onHold) {
+          setState(() {
+            _consultationCallId = callId;
+            _consultationUri = uri;
+          });
+        }
+      }
+      
+      // Update when consultation call is answered (InCall state)
+      if (callId != null && state == 'InCall' && callId == _consultationCallId) {
+        setState(() => _consultationUri = uri);
+      }
+      
+      // Clear when consultation call ends
+      if (state == 'Ended' && callId == _consultationCallId) {
+        setState(() {
+          _consultationCallId = null;
+          _consultationUri = null;
+        });
+      }
+      
+      // Clear if original call ends (no longer in consult state)
+      if (activeCallEnded(payload) && _consultationCallId != null) {
+        setState(() {
+          _consultationCallId = null;
+          _consultationUri = null;
+        });
+      }
+    }
+  }
+
+  bool activeCallEnded(Map<String, dynamic> payload) {
+    final state = payload['state'] as String?;
+    final callId = (payload['call_id'] as num?)?.toInt();
+    final activeCall = EngineChannel.instance.activeCall;
+    return state == 'Ended' && activeCall != null && callId == activeCall.callId;
   }
 
   @override
@@ -42,6 +95,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     _focusNode.dispose();
     super.dispose();
   }
+
+  /// Check if there's a consultation call active.
+  bool _hasConsultationCall() => _consultationCallId != null;
+
+  /// Get consultation call display info.
+  String? get _consultationDisplay => _consultationUri != null 
+      ? SipUriUtils.friendlyName(_consultationUri!) 
+      : null;
 
   void _dialKey(String digit, bool isCallActive) {
     // Local feedback (Spec 6.2)
@@ -65,45 +126,46 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   }
 
   void _call(AccountSchema? activeAccount, Account? activeAccountState,
-      List<AudioDevice> audioDevices) {
-    if (activeAccount == null) {
-      _showErrorDialog('No Account Selected',
-          'Please select an account before making a call.');
-      return;
-    }
+      List<AudioDevice> audioDevices) async {
     final raw = _uriCtrl.text.trim();
     if (raw.isEmpty) {
       _showErrorDialog('No Number Entered', 'Please enter a number or URI to dial.');
       return;
     }
 
-    final isRegistered =
-        activeAccountState?.registrationState == RegistrationState.registered;
     final hasInput = audioDevices.any((d) => d.isInput);
     final hasOutput = audioDevices.any((d) => d.isOutput);
 
-    // Block call if not registered - this is a hard requirement
-    if (!isRegistered) {
-      _showErrorDialog(
-        'Account Not Registered',
-        'The selected account is not registered with the SIP server.\n\n'
-        'Please check your account settings and server connection.',
-      );
-      return;
-    }
-
-    // Warn about missing audio devices but allow override
+    // Warn about missing audio devices first
     if (!hasInput || !hasOutput) {
       _showAudioDeviceWarning(
         context,
         hasInput: hasInput,
         hasOutput: hasOutput,
-        onProceed: () => _executeCall(activeAccount, raw),
+        onProceed: () => _dialWithAccountSelection(raw),
       );
       return;
     }
 
-    _executeCall(activeAccount, raw);
+    _dialWithAccountSelection(raw);
+  }
+
+  /// Handles account selection and dialing.
+  Future<void> _dialWithAccountSelection(String raw) async {
+    final selectedAccount = await _selectAccount(context);
+    if (selectedAccount == null) return;
+
+    final accountState = EngineChannel.instance.accounts[selectedAccount.uuid];
+    if (accountState?.registrationState != RegistrationState.registered) {
+      _showErrorDialog(
+        'Account Not Registered',
+        'The selected account "${selectedAccount.accountName}" is not registered.\n\n'
+        'Please check your account settings and server connection.',
+      );
+      return;
+    }
+
+    _executeCall(selectedAccount, raw);
   }
 
   void _executeCall(AccountSchema activeAccount, String raw) {
@@ -132,7 +194,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               '• Audio devices are selected in Windows Sound settings';
           break;
         case 6: // NotFound
-          errorMessage = 'Account not found. Please verify your account is registered.';
+          errorMessage = 'Account not found or not registered. Please verify your account settings.';
           break;
         case 1: // AlreadyInitialized
         case 2: // NotInitialized
@@ -143,6 +205,92 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       }
       _showErrorDialog(title, errorMessage);
     }
+  }
+
+  /// Shows account selection dialog when multiple accounts are registered.
+  Future<AccountSchema?> _selectAccount(BuildContext context) async {
+    final registeredAccounts = EngineChannel.instance.accounts.values
+        .where((a) => a.registrationState == RegistrationState.registered)
+        .toList();
+
+    if (registeredAccounts.isEmpty) {
+      _showErrorDialog('No Account Available',
+          'Please register at least one SIP account before making calls.');
+      return null;
+    }
+
+    if (registeredAccounts.length == 1) {
+      return registeredAccounts.first;
+    }
+
+    // Multiple accounts - show selection dialog
+    return showDialog<AccountSchema>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        icon: const Icon(Icons.sim_card, color: AppTheme.primary, size: 48),
+        title: const Text('Select Account',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Choose which account to use for this call:',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: registeredAccounts.length,
+                itemBuilder: (context, index) {
+                  final account = registeredAccounts[index];
+                  return Card(
+                    color: AppTheme.inputFill,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
+                        child: Text(
+                          account.accountName.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        account.accountName,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${account.username}@${account.server}',
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
+                      onTap: () => Navigator.pop(context, account),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorDialog(String title, String message) {
@@ -178,21 +326,26 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
         icon: const Icon(Icons.warning, color: AppTheme.warningAmber, size: 48),
-        title: const Text('No Audio Devices',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        title: Text('Audio Device Warning',
+            style: const TextStyle(color: AppTheme.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              missingDevices.length == 2
-                  ? 'No microphone or speaker detected.'
-                  : 'No ${missingDevices.first.toLowerCase()} detected.',
-              style: const TextStyle(color: AppTheme.textSecondary),
+            const Text(
+              'Missing audio devices:',
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 12),
-            const Text('Calls may fail without audio devices.',
-                style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+            const SizedBox(height: 8),
+            ...missingDevices.map((d) =>
+                Text('• $d', style: const TextStyle(color: AppTheme.textSecondary))),
+            const SizedBox(height: 16),
+            const Text(
+              'The call will use null audio devices (no sound). '
+              'Connect audio devices and configure them in Settings.',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
           ],
         ),
         actions: [
@@ -212,6 +365,556 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ],
       ),
     );
+  }
+
+  /// Shows transfer dialog with destination and transfer type selection.
+  void _showTransferDialog(ActiveCall call) {
+    // If there's a consultation call, show complete transfer dialog instead
+    if (_hasConsultationCall()) {
+      _showCompleteTransferDialog(call);
+      return;
+    }
+
+    final transferCtrl = TextEditingController();
+    final transferFocusNode = FocusNode();
+    bool isConsultTransfer = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surfaceCard,
+          icon: const Icon(Icons.phone_forwarded,
+              color: AppTheme.primary, size: 48),
+          title: const Text('Transfer Call',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Transfer this call to:',
+                  style: const TextStyle(color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: transferCtrl,
+                  focusNode: transferFocusNode,
+                  autofocus: true,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'sip:user@domain or extension',
+                    hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                    filled: true,
+                    fillColor: AppTheme.inputFill,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(Icons.phone_forwarded,
+                        color: AppTheme.primary),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Transfer Type:',
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                RadioListTile<bool>(
+                  title: const Text('Blind Transfer',
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                  subtitle: const Text('Transfer immediately without consulting',
+                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                  value: false,
+                  groupValue: isConsultTransfer,
+                  onChanged: (value) {
+                    setDialogState(() => isConsultTransfer = value!);
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                RadioListTile<bool>(
+                  title: const Text('Consult Transfer',
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                  subtitle: const Text('Speak to target first, then transfer',
+                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                  value: true,
+                  groupValue: isConsultTransfer,
+                  onChanged: (value) {
+                    setDialogState(() => isConsultTransfer = value!);
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                transferCtrl.dispose();
+                transferFocusNode.dispose();
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () {
+                if (transferCtrl.text.trim().isNotEmpty) {
+                  _executeTransfer(call, transferCtrl.text.trim(), isConsultTransfer);
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Transfer',
+                  style: TextStyle(color: AppTheme.primary)),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      transferCtrl.dispose();
+      transferFocusNode.dispose();
+    });
+  }
+
+  /// Shows dialog to complete consult transfer when consultation call is active.
+  void _showCompleteTransferDialog(ActiveCall heldCall) {
+    final consultationId = _consultationCallId;
+    final consultationTarget = _consultationDisplay;
+    if (consultationId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        icon: const Icon(Icons.check_circle,
+            color: AppTheme.success, size: 48),
+        title: const Text('Complete Transfer',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Complete the attended transfer?',
+              style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            if (consultationTarget != null) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person, color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Transfer to:',
+                            style: TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 10,
+                            ),
+                          ),
+                          Text(
+                            consultationTarget,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text(
+              'This will connect the held call to ${consultationTarget ?? 'the consultation target'} and end your consultation call.',
+              style: TextStyle(
+                  color: AppTheme.textTertiary, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _completeTransfer(heldCall);
+            },
+            icon: const Icon(Icons.phone_forwarded, size: 18),
+            label: const Text('Complete Transfer'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows conference dialog to add a participant.
+  void _showConferenceDialog(ActiveCall call) {
+    // If there's a consultation call, show join conference dialog
+    if (_hasConsultationCall()) {
+      _joinConference(call);
+      return;
+    }
+
+    final conferenceCtrl = TextEditingController();
+    final conferenceFocusNode = FocusNode();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        icon: const Icon(Icons.groups,
+            color: AppTheme.primary, size: 48),
+        title: const Text('Add to Conference',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add this participant to the call:',
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: conferenceCtrl,
+              focusNode: conferenceFocusNode,
+              autofocus: true,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'sip:user@domain or extension',
+                hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                filled: true,
+                fillColor: AppTheme.inputFill,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                prefixIcon: const Icon(Icons.groups,
+                    color: AppTheme.primary),
+              ),
+              onSubmitted: (_) {
+                if (conferenceCtrl.text.trim().isNotEmpty) {
+                  _executeConference(call, conferenceCtrl.text.trim());
+                  Navigator.pop(context);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'This will put the current call on hold and dial the participant. Once they answer, you can create a 3-way conference.',
+              style: TextStyle(
+                  color: AppTheme.textTertiary, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              conferenceCtrl.dispose();
+              conferenceFocusNode.dispose();
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              if (conferenceCtrl.text.trim().isNotEmpty) {
+                _executeConference(call, conferenceCtrl.text.trim());
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add Participant',
+                style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    ).then((_) {
+      conferenceCtrl.dispose();
+      conferenceFocusNode.dispose();
+    });
+  }
+
+  void _executeTransfer(ActiveCall call, String destUri, bool isConsult) {
+    // Build proper SIP URI if needed
+    String uri = destUri;
+    if (!destUri.contains(':')) {
+      // Try to get domain from account
+      final account = EngineChannel.instance.accounts[call.accountId];
+      if (account != null && account.server.isNotEmpty) {
+        uri = 'sip:$destUri@${account.server}';
+      } else {
+        uri = 'sip:$destUri';
+      }
+    } else if (!destUri.startsWith('sip:') &&
+        !destUri.startsWith('sips:')) {
+      uri = 'sip:$destUri';
+    }
+
+    if (isConsult) {
+      // Consult transfer: put current call on hold, dial target
+      final result = EngineChannel.instance.startAttendedXfer(call.callId, uri);
+      if (result >= 0) {
+        // Store consultation call ID
+        setState(() => _consultationCallId = result);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Calling $uri for consultation...'),
+            backgroundColor: AppTheme.primary,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        _showErrorDialog('Transfer Failed', _getTransferErrorMessage(result));
+      }
+    } else {
+      // Blind transfer: transfer immediately
+      final result = EngineChannel.instance.transferCall(call.callId, uri);
+      if (result == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Transferring call to $uri...'),
+            backgroundColor: AppTheme.primary,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        _showErrorDialog('Transfer Failed', _getTransferErrorMessage(result));
+      }
+    }
+  }
+
+  String _getTransferErrorMessage(int errorCode) {
+    switch (errorCode) {
+      case -1: return 'Engine not initialized. Please try again.';
+      case 6: return 'Call not found. The call may have ended.';
+      case 7: return 'Media not ready. Check audio device settings.';
+      case 100: return 'Internal error. Please try again.';
+      default: return 'Transfer failed (error code: $errorCode).';
+    }
+  }
+
+  void _executeConference(ActiveCall call, String destUri) {
+    // Build proper SIP URI if needed
+    String uri = destUri;
+    if (!destUri.contains(':')) {
+      final account = EngineChannel.instance.accounts[call.accountId];
+      if (account != null && account.server.isNotEmpty) {
+        uri = 'sip:$destUri@${account.server}';
+      } else {
+        uri = 'sip:$destUri';
+      }
+    } else if (!destUri.startsWith('sip:') &&
+        !destUri.startsWith('sips:')) {
+      uri = 'sip:$destUri';
+    }
+
+    // Put current call on hold and dial the participant
+    final result = EngineChannel.instance.startAttendedXfer(call.callId, uri);
+    if (result >= 0) {
+      setState(() => _consultationCallId = result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Calling $uri to add to conference...'),
+          backgroundColor: AppTheme.primary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      _showErrorDialog('Conference Failed', _getTransferErrorMessage(result));
+    }
+  }
+
+  /// Check if there's a consultation call active.
+  bool _hasConsultationCall() => _consultationCallId != null;
+
+  /// Complete a consult transfer - transfer the held call to the consultation target.
+  void _completeTransfer(ActiveCall heldCall) {
+    final consultationId = _consultationCallId;
+    if (consultationId == null) return;
+
+    final result = EngineChannel.instance.completeXfer(heldCall.callId, consultationId);
+    
+    if (result == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              const Text('Completing transfer...'),
+            ],
+          ),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      setState(() {
+        _consultationCallId = null;
+        _consultationUri = null;
+      });
+    } else {
+      _showErrorDialog('Transfer Failed', _getTransferErrorMessage(result));
+    }
+  }
+
+  /// Join the held call and active call into a conference.
+  void _joinConference(ActiveCall heldCall) {
+    final consultationId = _consultationCallId;
+    final consultationTarget = _consultationDisplay;
+    if (consultationId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        icon: const Icon(Icons.groups,
+            color: AppTheme.primary, size: 48),
+        title: const Text('Join Conference',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Create a 3-way conference?',
+              style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            if (consultationTarget != null) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_add, color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Add to conference:',
+                            style: TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 10,
+                            ),
+                          ),
+                          Text(
+                            consultationTarget,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text(
+              'This will merge all parties into a single conference call.',
+              style: TextStyle(
+                  color: AppTheme.textTertiary, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _executeMergeConference(heldCall.callId, consultationId);
+            },
+            icon: const Icon(Icons.groups, size: 18),
+            label: const Text('Join Conference'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeMergeConference(int callAId, int callBId) {
+    final result = EngineChannel.instance.mergeConference(callAId, callBId);
+
+    if (result == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              const Text('Joining calls into conference...'),
+            ],
+          ),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      setState(() {
+        _consultationCallId = null;
+        _consultationUri = null;
+      });
+    } else {
+      _showErrorDialog('Conference Failed', _getTransferErrorMessage(result));
+    }
   }
 
   void _hangup() => EngineChannel.instance.engine.hangup();
@@ -277,7 +980,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     if (activeCall != null)
                       Expanded(
                         child: _ActiveCallCard(
-                            call: activeCall, stats: stats, onHangup: _hangup),
+                          call: activeCall,
+                          stats: stats,
+                          onHangup: _hangup,
+                          onTransfer: () => _showTransferDialog(activeCall),
+                          onConference: () => _showConferenceDialog(activeCall),
+                          hasConsultationCall: _hasConsultationCall(),
+                          consultationDisplay: _consultationDisplay,
+                        ),
                       )
                     else
                       Expanded(child: _buildReadyIndicator()),
@@ -602,19 +1312,128 @@ class _ActiveCallCard extends StatelessWidget {
   final ActiveCall call;
   final MediaStats? stats;
   final VoidCallback onHangup;
-  const _ActiveCallCard(
-      {required this.call, this.stats, required this.onHangup});
+  final VoidCallback onTransfer;
+  final VoidCallback onConference;
+  final bool hasConsultationCall;
+  final String? consultationDisplay;
+
+  const _ActiveCallCard({
+    required this.call,
+    this.stats,
+    required this.onHangup,
+    required this.onTransfer,
+    required this.onConference,
+    this.hasConsultationCall = false,
+    this.consultationDisplay,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: AppTheme.glassCard(
-        color: AppTheme.accent.withValues(alpha: 0.08),
-        borderColor: AppTheme.accent.withValues(alpha: 0.25),
+        color: hasConsultationCall 
+            ? AppTheme.primary.withValues(alpha: 0.05)
+            : AppTheme.accent.withValues(alpha: 0.08),
+        borderColor: hasConsultationCall
+            ? AppTheme.primary.withValues(alpha: 0.3)
+            : AppTheme.accent.withValues(alpha: 0.25),
       ),
       child: Column(
         children: [
+          // Consultation status banner
+          if (hasConsultationCall) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primary.withValues(alpha: 0.15),
+                    AppTheme.primary.withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.phone_callback,
+                      color: AppTheme.primary,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Consultation Call',
+                          style: TextStyle(
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          consultationDisplay ?? 'Calling...',
+                          style: TextStyle(
+                            color: AppTheme.primary.withValues(alpha: 0.8),
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: AppTheme.success.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: AppTheme.success,
+                          size: 12,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Active',
+                          style: TextStyle(
+                            color: AppTheme.success,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          
+          // Main call info
           Row(
             children: [
               // Pulsing avatar
@@ -630,11 +1449,36 @@ class _ActiveCallCard extends StatelessWidget {
                             fontSize: 14,
                             color: AppTheme.textPrimary)),
                     const SizedBox(height: 2),
-                    Text(call.state.label,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.accent.withValues(alpha: 0.8),
-                            fontWeight: FontWeight.w500)),
+                    Row(
+                      children: [
+                        Text(call.state.label,
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.accent.withValues(alpha: 0.8),
+                                fontWeight: FontWeight.w500)),
+                        if (call.onHold) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warningAmber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: AppTheme.warningAmber.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: const Text(
+                              'On Hold',
+                              style: TextStyle(
+                                color: AppTheme.warningAmber,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -646,6 +1490,7 @@ class _ActiveCallCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          // Action buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -671,11 +1516,18 @@ class _ActiveCallCard extends StatelessWidget {
                 onTap: () {},
               ),
               _CallControlButton(
-                icon: Icons.swap_horiz,
-                label: 'XFER',
+                icon: hasConsultationCall ? Icons.check_circle : Icons.phone_forwarded,
+                label: hasConsultationCall ? 'COMPLETE' : 'TRANSFER',
                 active: false,
                 enabled: call.state != CallState.ringing,
-                onTap: () {},
+                onTap: onTransfer,
+              ),
+              _CallControlButton(
+                icon: hasConsultationCall ? Icons.groups : Icons.groups,
+                label: hasConsultationCall ? 'JOIN' : 'CONFERENCE',
+                active: false,
+                enabled: call.state != CallState.ringing,
+                onTap: onConference,
               ),
             ],
           ),

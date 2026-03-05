@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
+import '../core/multi_window/window_controller_extension.dart';
 
 /// Incoming call popup window — launched as a sub-window by the main app.
 ///
@@ -35,7 +35,9 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
   String? get callerDomain =>
       SipUriUtils.extractDomain(widget.callInfo['uri'] as String?);
   String get accountName =>
-      widget.callInfo['account'] as String? ?? 'SIP Account';
+      widget.callInfo['account_name'] as String? ?? 'SIP Account';
+  String get accountUser =>
+      widget.callInfo['account_user'] as String? ?? '';
 
   @override
   void initState() {
@@ -47,7 +49,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
 
     _configureWindow();
     
-    // Set up window method handler for close requests (desktop_multi_window pattern)
+    // Set up window method handler for close requests (non-blocking)
     _setupWindowHandler();
   }
 
@@ -61,14 +63,10 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     });
   }
   
-  Future<void> _setupWindowHandler() async {
-    await widget.windowController.setWindowMethodHandler((call) async {
-      debugPrint('[IncomingCallPopup] Method called: ${call.method}');
-      if (call.method == 'window_close') {
-        await windowManager.close();
-        return null;
-      }
-      throw MissingPluginException('Not implemented: ${call.method}');
+  void _setupWindowHandler() {
+    // Fire and forget - handler will be ready before any close request
+    widget.windowController.initWindowMethodHandler().catchError((e) {
+      debugPrint('[IncomingCallPopup] Handler setup error: $e');
     });
   }
 
@@ -108,8 +106,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
       debugPrint('[IncomingCallPopup] Closing window');
       // Give the main window time to process the answer/reject
       await Future.delayed(const Duration(milliseconds: 200));
-      // Use invokeMethod('window_close') as per desktop_multi_window documentation
-      await widget.windowController.invokeMethod('window_close');
+      // Use the extension method to close (desktop_multi_window pattern)
+      await widget.windowController.closeWindow();
     } catch (e) {
       debugPrint('[IncomingCallPopup] Error closing window: $e');
     }
@@ -182,7 +180,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
 
                       // Caller name
                       Text(
-                        callerName,
+                        callerName.isNotEmpty ? callerName : 'Unknown Caller',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -192,10 +190,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
-                      const SizedBox(height: 4),
-
-                      // Domain / account info
-                      if (callerDomain != null)
+                      if (callerDomain != null && callerDomain!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
                         Text(
                           callerDomain!,
                           style: const TextStyle(
@@ -203,13 +199,53 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                             color: AppTheme.textTertiary,
                           ),
                         ),
-                      Text(
-                        _answered ? 'Connecting…' : 'via $accountName',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: _answered
-                              ? AppTheme.accentBright
-                              : AppTheme.textTertiary.withValues(alpha: 0.7),
+                      ],
+                      const SizedBox(height: 16),
+
+                      // Account info badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppTheme.primary.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.sim_card,
+                              color: AppTheme.primary,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  accountName,
+                                  style: const TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (accountUser.isNotEmpty)
+                                  Text(
+                                    accountUser,
+                                    style: TextStyle(
+                                      color: AppTheme.primary.withValues(alpha: 0.7),
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 20),

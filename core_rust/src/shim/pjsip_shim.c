@@ -41,12 +41,13 @@
  * ----------------------------------------------------------------------- */
 
 /* Rust callback function pointers — set once in pd_init, read-only after */
-static PdOnRegState     g_on_reg      = NULL;
-static PdOnIncomingCall g_on_incoming = NULL;
-static PdOnCallState    g_on_call     = NULL;
-static PdOnCallMedia    g_on_media    = NULL;
-static PdOnLog          g_on_log      = NULL;
-static PdOnSipMsg       g_on_sip_msg  = NULL;
+static PdOnRegState          g_on_reg           = NULL;
+static PdOnIncomingCall      g_on_incoming      = NULL;
+static PdOnCallState         g_on_call          = NULL;
+static PdOnCallMedia         g_on_media         = NULL;
+static PdOnLog               g_on_log           = NULL;
+static PdOnSipMsg            g_on_sip_msg       = NULL;
+static PdOnCallTransferStatus g_on_transfer_status = NULL;
 
 /* Transport ids created at init time */
 static pjsua_transport_id g_udp_tp = PJSUA_INVALID_ID;
@@ -221,6 +222,19 @@ static void on_call_tsx_state(pjsua_call_id call_id, pjsip_transaction *tsx,
     }
 }
 
+/**
+ * PJSIP call transfer status callback.
+ * Called when a transfer request completes.
+ */
+static void on_call_transfer_status(pjsua_call_id call_id,
+                                     int status_code,
+                                     const char *reason,
+                                     pj_bool_t final)
+{
+    if (!g_on_transfer_status) return;
+    g_on_transfer_status((int)call_id, status_code, reason, final ? 1 : 0);
+}
+
 /* PJSIP log writer — forwards to the Rust log callback */
 static void pj_log_writer(int level, const char *data, int len)
 {
@@ -323,7 +337,8 @@ int pd_init(const char *user_agent,
             PdOnCallState    on_call,
             PdOnCallMedia    on_media,
             PdOnLog          on_log,
-            PdOnSipMsg       on_sip_msg)
+            PdOnSipMsg       on_sip_msg,
+            PdOnCallTransferStatus on_transfer_status)
 {
     pj_status_t status;
 
@@ -334,6 +349,7 @@ int pd_init(const char *user_agent,
     g_on_media    = on_media;
     g_on_log      = on_log;
     g_on_sip_msg  = on_sip_msg;
+    g_on_transfer_status = on_transfer_status;
 
     /* pjsua_create */
     status = pjsua_create();
@@ -358,6 +374,7 @@ int pd_init(const char *user_agent,
     ua_cfg.cb.on_call_state     = on_call_state;
     ua_cfg.cb.on_call_media_state = on_call_media_state;
     ua_cfg.cb.on_call_tsx_state = on_call_tsx_state;
+    ua_cfg.cb.on_call_transfer_status = on_call_transfer_status;
 
     if (user_agent && user_agent[0] != '\0') {
         ua_cfg.user_agent = S(user_agent);
@@ -779,6 +796,197 @@ int pd_call_send_dtmf(int call_id, const char *digits)
     if (!digits || digits[0] == '\0') return -1;
     pj_str_t d = S(digits);
     return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
+}
+
+int pd_call_transfer(int call_id, const char *dest_uri)
+{
+    pd_ensure_thread();
+    if (!dest_uri || dest_uri[0] == '\0') return -1;
+
+    pj_str_t dest = S(dest_uri);
+    pj_status_t status = pjsua_call_xfer((pjsua_call_id)call_id, &dest, NULL);
+
+    if (status != PJ_SUCCESS && g_on_log) {
+        char err_msg[256];
+        pj_str_t err_str = pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+                 "pd_call_transfer failed: call_id=%d uri=%s status=%d (%.*s)",
+                 call_id, dest_uri, (int)status, (int)err_str.slen, err_str.ptr);
+        g_on_log(1, buf);
+    }
+
+    return (int)status;
+}
+
+int pd_call_start_attended_xfer(int call_id, const char *dest_uri)
+{
+    pd_ensure_thread();
+    if (!dest_uri || dest_uri[0] == '\0') return -1;
+
+    /* First, put the current call on hold */
+    pj_status_t status = pjsua_call_set_hold((pjsua_call_id)call_id, NULL);
+    if (status != PJ_SUCCESS && g_on_log) {
+        char err_msg[256];
+        pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[256];
+        snprintf(buf, sizeof(buf), "pd_call_start_attended_xfer: hold failed: %s", err_msg);
+        g_on_log(2, buf);
+    }
+
+    /* Now initiate a new call to the transfer target */
+    pj_str_t dest = S(dest_uri);
+    pjsua_call_id new_call_id;
+
+    /* Find the account for the original call */
+    pjsua_call_info ci;
+    pj_bzero(&ci, sizeof(ci));
+    if (pjsua_call_get_info((pjsua_call_id)call_id, &ci) != PJ_SUCCESS) {
+        if (g_on_log) g_on_log(2, "pd_call_start_attended_xfer: failed to get call info");
+        return -1;
+    }
+
+    status = pjsua_call_make_call(ci.acc_id, &dest, 0, NULL, NULL, &new_call_id);
+    if (status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char err_msg[256];
+            pj_strerror(status, err_msg, sizeof(err_msg));
+            char buf[256];
+            snprintf(buf, sizeof(buf), "pd_call_start_attended_xfer: make_call failed: %s", err_msg);
+            g_on_log(1, buf);
+        }
+        return -1;
+    }
+
+    if (g_on_log) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "pd_call_start_attended_xfer: consultation call created: %d", (int)new_call_id);
+        g_on_log(4, buf);
+    }
+
+    return (int)new_call_id;
+}
+
+int pd_call_complete_xfer(int call_a, int call_b)
+{
+    pd_ensure_thread();
+
+    /* Get call B info to retrieve the remote URI */
+    pjsua_call_info ci_b;
+    pj_bzero(&ci_b, sizeof(ci_b));
+    if (pjsua_call_get_info((pjsua_call_id)call_b, &ci_b) != PJ_SUCCESS) {
+        if (g_on_log) g_on_log(2, "pd_call_complete_xfer: failed to get call B info");
+        return -1;
+    }
+
+    /* Extract remote URI from call B */
+    char remote_uri[256];
+    pj_ssize_t len = ci_b.remote_info.slen;
+    if (len >= (pj_ssize_t)sizeof(remote_uri)) len = (pj_ssize_t)sizeof(remote_uri) - 1;
+    memcpy(remote_uri, ci_b.remote_info.ptr, (size_t)len);
+    remote_uri[len] = '\0';
+
+    /* Transfer call A to call B's remote URI */
+    pj_str_t dest = S(remote_uri);
+    pj_status_t status = pjsua_call_xfer((pjsua_call_id)call_a, &dest, NULL);
+
+    if (status != PJ_SUCCESS && g_on_log) {
+        char err_msg[256];
+        pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+                 "pd_call_complete_xfer failed: call_a=%d status=%d (%.*s)",
+                 call_a, (int)status, (int)err_str.slen, err_str.ptr);
+        g_on_log(1, buf);
+    }
+
+    /* Hang up call B (consultation call) */
+    pjsua_call_hangup((pjsua_call_id)call_b, 0, NULL, NULL);
+
+    return (int)status;
+}
+
+int pd_call_merge_conference(int call_a, int call_b)
+{
+    pd_ensure_thread();
+
+    /* Get conference port IDs for both calls */
+    pjsua_call_info ci_a, ci_b;
+    pj_bzero(&ci_a, sizeof(ci_a));
+    pj_bzero(&ci_b, sizeof(ci_b));
+
+    if (pjsua_call_get_info((pjsua_call_id)call_a, &ci_a) != PJ_SUCCESS) {
+        if (g_on_log) g_on_log(2, "pd_call_merge_conference: failed to get call A info");
+        return -1;
+    }
+
+    if (pjsua_call_get_info((pjsua_call_id)call_b, &ci_b) != PJ_SUCCESS) {
+        if (g_on_log) g_on_log(2, "pd_call_merge_conference: failed to get call B info");
+        return -1;
+    }
+
+    /* Find active audio streams and connect to conference bridge */
+    unsigned i;
+    pjsua_conf_port_id port_a = PJSUA_INVALID_ID, port_b = PJSUA_INVALID_ID;
+
+    for (i = 0; i < ci_a.media_cnt; i++) {
+        if (ci_a.media[i].type == PJMEDIA_TYPE_AUDIO &&
+            ci_a.media[i].status == PJSUA_CALL_MEDIA_ACTIVE) {
+            port_a = ci_a.media[i].stream.aud.conf_slot;
+            break;
+        }
+    }
+
+    for (i = 0; i < ci_b.media_cnt; i++) {
+        if (ci_b.media[i].type == PJMEDIA_TYPE_AUDIO &&
+            ci_b.media[i].status == PJSUA_CALL_MEDIA_ACTIVE) {
+            port_b = ci_b.media[i].stream.aud.conf_slot;
+            break;
+        }
+    }
+
+    if (port_a == PJSUA_INVALID_ID || port_b == PJSUA_INVALID_ID) {
+        if (g_on_log) g_on_log(2, "pd_call_merge_conference: no active audio streams");
+        return -1;
+    }
+
+    /* Connect call A to call B (bidirectional) */
+    pj_status_t status;
+    status = pjsua_conf_connect(port_a, port_b);
+    if (status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "pd_call_merge_conference: connect A->B failed: %d", (int)status);
+            g_on_log(2, buf);
+        }
+        return -1;
+    }
+
+    status = pjsua_conf_connect(port_b, port_a);
+    if (status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "pd_call_merge_conference: connect B->A failed: %d", (int)status);
+            g_on_log(2, buf);
+        }
+        /* Try to disconnect the first connection */
+        pjsua_conf_disconnect(port_a, port_b);
+        return -1;
+    }
+
+    /* Also connect both to the local speaker/mic for monitoring */
+    pjsua_conf_connect(port_a, 0);  /* Call A to speaker */
+    pjsua_conf_connect(0, port_a);  /* Mic to Call A */
+    pjsua_conf_connect(port_b, 0);  /* Call B to speaker */
+    pjsua_conf_connect(0, port_b);  /* Mic to Call B */
+
+    if (g_on_log) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "pd_call_merge_conference: merged calls %d and %d", call_a, call_b);
+        g_on_log(4, buf);
+    }
+
+    return 0;
 }
 
 /* -----------------------------------------------------------------------

@@ -304,6 +304,7 @@ extern "C" {
         on_media: extern "C" fn(i32, i32),
         on_log: extern "C" fn(i32, *const c_char),
         on_sip_msg: extern "C" fn(i32, i32, *const c_char),
+        on_transfer_status: extern "C" fn(i32, i32, *const c_char, i32),
     ) -> i32;
     fn pd_shutdown() -> i32;
     fn pd_acc_add(
@@ -340,6 +341,10 @@ extern "C" {
         bitrate_kbps_out: *mut i32,
     ) -> i32;
     fn pd_call_send_dtmf(call_id: i32, digits: *const c_char) -> i32;
+    fn pd_call_transfer(call_id: i32, dest_uri: *const c_char) -> i32;
+    fn pd_call_start_attended_xfer(call_id: i32, dest_uri: *const c_char) -> i32;
+    fn pd_call_complete_xfer(call_a: i32, call_b: i32) -> i32;
+    fn pd_call_merge_conference(call_a: i32, call_b: i32) -> i32;
     fn pd_aud_play_dtmf(digits: *const c_char) -> i32;
 }
 
@@ -640,6 +645,60 @@ extern "C" fn pjsip_on_sip_msg(pj_call_id: i32, is_tx: i32, msg_ptr: *const c_ch
         }
     });
     push_event(event.to_string());
+}
+
+/// PJSIP call transfer status callback.
+/// Notifies the Dart/Flutter UI about transfer request status.
+extern "C" fn pjsip_on_transfer_status(
+    pj_call_id: i32,
+    status_code: i32,
+    reason_ptr: *const c_char,
+    is_final: i32,
+) {
+    let reason = if reason_ptr.is_null() {
+        String::new()
+    } else {
+        unsafe {
+            match CStr::from_ptr(reason_ptr).to_str() {
+                Ok(s) => s.to_owned(),
+                Err(_) => {
+                    log_engine(
+                        LogLevel::Warn,
+                        "pjsip_on_transfer_status: reason contains invalid UTF-8",
+                    );
+                    "<invalid UTF-8>".to_owned()
+                }
+            }
+        }
+    };
+
+    // Look up our internal call id from the PJSIP call id
+    let our_call_id = {
+        let map = PJSIP_CALL_MAP.lock().unwrap();
+        map.get(&pj_call_id).copied()
+    };
+
+    let call_id = our_call_id.unwrap_or(pj_call_id as u32);
+
+    // Push transfer status event
+    let event = serde_json::json!({
+        "type": "CallTransferStatus",
+        "payload": {
+            "call_id": call_id,
+            "status_code": status_code,
+            "status_text": reason,
+            "final": is_final != 0,
+        }
+    });
+    push_event(event.to_string());
+
+    log_engine(
+        LogLevel::Info,
+        &format!(
+            "Call {} transfer status: {} {} (final={})",
+            call_id, status_code, reason, is_final != 0
+        ),
+    );
 }
 
 /// Poll real-time media statistics for a PJSIP call and push a MediaStatsUpdated event.
@@ -1906,6 +1965,7 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
                 pjsip_on_call_media,
                 pjsip_on_log,
                 pjsip_on_sip_msg,
+                pjsip_on_transfer_status,
             )
         };
         if rc != 0 {
@@ -2058,6 +2118,10 @@ pub enum EngineEventId {
     LogLevelSet = 14,
     LogBufferResult = 15,
     EngineLog = 16,
+    CallTransferInitiated = 17,
+    CallTransferStatus = 18,
+    CallTransferCompleted = 19,
+    ConferenceMerged = 20,
 }
 
 /// C callback: `void (*)(int event_id, const char* message)`
@@ -2486,6 +2550,153 @@ pub extern "C" fn engine_play_dtmf(digits: *const c_char) -> i32 {
         unsafe { pd_aud_play_dtmf(digits) }
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Transfer call (blind or attended completion).
+/// Thin wrapper - Dart handles all validation and state management.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_transfer_call(call_id: i32, dest_uri: *const c_char) -> i32 {
+    if dest_uri.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    
+    std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let dest_uri_s = match unsafe { CStr::from_ptr(dest_uri) }.to_str() {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the call
+        let pj_call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls.iter()
+                .find(|c| c.id == call_id as u32)
+                .and_then(|c| c.pjsip_call_id)
+        };
+
+        let pj_id = match pj_call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        unsafe { pd_call_transfer(pj_id, dest_uri_s.as_ptr() as *const c_char) }
+    })).unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Start attended transfer - puts call on hold and creates consultation call.
+/// Returns new call ID on success.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_char) -> i32 {
+    if dest_uri.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    
+    std::panic::catch_unwind(AssertUnwindSafe(|| {
+        let dest_uri_s = match unsafe { CStr::from_ptr(dest_uri) }.to_str() {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the call and its account
+        let (pj_call_id, acc_id) = {
+            let calls = CALLS.lock().unwrap();
+            calls.iter()
+                .find(|c| c.id == call_id as u32)
+                .map(|c| (c.pjsip_call_id, c.account_id.clone()))
+                .unwrap_or((None, String::new()))
+        };
+
+        let pj_id = match pj_call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        // Put current call on hold
+        unsafe { pd_call_hold(pj_id, 1) };
+
+        // Find account's PJSIP ID
+        let pj_acc_id = {
+            let accounts = ACCOUNTS.lock().unwrap();
+            accounts.iter()
+                .find(|a| a.uuid == acc_id)
+                .and_then(|a| a.pjsip_acc_id)
+        };
+
+        let acc_id = match pj_acc_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        // Create consultation call
+        let dest_cstr = match CString::new(dest_uri_s) {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        let new_pj_id = unsafe { pd_call_make(acc_id, dest_cstr.as_ptr()) };
+        
+        if new_pj_id < 0 {
+            return EngineErrorCode::InternalError as i32;
+        }
+
+        new_pj_id
+    })).unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Complete attended transfer.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_complete_xfer(call_a_id: i32, call_b_id: i32) -> i32 {
+    std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let (pj_a, pj_b) = {
+            let calls = CALLS.lock().unwrap();
+            let call_a = calls.iter().find(|c| c.id == call_a_id as u32);
+            let call_b = calls.iter().find(|c| c.id == call_b_id as u32);
+            (call_a.and_then(|c| c.pjsip_call_id), call_b.and_then(|c| c.pjsip_call_id))
+        };
+
+        match (pj_a, pj_b) {
+            (Some(a), Some(b)) => unsafe { pd_call_complete_xfer(a, b) },
+            _ => EngineErrorCode::NotFound as i32,
+        }
+    })).unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Merge two calls into conference.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_merge_conference(call_a_id: i32, call_b_id: i32) -> i32 {
+    std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let (pj_a, pj_b) = {
+            let calls = CALLS.lock().unwrap();
+            let call_a = calls.iter().find(|c| c.id == call_a_id as u32);
+            let call_b = calls.iter().find(|c| c.id == call_b_id as u32);
+            (call_a.and_then(|c| c.pjsip_call_id), call_b.and_then(|c| c.pjsip_call_id))
+        };
+
+        match (pj_a, pj_b) {
+            (Some(a), Some(b)) => unsafe { pd_call_merge_conference(a, b) },
+            _ => EngineErrorCode::NotFound as i32,
+        }
+    })).unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Request audio device list.

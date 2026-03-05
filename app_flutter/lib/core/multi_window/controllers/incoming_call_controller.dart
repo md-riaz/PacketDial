@@ -87,15 +87,17 @@ class IncomingCallController {
     }
 
     try {
-      // Find account name from engine channel
+      // Find account info from engine channel
       final account = EngineChannel.instance.accounts[accountId];
       final accountName = account?.accountName ?? 'SIP Account';
+      final accountUser = account?.username ?? '';
 
       final payload = {
         'callData': {
           'uri': uri,
           'direction': 'Incoming',
-          'account': accountName,
+          'account_name': accountName,
+          'account_user': accountUser,
         },
       };
 
@@ -104,7 +106,7 @@ class IncomingCallController {
       // Create the popup window
       _popupController = await WindowController.create(
         WindowConfiguration(
-          hiddenAtLaunch: true,
+          hiddenAtLaunch: false,
           arguments: '${WindowType.incomingCall.key}|$jsonStr',
         ),
       );
@@ -128,10 +130,6 @@ class IncomingCallController {
             break;
         }
         return null;
-      });
-
-      await _popupController!.show().catchError((e) {
-        debugPrint('[IncomingCallController] Error showing popup: $e');
       });
     } catch (e) {
       debugPrint('[IncomingCallController] Failed to create popup: $e');
