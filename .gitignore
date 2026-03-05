@@ -20,3 +20,12 @@
 
 # CodeQL tooling artifact
 _codeql_detected_source_root
+
+# vcpkg build and download artifacts (too large for git)
+/vcpkg/buildtrees/
+/vcpkg/downloads/
+/vcpkg/packages/
+
+# Build distributions
+/dist/
+/app_flutter/dist/
