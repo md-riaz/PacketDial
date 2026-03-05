@@ -15,10 +15,35 @@ final accountSetupControllerProvider = Provider((ref) {
 class AccountSetupController {
   final Ref _ref;
   static final Map<String, AccountSetupController> _activeControllers = {};
+  static bool _isListeningForChanges = false;
 
   String? _windowId;
 
-  AccountSetupController(this._ref);
+  AccountSetupController(this._ref) {
+    _ensureGlobalListener();
+  }
+
+  void _ensureGlobalListener() {
+    if (_isListeningForChanges) return;
+    _isListeningForChanges = true;
+
+    onWindowsChanged.listen((_) async {
+      final all = await WindowController.getAll();
+      final activeIds = all.map((w) => w.windowId).toSet();
+
+      // Cleanup any controllers whose windows are gone
+      final goneIds = _activeControllers.keys
+          .where((id) => !activeIds.contains(id))
+          .toList();
+
+      for (final id in goneIds) {
+        final ctrl = _activeControllers.remove(id);
+        if (ctrl?._windowId == id) {
+          ctrl?._windowId = null;
+        }
+      }
+    });
+  }
 
   void _setupHandler(String windowId) {
     // We use WindowMethodChannel directly to bypass the "current window" assertion
@@ -72,8 +97,21 @@ class AccountSetupController {
 
   Future<void> showWindow([AccountSchema? existing]) async {
     if (_windowId != null) {
-      // Focus logic if needed
-      return;
+      // Proactive check if window still exists (covers late events)
+      final all = await WindowController.getAll();
+      final exists = all.any((w) => w.windowId == _windowId);
+      if (exists) {
+        // Already open, just show/focus (implementation details of focusing depend on plugin)
+        final window = WindowController.fromWindowId(_windowId!);
+        await window.show();
+        return;
+      } else {
+        // State was stale, reset
+        debugPrint(
+            '[AccountSetupController] Detected stale windowId, resetting.');
+        _windowId = null;
+        _activeControllers.removeWhere((id, ctrl) => ctrl == this);
+      }
     }
 
     final payload = {

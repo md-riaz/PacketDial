@@ -38,8 +38,15 @@ void main(List<String> args) async {
   final subWindowApp = WindowRouter.getAppForArgs(windowArgs, windowController);
   if (subWindowApp != null) {
     if (windowArgs.startsWith('${WindowType.incomingCall.key}|')) {
-      await windowManager.ensureInitialized();
-      await windowManager.setAlwaysOnTop(true);
+      doWhenWindowReady(() {
+        appWindow.minSize = const Size(320, 240);
+        appWindow.size = const Size(320, 240);
+        appWindow.alignment = Alignment.center;
+        // bitsdojo_window doesn't have a direct "always on top" yet in some versions,
+        // but it handles showing/positioning fine.
+        // If always-on-top is critical, we use native FFI later.
+        appWindow.show();
+      });
     }
     runApp(subWindowApp);
     return;

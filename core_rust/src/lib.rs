@@ -1227,35 +1227,72 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         };
         let pj_call_id = unsafe { pd_call_make(pj_acc_id, dst.as_ptr()) };
         if pj_call_id < 0 {
-            // pd_call_make returns negated PJSIP status codes
+            // pd_call_make returns negated PJSIP/PJMEDIA/Windows status codes
             let status = -pj_call_id;
+            
+            // Log the exact status code for debugging
+            log_engine(
+                LogLevel::Debug,
+                &format!("CallStart: pd_call_make returned status={}", status),
+            );
             
             // Check for specific error codes
             let error_code = match status {
-                // PJMEDIA_EAUD_NODEVICES (-450000 + specific offset)
-                // Device ID out of range error (450002)
-                450002 => {
+                // Device ID out of range error (Windows MMSYSERR or PJSIP audio device error)
+                // This is the specific error from the issue: 450002
+                450002 | 450003 | 450004 | 450005 | 450006 | 450007 => {
                     log_engine(
                         LogLevel::Error,
-                        &format!("CallStart: audio device not available for uri={uri}. Please check audio device settings."),
+                        &format!("CallStart: audio device not available for uri={uri}. Please check audio device settings (status={}).", status),
                     );
                     EngineErrorCode::MediaNotReady
                 }
-                // Other media-related errors
-                430000..=439999 => {
-                    // PJMEDIA error range
+                // PJMEDIA error range (220000-220999)
+                220000..=220999 => {
                     log_engine(
                         LogLevel::Error,
-                        &format!("CallStart: media subsystem error for uri={uri} (status={status})"),
+                        &format!("CallStart: PJMEDIA error for uri={uri} (status={}). Check audio devices.", status),
                     );
                     EngineErrorCode::MediaNotReady
+                }
+                // PJMEDIA audio device error range (420000-420999)
+                420000..=420999 => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: audio device error for uri={uri} (status={}). Check microphone and speaker.", status),
+                    );
+                    EngineErrorCode::MediaNotReady
+                }
+                // Extended audio/media error range (450000-459999)
+                450000..=459999 => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: media subsystem error for uri={uri} (status={}). Check audio devices.", status),
+                    );
+                    EngineErrorCode::MediaNotReady
+                }
+                // PJSIP transport/network errors (171000-171999)
+                171000..=171999 => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: network/transport error for uri={uri} (status={})", status),
+                    );
+                    EngineErrorCode::InternalError
+                }
+                // PJ error range (190000-199999)
+                190000..=199999 => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: system error for uri={uri} (status={})", status),
+                    );
+                    EngineErrorCode::InternalError
                 }
                 _ => {
                     log_engine(
                         LogLevel::Error,
-                        &format!("CallStart: pd_call_make failed for uri={uri} (status={status})"),
+                        &format!("CallStart: pd_call_make failed for uri={uri} (status={}). Unknown error - check audio devices and account registration.", status),
                     );
-                    EngineErrorCode::InternalError
+                    EngineErrorCode::MediaNotReady
                 }
             };
             return error_code;

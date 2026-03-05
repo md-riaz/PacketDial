@@ -17,6 +17,25 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Audio device capability flags (from pjmedia/audiodev.h) */
+#ifndef PJMEDIA_AUD_DEV_CAP_INPUT_STREAM
+#define PJMEDIA_AUD_DEV_CAP_INPUT_STREAM 1
+#endif
+#ifndef PJMEDIA_AUD_DEV_CAP_OUTPUT_STREAM
+#define PJMEDIA_AUD_DEV_CAP_OUTPUT_STREAM 2
+#endif
+
+/* Audio device error codes */
+#ifndef PJMEDIA_EAUD_NODEVICES
+#define PJMEDIA_EAUD_NODEVICES 420005
+#endif
+#ifndef PJMEDIA_EAUD_NOINPUT
+#define PJMEDIA_EAUD_NOINPUT 420007
+#endif
+#ifndef PJMEDIA_EAUD_NOOUTPUT
+#define PJMEDIA_EAUD_NOOUTPUT 420008
+#endif
+
 /* -----------------------------------------------------------------------
  * Module-level globals
  * ----------------------------------------------------------------------- */
@@ -548,17 +567,40 @@ static pj_status_t pd_check_media_ready(void)
     /* Enumerate audio devices */
     status = pjsua_enum_aud_devs(infos, &dev_count);
     if (status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "pd_check_media_ready: enum failed status=%d", (int)status);
+            g_on_log(2, buf);
+        }
         return status;
+    }
+
+    if (g_on_log) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "pd_check_media_ready: found %u audio device(s)", dev_count);
+        g_on_log(4, buf);
     }
 
     /* Need at least one capture and one playback device */
     if (dev_count == 0) {
+        if (g_on_log) {
+            g_on_log(2, "pd_check_media_ready: no audio devices found");
+        }
         return PJMEDIA_EAUD_NODEVICES;  /* No audio devices */
     }
 
     /* Check that we have at least one input and one output device */
     int has_input = 0, has_output = 0;
     for (unsigned i = 0; i < dev_count; i++) {
+        if (g_on_log) {
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "pd_check_media_ready: device %u: %s (caps=0x%x)",
+                     i, infos[i].name, infos[i].caps);
+            g_on_log(4, buf);
+        }
         if (infos[i].caps & PJMEDIA_AUD_DEV_CAP_INPUT_STREAM) {
             has_input = 1;
         }
@@ -569,12 +611,21 @@ static pj_status_t pd_check_media_ready(void)
     }
 
     if (!has_input) {
+        if (g_on_log) {
+            g_on_log(2, "pd_check_media_ready: no input device found");
+        }
         return PJMEDIA_EAUD_NOINPUT;  /* No capture device */
     }
     if (!has_output) {
+        if (g_on_log) {
+            g_on_log(2, "pd_check_media_ready: no output device found");
+        }
         return PJMEDIA_EAUD_NOOUTPUT;  /* No playback device */
     }
 
+    if (g_on_log) {
+        g_on_log(4, "pd_check_media_ready: media ready (has input and output)");
+    }
     return PJ_SUCCESS;
 }
 

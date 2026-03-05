@@ -121,9 +121,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     if (rc != 0) {
       // Handle error codes from Rust EngineErrorCode enum
       String errorMessage;
+      String title = 'Call Failed';
       switch (rc) {
-        case 7: // MediaNotReady
-          errorMessage = 'Audio devices are not ready. Please check your microphone and speaker settings.';
+        case 7: // MediaNotReady - audio device unavailable
+          title = 'Audio Device Unavailable';
+          errorMessage = 'Cannot start call - no audio devices detected.\n\n'
+              'Please check:\n'
+              '• Microphone is connected and enabled\n'
+              '• Speakers or headphones are connected\n'
+              '• Audio devices are selected in Windows Sound settings';
           break;
         case 6: // NotFound
           errorMessage = 'Account not found. Please verify your account is registered.';
@@ -132,9 +138,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         case 2: // NotInitialized
         case 100: // InternalError
         default:
-          errorMessage = 'Call failed with error code $rc. Please try again.';
+          errorMessage = 'Call failed (error code $rc). '
+              'Please check your audio devices and try again.';
       }
-      _showErrorDialog('Call Failed', errorMessage);
+      _showErrorDialog(title, errorMessage);
     }
   }
 
@@ -163,35 +170,28 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     required VoidCallback onProceed,
   }) {
     final missingDevices = <String>[];
-    if (!hasInput) missingDevices.add('microphone');
-    if (!hasOutput) missingDevices.add('speaker');
+    if (!hasInput) missingDevices.add('Microphone');
+    if (!hasOutput) missingDevices.add('Speaker');
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
         icon: const Icon(Icons.warning, color: AppTheme.warningAmber, size: 48),
-        title: const Text('Audio Device Warning',
+        title: const Text('No Audio Devices',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('No audio devices detected:',
-                style: TextStyle(color: AppTheme.textSecondary)),
-            const SizedBox(height: 8),
-            ...missingDevices.map((d) => Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: Row(
-                children: [
-                  const Icon(Icons.close, size: 16, color: AppTheme.warningAmber),
-                  const SizedBox(width: 8),
-                  Text('No ${d}', style: const TextStyle(color: AppTheme.textPrimary)),
-                ],
-              ),
-            )),
+            Text(
+              missingDevices.length == 2
+                  ? 'No microphone or speaker detected.'
+                  : 'No ${missingDevices.first.toLowerCase()} detected.',
+              style: const TextStyle(color: AppTheme.textSecondary),
+            ),
             const SizedBox(height: 12),
-            const Text('Call may fail without audio devices.',
+            const Text('Calls may fail without audio devices.',
                 style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           ],
         ),

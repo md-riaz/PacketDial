@@ -22,6 +22,24 @@ class IncomingCallController {
   void init() {
     _eventSub?.cancel();
     _eventSub = EngineChannel.instance.eventStream.listen(_onEvent);
+    _listenForWindowChanges();
+  }
+
+  void _listenForWindowChanges() {
+    onWindowsChanged.listen((_) async {
+      if (!_isPopupOpen || _popupController == null) return;
+
+      final all = await WindowController.getAll();
+      final stillExists =
+          all.any((w) => w.windowId == _popupController?.windowId);
+
+      if (!stillExists) {
+        debugPrint(
+            '[IncomingCallController] Popup window destroyed externally');
+        _popupController = null;
+        _isPopupOpen = false;
+      }
+    });
   }
 
   void dispose() {
@@ -54,7 +72,19 @@ class IncomingCallController {
     required String accountId,
   }) async {
     // Don't open multiple popups
-    if (_isPopupOpen) return;
+    if (_isPopupOpen && _popupController != null) {
+      final all = await WindowController.getAll();
+      final exists = all.any((w) => w.windowId == _popupController?.windowId);
+      if (exists) {
+        await _popupController?.show();
+        return;
+      } else {
+        debugPrint(
+            '[IncomingCallController] Detected stale popup state, resetting.');
+        _popupController = null;
+        _isPopupOpen = false;
+      }
+    }
 
     try {
       // Find account name from engine channel
