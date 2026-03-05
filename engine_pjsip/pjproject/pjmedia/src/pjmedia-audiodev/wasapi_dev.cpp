@@ -27,8 +27,8 @@
 #include <audioclient.h>
 #include <Processthreadsapi.h>
 
-#if defined(PJ_WIN32_UWP) && PJ_WIN32_UWP
-#define USE_ASYNC_ACTIVATE 1;
+#if (defined(PJ_WIN32_UWP) && PJ_WIN32_UWP) || (defined(PJ_WIN32) && PJ_WIN32)
+#define USE_ASYNC_ACTIVATE 1
 #endif
 
 #if defined(USE_ASYNC_ACTIVATE)
