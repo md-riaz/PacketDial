@@ -16,6 +16,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -30,9 +32,37 @@ jobs:
             core_rust\target
           key: ${{ runner.os }}-cargo-${{ hashFiles('core_rust/Cargo.lock') }}
 
+      - name: Cache PJSIP build output
+        id: cache-pjsip
+        uses: actions/cache@v4
+        with:
+          path: engine_pjsip/build/out
+          key: pjsip-windows-v2142-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1') }}
+
+      - name: Map workspace to short path
+        shell: pwsh
+        run: |
+          if (-not (Test-Path X:)) {
+            subst X: "$env:GITHUB_WORKSPACE"
+          }
+          Write-Host "Mapped workspace to X:"
+
+      - name: Build pjproject (Release x64)
+        if: steps.cache-pjsip.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          X:
+          .\scripts\build_pjsip.ps1
+
       - name: cargo test (core_rust)
         working-directory: core_rust
-        run: cargo test
+        env:
+          PJSIP_LIB_DIR: ${{ github.workspace }}\engine_pjsip\build\out\lib
+          PJSIP_INCLUDE_DIR: ${{ github.workspace }}\engine_pjsip\build\out\include
+        run: |
+          X:
+          cd core_rust
+          cargo test
 
       - name: cargo fmt (core_rust)
         working-directory: core_rust
@@ -40,6 +70,9 @@ jobs:
 
       - name: cargo clippy (core_rust)
         working-directory: core_rust
+        env:
+          PJSIP_LIB_DIR: ${{ github.workspace }}\engine_pjsip\build\out\lib
+          PJSIP_INCLUDE_DIR: ${{ github.workspace }}\engine_pjsip\build\out\include
         run: cargo clippy -- -D warnings
 
       - name: cargo test (pd)

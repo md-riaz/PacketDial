@@ -140,6 +140,7 @@ if (Test-Path $ProjectConfigSite) {
 
 /* Audio device backends - WASAPI for low-latency, WMME for compatibility */
 #define PJMEDIA_AUDIO_DEV_HAS_WASAPI    1
+#define PJMEDIA_HAS_WASAPI              1
 #define PJMEDIA_AUDIO_DEV_HAS_WMME      1
 
 /* Disable video (audio-only SIP client) */

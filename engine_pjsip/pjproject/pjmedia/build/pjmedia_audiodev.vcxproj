@@ -759,8 +759,8 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Condition="'$(API_Family)'!='WinDesktop'" Include="..\src\pjmedia-audiodev\wasapi_dev.cpp">
-      <CompileAsWinRT>true</CompileAsWinRT>
+    <ClCompile Include="..\src\pjmedia-audiodev\wasapi_dev.cpp">
+      <CompileAsWinRT Condition="'$(API_Family)'!='WinDesktop'">true</CompileAsWinRT>
       <AdditionalUsingDirectories Condition="'$(Configuration)|$(Platform)'=='Release-Static|ARM'">$(WindowsSDK_MetadataPath);%(AdditionalUsingDirectories)</AdditionalUsingDirectories>
       <CompileAsWinRT Condition="'$(Configuration)|$(Platform)'=='Release-Static|ARM'">true</CompileAsWinRT>
       <AdditionalUsingDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">$(WindowsSDK_MetadataPath);%(AdditionalUsingDirectories)</AdditionalUsingDirectories>
