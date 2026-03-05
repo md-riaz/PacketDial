@@ -15,6 +15,14 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#endif
+
+#ifndef NTDDI_VERSION
+#define NTDDI_VERSION 0x06020000
+#endif
+
 #include <pjmedia-audiodev/audiodev_imp.h>
 #include <pj/assert.h>
 #include <pj/log.h>
@@ -22,12 +30,13 @@
 
 #if PJMEDIA_AUDIO_DEV_HAS_WASAPI
 
+
 #include <Avrt.h>
 #include <windows.h>
 #include <audioclient.h>
 #include <Processthreadsapi.h>
 
-#if (defined(PJ_WIN32_UWP) && PJ_WIN32_UWP) || (defined(PJ_WIN32) && PJ_WIN32)
+#if (defined(PJ_WIN32_UWP) && PJ_WIN32_UWP)
 #define USE_ASYNC_ACTIVATE 1
 #endif
 
@@ -38,6 +47,11 @@
     using namespace Windows::Media::Devices;  
     using namespace Microsoft::WRL;
     using namespace concurrency;   
+#elif defined(PJ_WIN32)
+    #include <Mmdeviceapi.h>
+    #include <Functiondiscoverykeys_devpkey.h>
+    #include <wrl/client.h>
+    using namespace Microsoft::WRL;
 #else
     #include <phoneaudioclient.h>
     #using <Windows.winmd>
@@ -490,6 +504,18 @@ static pj_status_t activate_capture_dev(struct wasapi_stream *ws)
     ComPtr<IActivateAudioInterfaceAsyncOperation> async_op;
     ws->cap_id = MediaDevice::GetDefaultAudioCaptureId(
                                               AudioDeviceRole::Communications);
+#elif defined(PJ_WIN32)
+    ComPtr<IMMDeviceEnumerator> pEnumerator;
+    ComPtr<IMMDevice> pDevice;
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
+                          CLSCTX_ALL, IID_PPV_ARGS(&pEnumerator));
+    if (FAILED(hr)) return PJMEDIA_EAUD_SYSERR;
+    
+    hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, &pDevice);
+    if (FAILED(hr)) return PJMEDIA_EAUD_SYSERR;
+    
+    hr = pDevice->GetId((LPWSTR*)&ws->cap_id);
+    if (FAILED(hr)) return PJMEDIA_EAUD_SYSERR;
 #else
     ws->cap_id = GetDefaultAudioCaptureId(AudioDeviceRole::Communications);
 #endif
@@ -515,6 +541,8 @@ static pj_status_t activate_capture_dev(struct wasapi_stream *ws)
     auto task_completed = create_task(ws->cap_aud_act->task_completed);
     task_completed.wait();    
     ws->default_cap_dev = task_completed.get().Get();
+#elif defined(PJ_WIN32)
+    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&ws->default_cap_dev);
 #else
     hr = ActivateAudioInterface(ws->cap_id, __uuidof(IAudioClient2),
                                 (void**)&ws->default_cap_dev);
@@ -636,6 +664,18 @@ static pj_status_t activate_playback_dev(struct wasapi_stream *ws)
 
     ws->pb_id = MediaDevice::GetDefaultAudioRenderId(
                                               AudioDeviceRole::Communications);
+#elif defined(PJ_WIN32)
+    ComPtr<IMMDeviceEnumerator> pEnumerator;
+    ComPtr<IMMDevice> pDevice;
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
+                          CLSCTX_ALL, IID_PPV_ARGS(&pEnumerator));
+    if (FAILED(hr)) return PJMEDIA_EAUD_SYSERR;
+    
+    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eCommunications, &pDevice);
+    if (FAILED(hr)) return PJMEDIA_EAUD_SYSERR;
+    
+    hr = pDevice->GetId((LPWSTR*)&ws->pb_id);
+    if (FAILED(hr)) return PJMEDIA_EAUD_SYSERR;
 #else
     ws->pb_id = GetDefaultAudioRenderId(AudioDeviceRole::Communications);
 #endif
@@ -660,6 +700,8 @@ static pj_status_t activate_playback_dev(struct wasapi_stream *ws)
     auto task_completed = create_task(ws->pb_aud_act->task_completed);
     task_completed.wait();
     ws->default_pb_dev = task_completed.get().Get();
+#elif defined(PJ_WIN32)
+    hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&ws->default_pb_dev);
 #else
     hr = ActivateAudioInterface(ws->pb_id, __uuidof(IAudioClient2),
                                 (void**)&ws->default_pb_dev);
@@ -792,6 +834,19 @@ static pj_status_t wasapi_add_dev(struct wasapi_factory *wf)
 #if defined(USE_ASYNC_ACTIVATE)
     capture_id = MediaDevice::GetDefaultAudioCaptureId(
                                       AudioDeviceRole::Communications)->Data();
+#elif defined(PJ_WIN32)
+    {
+        ComPtr<IMMDeviceEnumerator> pEnumerator;
+        ComPtr<IMMDevice> pDevice;
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
+                                      CLSCTX_ALL, IID_PPV_ARGS(&pEnumerator));
+        if (SUCCEEDED(hr)) {
+            hr = pEnumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, &pDevice);
+            if (SUCCEEDED(hr)) {
+                hr = pDevice->GetId((LPWSTR*)&capture_id);
+            }
+        }
+    }
 #else
     capture_id = GetDefaultAudioCaptureId(AudioDeviceRole::Communications);
 #endif
@@ -804,6 +859,19 @@ static pj_status_t wasapi_add_dev(struct wasapi_factory *wf)
 #if defined(USE_ASYNC_ACTIVATE)
     render_id = MediaDevice::GetDefaultAudioRenderId(
                                       AudioDeviceRole::Communications)->Data();
+#elif defined(PJ_WIN32)
+    {
+        ComPtr<IMMDeviceEnumerator> pEnumerator;
+        ComPtr<IMMDevice> pDevice;
+        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL,
+                              CLSCTX_ALL, IID_PPV_ARGS(&pEnumerator));
+        if (SUCCEEDED(hr)) {
+            hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eCommunications, &pDevice);
+            if (SUCCEEDED(hr)) {
+                hr = pDevice->GetId((LPWSTR*)&render_id);
+            }
+        }
+    }
 #else
     render_id = GetDefaultAudioRenderId(AudioDeviceRole::Communications);
 #endif

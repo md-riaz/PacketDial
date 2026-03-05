@@ -57,8 +57,8 @@ jobs:
       - name: cargo test (core_rust)
         working-directory: core_rust
         env:
-          PJSIP_LIB_DIR: ${{ github.workspace }}\engine_pjsip\build\out\lib
-          PJSIP_INCLUDE_DIR: ${{ github.workspace }}\engine_pjsip\build\out\include
+          PJSIP_LIB_DIR: X:\engine_pjsip\build\out\lib
+          PJSIP_INCLUDE_DIR: X:\engine_pjsip\build\out\include
         run: |
           X:
           cd core_rust
@@ -71,9 +71,12 @@ jobs:
       - name: cargo clippy (core_rust)
         working-directory: core_rust
         env:
-          PJSIP_LIB_DIR: ${{ github.workspace }}\engine_pjsip\build\out\lib
-          PJSIP_INCLUDE_DIR: ${{ github.workspace }}\engine_pjsip\build\out\include
-        run: cargo clippy -- -D warnings
+          PJSIP_LIB_DIR: X:\engine_pjsip\build\out\lib
+          PJSIP_INCLUDE_DIR: X:\engine_pjsip\build\out\include
+        run: |
+          X:
+          cd core_rust
+          cargo clippy -- -D warnings
 
       - name: cargo test (pd)
         working-directory: tools/pd

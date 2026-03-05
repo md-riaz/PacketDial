@@ -1,5 +1,5 @@
 # Rust
-/core_rust/target/
+**/target/
 **/*.pdb
 **/*.dll
 **/*.lib
@@ -12,19 +12,29 @@
 /app_flutter/.metadata
 # Note: app_flutter/windows/flutter/ is intentionally tracked (Flutter engine CMake stubs)
 
-# PJSIP builds (compiled output only — source is committed under engine_pjsip/pjproject/)
+# PJSIP builds
 /engine_pjsip/build/
+**/*.obj
+**/*.log
+**/*.tlog
+**/*.lastbuildstate
+**/*.idb
+**/*.pdb
 
-# Misc
-.DS_Store
-
-# CodeQL tooling artifact
-_codeql_detected_source_root
-
-# vcpkg build and download artifacts (too large for git)
+# vcpkg build and download artifacts
 /vcpkg/buildtrees/
 /vcpkg/downloads/
 /vcpkg/packages/
+/vcpkg/installed/
+
+# Local build artifacts and logs
+build.log
+build_utf8.log
+pjsip_build_stamp.txt
+
+# Misc
+.DS_Store
+_codeql_detected_source_root
 
 # Build distributions
 /dist/
