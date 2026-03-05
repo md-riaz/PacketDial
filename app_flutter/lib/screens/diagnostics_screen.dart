@@ -59,6 +59,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
 
   void _exportBundle() {
     // TODO: Implement with new C ABI - needs engine_export_diagnostics() function
+    // This will export logs, events, SIP messages, and system info to a zip file
     _showSnack('Export bundle feature coming soon');
   }
 

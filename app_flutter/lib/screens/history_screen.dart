@@ -147,8 +147,10 @@ class _HistoryCard extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              // TODO: Pre-fill dialer with this number
+            onTap: () async {
+              // Pre-fill dialer with this number
+              // TODO: Navigate to dialer screen with the number pre-filled
+              // This will be implemented when dialer screen navigation is added
             },
             child: Padding(
               padding: const EdgeInsets.all(14),

@@ -65,7 +65,6 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
       appWindow.alignment = Alignment.center;
       appWindow.title =
           widget.existing == null ? 'Add SIP Account' : 'Edit Account';
-      appWindow.show();
     });
   }
 
@@ -400,7 +399,11 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
 
       await widget.windowController
           .invokeMethod('saveAccount', jsonEncode(schemaData));
-      _closeWindow();
+      
+      // Close via appWindow since the controller may have cleaned up
+      if (mounted) {
+        appWindow.close();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {

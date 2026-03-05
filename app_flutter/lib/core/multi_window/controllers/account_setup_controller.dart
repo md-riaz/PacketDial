@@ -54,6 +54,8 @@ class AccountSetupController {
     );
 
     channel.setMethodCallHandler((call) async {
+      debugPrint(
+          '[AccountSetupController] Method handler for $windowId called: ${call.method}');
       try {
         if (call.method == 'tryRegister') {
           final args =
@@ -71,25 +73,38 @@ class AccountSetupController {
             'errorReason': result.errorReason,
           });
         } else if (call.method == 'saveAccount') {
+          debugPrint('[AccountSetupController] Saving account via IPC...');
           final args =
               jsonDecode(call.arguments as String) as Map<String, dynamic>;
           final schema = AccountSchema.fromJson(args);
-          await _ref.read(accountServiceProvider).saveAccount(schema);
-          _ref.read(accountServiceProvider).register(schema);
+
+          final service = _ref.read(accountServiceProvider);
+          if (service.isar == null) {
+            debugPrint(
+                '[AccountSetupController] ERROR: Isar not ready in main process!');
+            return jsonEncode({'success': false, 'error': 'Isar not ready'});
+          }
+
+          await service.saveAccount(schema);
+          service.register(schema);
           _ref.invalidate(accountsListProvider);
 
-          // The window will close itself using bitsdojo_window after receiving null
-          _activeControllers.remove(windowId);
-          if (_windowId == windowId) _windowId = null;
-          return null;
+          debugPrint('[AccountSetupController] Account saved successfully');
+
+          // Don't cleanup here - let the window close naturally
+          return jsonEncode({'success': true});
         } else if (call.method == 'close') {
+          debugPrint(
+              '[AccountSetupController] Closing controller for $windowId');
           _activeControllers.remove(windowId);
           if (_windowId == windowId) _windowId = null;
           return null;
         }
-      } catch (e) {
+      } catch (e, stack) {
         debugPrint(
-            '[AccountSetupController] IPC error from window $windowId: $e');
+            '[AccountSetupController] CRITICAL IPC ERROR from window $windowId: $e');
+        debugPrint(stack.toString());
+        return jsonEncode({'success': false, 'error': e.toString()});
       }
       return null;
     });
