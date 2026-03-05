@@ -35,6 +35,10 @@ pjsip_build_stamp.txt
 # Misc
 .DS_Store
 _codeql_detected_source_root
+.vs/
+*.suo
+*.user
+*.sln.docstates
 
 # Build distributions
 /dist/
