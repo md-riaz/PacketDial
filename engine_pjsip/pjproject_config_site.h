@@ -32,6 +32,8 @@
 #define PJMEDIA_AUDIO_DEV_HAS_WASAPI    1
 /* Also keep Windows Multimedia Extensions for broader device compatibility */
 #define PJMEDIA_AUDIO_DEV_HAS_WMME      1
+/* Enable Null Audio device for headless environments (CI/VMs) */
+#define PJMEDIA_AUDIO_DEV_HAS_NULL_AUDIO 1
 /* Disable WMME when WASAPI is preferred (WASAPI takes precedence) */
 #define PJMEDIA_AUDIO_DEV_WMME_STATIC_DEFAULT 0
 

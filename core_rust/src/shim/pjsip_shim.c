@@ -414,18 +414,12 @@ int pd_init(const char *user_agent,
      * runners that have zero audio hardware).  Then try to upgrade to
      * real devices if the system has any.
      * ----------------------------------------------------------------- */
-    fprintf(stderr, "DEBUG: Setting null sound device as baseline...\n");
-    pj_status_t aud_st = pjsua_set_null_snd_dev();
-    if (aud_st != PJ_SUCCESS) {
-        fprintf(stderr, "DEBUG: pjsua_set_null_snd_dev failed: %d\n", (int)aud_st);
-    }
+    pjsua_set_null_snd_dev();
 
     /* Try to discover real audio hardware */
     pjmedia_aud_dev_info infos[64];
     unsigned dev_count = 64;
     pj_status_t aud_enum_st = pjsua_enum_aud_devs(infos, &dev_count);
-    fprintf(stderr, "DEBUG: Audio enum: status=%d, count=%u\n",
-            (int)aud_enum_st, dev_count);
 
     if (aud_enum_st == PJ_SUCCESS && dev_count > 0) {
         /* Real devices available — try to switch away from the null device */
@@ -435,20 +429,15 @@ int pd_init(const char *user_agent,
                      "Found %u audio device(s), switching to device 0", dev_count);
             g_on_log(4, buf);
         }
-        aud_st = pjsua_set_snd_dev(0, 0);
-        if (aud_st != PJ_SUCCESS) {
-            /* Real device failed — keep the null device that is already active */
-            fprintf(stderr, "DEBUG: pjsua_set_snd_dev(0,0) failed: %d, "
-                            "keeping null device\n", (int)aud_st);
-            if (g_on_log) {
-                char err_msg[256];
-                pj_strerror(aud_st, err_msg, sizeof(err_msg));
-                char buf[512];
-                snprintf(buf, sizeof(buf),
-                         "pjsua_set_snd_dev(0,0) failed: %d (%s) — "
-                         "using null device", aud_st, err_msg);
-                g_on_log(2, buf);
-            }
+        pj_status_t up_st = pjsua_set_snd_dev(0, 0);
+        if (up_st != PJ_SUCCESS && g_on_log) {
+            char err_msg[256];
+            pj_strerror(up_st, err_msg, sizeof(err_msg));
+            char buf[512];
+            snprintf(buf, sizeof(buf),
+                     "pjsua_set_snd_dev(0,0) failed: %d (%s) — "
+                     "using null device", up_st, err_msg);
+            g_on_log(2, buf);
         }
     } else {
         /* No real devices — null device already set, nothing to do */

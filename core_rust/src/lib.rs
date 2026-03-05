@@ -2569,7 +2569,13 @@ mod tests {
     fn init_shutdown_ok() {
         let _guard = TEST_LOCK.lock().unwrap();
         reset();
-        assert_eq!(engine_init(std::ptr::null()), EngineErrorCode::Ok as i32);
+        let res = engine_init(std::ptr::null());
+        assert_eq!(
+            res,
+            EngineErrorCode::Ok as i32,
+            "engine_init failed with code: {}",
+            res
+        );
         assert_eq!(engine_shutdown(), EngineErrorCode::Ok as i32);
     }
 
@@ -2577,10 +2583,19 @@ mod tests {
     fn init_twice() {
         let _guard = TEST_LOCK.lock().unwrap();
         reset();
-        assert_eq!(engine_init(std::ptr::null()), EngineErrorCode::Ok as i32);
+        let res1 = engine_init(std::ptr::null());
         assert_eq!(
-            engine_init(std::ptr::null()),
-            EngineErrorCode::AlreadyInitialized as i32
+            res1,
+            EngineErrorCode::Ok as i32,
+            "First engine_init failed with code: {}",
+            res1
+        );
+        let res2 = engine_init(std::ptr::null());
+        assert_eq!(
+            res2,
+            EngineErrorCode::AlreadyInitialized as i32,
+            "Second engine_init should have returned AlreadyInitialized, but got: {}",
+            res2
         );
         assert_eq!(engine_shutdown(), EngineErrorCode::Ok as i32);
     }
