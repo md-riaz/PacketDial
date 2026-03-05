@@ -1438,7 +1438,7 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
             LogLevel::Info,
             &format!("Audio enumeration: PJSIP reported {} devices", count),
         );
-        
+
         let mut real_devices: Vec<AudioDevice> = Vec::new();
         for idx in 0..count {
             let mut id: i32 = 0;
@@ -1495,8 +1495,12 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
 
         log_engine(
             LogLevel::Info,
-            &format!("Audio devices: {} real devices found, selected input={}, output={}", 
-                    real_devices.len(), selected_in, selected_out),
+            &format!(
+                "Audio devices: {} real devices found, selected input={}, output={}",
+                real_devices.len(),
+                selected_in,
+                selected_out
+            ),
         );
 
         *AUDIO_DEVICES.lock().unwrap() = real_devices;
@@ -1509,17 +1513,23 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
     {
         let mut devices = AUDIO_DEVICES.lock().unwrap();
         if !devices.iter().any(|d| d.kind == AudioDeviceKind::Input) {
-            log_engine(LogLevel::Warn, "No input devices found, adding fallback device");
+            log_engine(
+                LogLevel::Warn,
+                "No input devices found, adding fallback device",
+            );
             devices.push(AudioDevice {
-                id: 0,  // Use PJSIP default device ID
+                id: 0, // Use PJSIP default device ID
                 name: "System Default Input".to_owned(),
                 kind: AudioDeviceKind::Input,
             });
         }
         if !devices.iter().any(|d| d.kind == AudioDeviceKind::Output) {
-            log_engine(LogLevel::Warn, "No output devices found, adding fallback device");
+            log_engine(
+                LogLevel::Warn,
+                "No output devices found, adding fallback device",
+            );
             devices.push(AudioDevice {
-                id: 0,  // Use PJSIP default device ID
+                id: 0, // Use PJSIP default device ID
                 name: "System Default Output".to_owned(),
                 kind: AudioDeviceKind::Output,
             });
@@ -1839,7 +1849,7 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
                 LogLevel::Error,
                 &format!("Engine init failed: pd_init returned {rc}"),
             );
-            return EngineErrorCode::InternalError as i32;
+            return rc; // Return the actual PJSIP / Shim error code
         }
         push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
         log_engine(LogLevel::Info, "Engine initialized (PJSIP active)");

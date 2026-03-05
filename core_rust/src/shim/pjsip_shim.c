@@ -318,7 +318,10 @@ int pd_init(const char *user_agent,
 
     /* pjsua_create */
     status = pjsua_create();
-    if (status != PJ_SUCCESS) return (int)status;
+    if (status != PJ_SUCCESS) {
+        fprintf(stderr, "DEBUG: pjsua_create failed: %d\n", (int)status);
+        return (int)status;
+    }
 
     /* Logging config */
     pjsua_logging_config log_cfg;
@@ -362,9 +365,11 @@ int pd_init(const char *user_agent,
 
     status = pjsua_init(&ua_cfg, &log_cfg, &med_cfg);
     if (status != PJ_SUCCESS) {
+        fprintf(stderr, "DEBUG: pjsua_init failed: %d\n", (int)status);
         pjsua_destroy();
         return (int)status;
     }
+    fprintf(stderr, "DEBUG: pjsua_init success\n");
 
     /* Register the SIP capture module to see ALL SIP traffic
      * (REGISTER, OPTIONS, etc.) — not just call transactions. */
@@ -382,6 +387,7 @@ int pd_init(const char *user_agent,
 
     status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &tp_cfg, &g_udp_tp);
     if (status != PJ_SUCCESS) {
+        fprintf(stderr, "DEBUG: pjsua_transport_create (UDP) failed: %d\n", (int)status);
         pjsua_destroy();
         return (int)status;
     }
@@ -395,63 +401,58 @@ int pd_init(const char *user_agent,
     /* Start */
     status = pjsua_start();
     if (status != PJ_SUCCESS) {
+        fprintf(stderr, "DEBUG: pjsua_start failed: %d\n", (int)status);
         pjsua_destroy();
         return (int)status;
     }
+    fprintf(stderr, "DEBUG: pjsua_start success\n");
 
-    /* Enumerate audio devices and configure sound subsystem.
-     * We explicitly set the sound device to force PJSIP to initialize
-     * the audio subsystem, which is required for device enumeration. */
+    /* -----------------------------------------------------------------
+     * Audio device setup.
+     *
+     * Strategy: start with the null sound device (works on headless CI
+     * runners that have zero audio hardware).  Then try to upgrade to
+     * real devices if the system has any.
+     * ----------------------------------------------------------------- */
+    fprintf(stderr, "DEBUG: Setting null sound device as baseline...\n");
+    pj_status_t aud_st = pjsua_set_null_snd_dev();
+    if (aud_st != PJ_SUCCESS) {
+        fprintf(stderr, "DEBUG: pjsua_set_null_snd_dev failed: %d\n", (int)aud_st);
+    }
+
+    /* Try to discover real audio hardware */
     pjmedia_aud_dev_info infos[64];
     unsigned dev_count = 64;
     pj_status_t aud_enum_st = pjsua_enum_aud_devs(infos, &dev_count);
-    
-    if (aud_enum_st != PJ_SUCCESS || dev_count == 0) {
-        /* No devices found - try to force initialization with default devices */
-        if (g_on_log) g_on_log(2, "No audio devices enumerated, trying default device initialization");
-        
-        /* Try setting explicit default devices (-1 = system default) */
-        pj_status_t aud_st = pjsua_set_snd_dev(-1, -1);
-        if (aud_st != PJ_SUCCESS && g_on_log) {
-            char err_msg[256];
-            pj_strerror(aud_st, err_msg, sizeof(err_msg));
-            char buf[512];
-            snprintf(buf, sizeof(buf), "pjsua_set_snd_dev(-1,-1) failed: %d (%s)", aud_st, err_msg);
-            g_on_log(1, buf);
+    fprintf(stderr, "DEBUG: Audio enum: status=%d, count=%u\n",
+            (int)aud_enum_st, dev_count);
+
+    if (aud_enum_st == PJ_SUCCESS && dev_count > 0) {
+        /* Real devices available — try to switch away from the null device */
+        if (g_on_log) {
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "Found %u audio device(s), switching to device 0", dev_count);
+            g_on_log(4, buf);
         }
-        
-        /* Re-enumerate after explicit initialization */
-        dev_count = 64;
-        aud_enum_st = pjsua_enum_aud_devs(infos, &dev_count);
-        
-        if (aud_enum_st != PJ_SUCCESS || dev_count == 0) {
-            /* Still no devices - fall back to null device for headless systems */
-            if (g_on_log) g_on_log(2, "No audio devices after initialization, using null sound device");
-            aud_st = pjsua_set_null_snd_dev();
-            if (aud_st != PJ_SUCCESS && g_on_log) {
+        aud_st = pjsua_set_snd_dev(0, 0);
+        if (aud_st != PJ_SUCCESS) {
+            /* Real device failed — keep the null device that is already active */
+            fprintf(stderr, "DEBUG: pjsua_set_snd_dev(0,0) failed: %d, "
+                            "keeping null device\n", (int)aud_st);
+            if (g_on_log) {
                 char err_msg[256];
                 pj_strerror(aud_st, err_msg, sizeof(err_msg));
                 char buf[512];
-                snprintf(buf, sizeof(buf), "pjsua_set_null_snd_dev failed: %d (%s)", aud_st, err_msg);
-                g_on_log(1, buf);
+                snprintf(buf, sizeof(buf),
+                         "pjsua_set_snd_dev(0,0) failed: %d (%s) — "
+                         "using null device", aud_st, err_msg);
+                g_on_log(2, buf);
             }
         }
     } else {
-        /* Devices found - use system defaults (device 0 for both capture and playback) */
-        if (g_on_log) {
-            char buf[128];
-            snprintf(buf, sizeof(buf), "Found %u audio devices, using device 0 as default", dev_count);
-            g_on_log(4, buf);
-        }
-        /* Explicitly set device 0 to ensure audio subsystem is active */
-        pj_status_t aud_st = pjsua_set_snd_dev(0, 0);
-        if (aud_st != PJ_SUCCESS && g_on_log) {
-            char err_msg[256];
-            pj_strerror(aud_st, err_msg, sizeof(err_msg));
-            char buf[512];
-            snprintf(buf, sizeof(buf), "pjsua_set_snd_dev(0,0) failed: %d (%s)", aud_st, err_msg);
-            g_on_log(1, buf);
-        }
+        /* No real devices — null device already set, nothing to do */
+        if (g_on_log) g_on_log(2, "No audio devices found, using null sound device");
     }
 
     /* Create tone generator for local feedback */

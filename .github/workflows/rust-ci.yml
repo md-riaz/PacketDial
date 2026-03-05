@@ -59,10 +59,11 @@ jobs:
         env:
           PJSIP_LIB_DIR: X:\engine_pjsip\build\out\lib
           PJSIP_INCLUDE_DIR: X:\engine_pjsip\build\out\include
+          RUST_BACKTRACE: 1
         run: |
           X:
           cd core_rust
-          cargo test
+          cargo test -- --nocapture
 
       - name: cargo fmt (core_rust)
         working-directory: core_rust
