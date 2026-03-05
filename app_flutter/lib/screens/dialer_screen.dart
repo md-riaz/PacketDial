@@ -66,23 +66,39 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   void _call(AccountSchema? activeAccount, Account? activeAccountState,
       List<AudioDevice> audioDevices) {
-    if (activeAccount == null) return;
+    if (activeAccount == null) {
+      _showErrorDialog('No Account Selected',
+          'Please select an account before making a call.');
+      return;
+    }
     final raw = _uriCtrl.text.trim();
-    if (raw.isEmpty) return;
+    if (raw.isEmpty) {
+      _showErrorDialog('No Number Entered', 'Please enter a number or URI to dial.');
+      return;
+    }
 
     final isRegistered =
         activeAccountState?.registrationState == RegistrationState.registered;
     final hasInput = audioDevices.any((d) => d.isInput);
     final hasOutput = audioDevices.any((d) => d.isOutput);
 
-    if (!isRegistered || !hasInput || !hasOutput) {
-      _showPreFlightChecklist(
+    // Block call if not registered - this is a hard requirement
+    if (!isRegistered) {
+      _showErrorDialog(
+        'Account Not Registered',
+        'The selected account is not registered with the SIP server.\n\n'
+        'Please check your account settings and server connection.',
+      );
+      return;
+    }
+
+    // Warn about missing audio devices but allow override
+    if (!hasInput || !hasOutput) {
+      _showAudioDeviceWarning(
         context,
-        activeAccount: activeAccount,
-        isRegistered: isRegistered,
         hasInput: hasInput,
         hasOutput: hasOutput,
-        onCallAnyway: () => _executeCall(activeAccount, raw),
+        onProceed: () => _executeCall(activeAccount, raw),
       );
       return;
     }
@@ -101,7 +117,101 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       uri = 'sip:$raw';
     }
 
-    EngineChannel.instance.engine.makeCall(accountId, uri);
+    final rc = EngineChannel.instance.engine.makeCall(accountId, uri);
+    if (rc != 0) {
+      // Handle error codes from Rust EngineErrorCode enum
+      String errorMessage;
+      switch (rc) {
+        case 7: // MediaNotReady
+          errorMessage = 'Audio devices are not ready. Please check your microphone and speaker settings.';
+          break;
+        case 6: // NotFound
+          errorMessage = 'Account not found. Please verify your account is registered.';
+          break;
+        case 1: // AlreadyInitialized
+        case 2: // NotInitialized
+        case 100: // InternalError
+        default:
+          errorMessage = 'Call failed with error code $rc. Please try again.';
+      }
+      _showErrorDialog('Call Failed', errorMessage);
+    }
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        icon: const Icon(Icons.error, color: AppTheme.errorRed, size: 48),
+        title: Text(title, style: const TextStyle(color: AppTheme.textPrimary)),
+        content: Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAudioDeviceWarning(
+    BuildContext context, {
+    required bool hasInput,
+    required bool hasOutput,
+    required VoidCallback onProceed,
+  }) {
+    final missingDevices = <String>[];
+    if (!hasInput) missingDevices.add('microphone');
+    if (!hasOutput) missingDevices.add('speaker');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        icon: const Icon(Icons.warning, color: AppTheme.warningAmber, size: 48),
+        title: const Text('Audio Device Warning',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('No audio devices detected:',
+                style: TextStyle(color: AppTheme.textSecondary)),
+            const SizedBox(height: 8),
+            ...missingDevices.map((d) => Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.close, size: 16, color: AppTheme.warningAmber),
+                  const SizedBox(width: 8),
+                  Text('No ${d}', style: const TextStyle(color: AppTheme.textPrimary)),
+                ],
+              ),
+            )),
+            const SizedBox(height: 12),
+            const Text('Call may fail without audio devices.',
+                style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onProceed();
+            },
+            child: const Text('Proceed Anyway',
+                style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showPreFlightChecklist(

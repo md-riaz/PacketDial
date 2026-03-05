@@ -1,20 +1,18 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart';
 import '../core/app_theme.dart';
 import '../models/account_schema.dart';
 
 class AccountSetupWindow extends StatefulWidget {
   final WindowController windowController;
   final AccountSchema? existing;
-  final Map<String, dynamic>? parentBounds;
 
   const AccountSetupWindow({
     super.key,
     required this.windowController,
     this.existing,
-    this.parentBounds,
   });
 
   @override
@@ -59,38 +57,20 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
       autoRegister = e.autoRegister;
       srtpEnabled = e.srtpEnabled;
     }
-    _configureWindow();
-  }
 
-  Future<void> _configureWindow() async {
-    await windowManager.ensureInitialized();
-    const size = Size(450, 650);
-    await windowManager.setSize(size);
-
-    // Positioning relative to main window
-    if (widget.parentBounds != null) {
-      final pb = widget.parentBounds!;
-      final double px = (pb['x'] as num).toDouble();
-      final double py = (pb['y'] as num).toDouble();
-      final double pw = (pb['w'] as num).toDouble();
-      final double ph = (pb['h'] as num).toDouble();
-
-      final double x = px + (pw / 2) - (size.width / 2);
-      final double y = py + (ph / 2) - (size.height / 2);
-      await windowManager.setPosition(Offset(x, y));
-    } else {
-      await windowManager.center();
-    }
-
-    await windowManager
-        .setTitle(widget.existing == null ? 'Add SIP Account' : 'Edit Account');
-    await windowManager.setSkipTaskbar(false);
-    await windowManager.show();
-    await windowManager.focus();
+    // Set window size and center using bitsdojo_window
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      appWindow.minSize = const Size(400, 600);
+      appWindow.size = const Size(450, 650);
+      appWindow.alignment = Alignment.center;
+      appWindow.title =
+          widget.existing == null ? 'Add SIP Account' : 'Edit Account';
+      appWindow.show();
+    });
   }
 
   void _closeWindow() {
-    windowManager.close();
+    appWindow.close();
   }
 
   @override

@@ -537,15 +537,130 @@ int pd_acc_remove(int acc_id)
  * Call management
  * ----------------------------------------------------------------------- */
 
+/* Check if media subsystem is ready for calls.
+ * Returns PJ_SUCCESS if ready, or an error code if not. */
+static pj_status_t pd_check_media_ready(void)
+{
+    pjmedia_aud_dev_info infos[64];
+    unsigned dev_count = 64;
+    pj_status_t status;
+
+    /* Enumerate audio devices */
+    status = pjsua_enum_aud_devs(infos, &dev_count);
+    if (status != PJ_SUCCESS) {
+        return status;
+    }
+
+    /* Need at least one capture and one playback device */
+    if (dev_count == 0) {
+        return PJMEDIA_EAUD_NODEVICES;  /* No audio devices */
+    }
+
+    /* Check that we have at least one input and one output device */
+    int has_input = 0, has_output = 0;
+    for (unsigned i = 0; i < dev_count; i++) {
+        if (infos[i].caps & PJMEDIA_AUD_DEV_CAP_INPUT_STREAM) {
+            has_input = 1;
+        }
+        if (infos[i].caps & PJMEDIA_AUD_DEV_CAP_OUTPUT_STREAM) {
+            has_output = 1;
+        }
+        if (has_input && has_output) break;
+    }
+
+    if (!has_input) {
+        return PJMEDIA_EAUD_NOINPUT;  /* No capture device */
+    }
+    if (!has_output) {
+        return PJMEDIA_EAUD_NOOUTPUT;  /* No playback device */
+    }
+
+    return PJ_SUCCESS;
+}
+
+/* Re-enumerate and reinitialize audio devices.
+ * Call this when device IDs may have become stale. */
+static int pd_reinit_audio_devices(void)
+{
+    pjmedia_aud_dev_info infos[64];
+    unsigned dev_count = 64;
+    pj_status_t status;
+
+    /* Re-enumerate devices */
+    status = pjsua_enum_aud_devs(infos, &dev_count);
+    if (status != PJ_SUCCESS || dev_count == 0) {
+        if (g_on_log) {
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "Audio re-init: no devices found (status=%d)", (int)status);
+            g_on_log(2, buf);
+        }
+        return -1;
+    }
+
+    if (g_on_log) {
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "Audio re-init: found %u device(s), trying device 0", dev_count);
+        g_on_log(4, buf);
+    }
+
+    /* Try to set devices - use PJSUA_INVALID_ID to force re-detection */
+    status = pjsua_set_snd_dev(0, 0);
+    if (status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char err_msg[256];
+            pj_strerror(status, err_msg, sizeof(err_msg));
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "pjsua_set_snd_dev failed: %d (%s)", (int)status, err_msg);
+            g_on_log(2, buf);
+        }
+        return -1;
+    }
+
+    return 0;
+}
+
 int pd_call_make(int acc_id, const char *dst_uri)
 {
     pd_ensure_thread();
+
+    /* Check media readiness before attempting call */
+    pj_status_t media_status = pd_check_media_ready();
+    if (media_status != PJ_SUCCESS) {
+        if (g_on_log) {
+            char err_msg[256];
+            pj_strerror(media_status, err_msg, sizeof(err_msg));
+            char buf[512];
+            snprintf(buf, sizeof(buf),
+                     "pd_call_make: media not ready - %s", err_msg);
+            g_on_log(1, buf);
+        }
+        return -(int)media_status;
+    }
+
     pj_str_t dst = S(dst_uri);
     pjsua_call_id call_id;
     pj_status_t status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
                                                NULL, NULL, NULL, &call_id);
     if (status != PJ_SUCCESS) {
-        if (g_on_log) {
+        /* If device ID out of range error, try to reinitialize audio */
+        if (status == 450002 || status == -450002) {
+            if (g_on_log) {
+                g_on_log(2, "pd_call_make: device ID error, attempting re-init");
+            }
+            if (pd_reinit_audio_devices() == 0) {
+                /* Retry the call with refreshed device IDs */
+                status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
+                                               NULL, NULL, NULL, &call_id);
+                if (status == PJ_SUCCESS && g_on_log) {
+                    g_on_log(2, "pd_call_make: retry succeeded after re-init");
+                }
+            }
+        }
+
+        if (status != PJ_SUCCESS && g_on_log) {
             char err_msg[256];
             pj_str_t err_str = pj_strerror(status, err_msg, sizeof(err_msg));
             char buf[512];

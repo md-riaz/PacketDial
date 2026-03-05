@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart';
 
 import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
@@ -11,13 +11,11 @@ import '../core/sip_uri_utils.dart';
 class IncomingCallPopup extends StatefulWidget {
   final WindowController windowController;
   final Map<String, dynamic> callInfo;
-  final Map<String, dynamic>? parentBounds;
 
   const IncomingCallPopup({
     super.key,
     required this.windowController,
     required this.callInfo,
-    this.parentBounds,
   });
 
   @override
@@ -47,32 +45,14 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     _configureWindow();
   }
 
-  Future<void> _configureWindow() async {
-    // Configure the sub-window via windowManager
-    await windowManager.ensureInitialized();
-    const size = Size(320, 240);
-    await windowManager.setSize(size);
-    await windowManager.setAlwaysOnTop(true);
-    await windowManager.setTitle('Incoming Call');
-    await windowManager.setSkipTaskbar(true);
-
-    // Position relative to parent
-    if (widget.parentBounds != null) {
-      final pb = widget.parentBounds!;
-      final double px = (pb['x'] as num).toDouble();
-      final double py = (pb['y'] as num).toDouble();
-      final double pw = (pb['w'] as num).toDouble();
-      final double ph = (pb['h'] as num).toDouble();
-
-      final double x = px + (pw / 2) - (size.width / 2);
-      final double y = py + (ph / 2) - (size.height / 2);
-      await windowManager.setPosition(Offset(x, y));
-    } else {
-      await windowManager.center();
-    }
-
-    await windowManager.show();
-    await windowManager.focus();
+  void _configureWindow() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      appWindow.minSize = const Size(320, 240);
+      appWindow.size = const Size(320, 240);
+      appWindow.alignment = Alignment.center;
+      appWindow.title = 'Incoming Call';
+      appWindow.show();
+    });
   }
 
   @override
@@ -94,7 +74,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
   }
 
   void _closeWindow() {
-    windowManager.close();
+    appWindow.close();
   }
 
   @override
@@ -118,7 +98,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
           ),
           child: Column(
             children: [
-              // Native title bar used, no internal bar needed
+              // Use bitsdojo_window for title bar interaction if needed,
+              // but here we just rely on native decorations.
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(16),

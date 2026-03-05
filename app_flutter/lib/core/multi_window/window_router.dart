@@ -20,33 +20,27 @@ class WindowRouter {
     switch (type) {
       case WindowType.incomingCall:
         Map<String, dynamic> callInfo = {};
-        Map<String, dynamic>? parentBounds;
         try {
           final payload = jsonDecode(jsonStr) as Map<String, dynamic>;
           callInfo = payload['callData'] as Map<String, dynamic>? ?? {};
-          parentBounds = payload['parentBounds'] as Map<String, dynamic>?;
         } catch (_) {}
         return IncomingCallPopup(
           windowController: windowController,
           callInfo: callInfo,
-          parentBounds: parentBounds,
         );
 
       case WindowType.accountSetup:
         AccountSchema? existing;
-        Map<String, dynamic>? parentBounds;
         try {
           final payload = jsonDecode(jsonStr) as Map<String, dynamic>;
           final accMap = payload['existing'] as Map<String, dynamic>?;
           if (accMap != null && accMap.isNotEmpty) {
             existing = AccountSchema.fromJson(accMap);
           }
-          parentBounds = payload['parentBounds'] as Map<String, dynamic>?;
         } catch (_) {}
         return AccountSetupWindow(
           windowController: windowController,
           existing: existing,
-          parentBounds: parentBounds,
         );
 
       case WindowType.unknown:

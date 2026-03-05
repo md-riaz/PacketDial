@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
-import 'package:window_manager/window_manager.dart';
 import 'dart:async';
 
 import '../../engine_channel.dart';
@@ -62,26 +61,17 @@ class IncomingCallController {
       final account = EngineChannel.instance.accounts[accountId];
       final accountName = account?.accountName ?? 'SIP Account';
 
-      // Get main window bounds for positioning
-      final mainWindowRect = await windowManager.getBounds();
-
       final payload = {
         'callData': {
           'uri': uri,
           'direction': 'Incoming',
           'account': accountName,
         },
-        'parentBounds': {
-          'x': mainWindowRect.left,
-          'y': mainWindowRect.top,
-          'w': mainWindowRect.width,
-          'h': mainWindowRect.height,
-        }
       };
 
       final jsonStr = jsonEncode(payload);
 
-      // Create the popup window — it will configure its own size via windowManager
+      // Create the popup window
       _popupController = await WindowController.create(
         WindowConfiguration(
           hiddenAtLaunch: true,
@@ -89,12 +79,16 @@ class IncomingCallController {
         ),
       );
 
+      final id = _popupController!.windowId;
       _isPopupOpen = true;
 
-      await _popupController!.show();
+      // Set up handler for answer/reject commands from the popup using low-level channel
+      final channel = WindowMethodChannel(
+        'mixin.one/window_controller/$id',
+        mode: ChannelMode.unidirectional,
+      );
 
-      // Set up handler for answer/reject commands from the popup
-      _popupController!.setWindowMethodHandler((call) async {
+      channel.setMethodCallHandler((call) async {
         switch (call.method) {
           case 'answer':
             _handleAnswer();
@@ -105,6 +99,8 @@ class IncomingCallController {
         }
         return null;
       });
+
+      await _popupController!.show();
     } catch (e) {
       debugPrint('[IncomingCallController] Failed to create popup: $e');
       _isPopupOpen = false;
@@ -114,6 +110,9 @@ class IncomingCallController {
   void _dismissPopup() {
     if (!_isPopupOpen || _popupController == null) return;
     try {
+      // In version 0.3.0, WindowController doesn't have a close() method.
+      // We rely on bitsdojo_window in the sub-window to close itself,
+      // or we hide it if we can't force close from here.
       _popupController!.hide();
     } catch (_) {}
     _popupController = null;

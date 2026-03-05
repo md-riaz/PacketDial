@@ -78,6 +78,7 @@ pub enum EngineErrorCode {
     InvalidJson = 4,
     UnknownCommand = 5,
     NotFound = 6,
+    MediaNotReady = 7,
     InternalError = 100,
 }
 
@@ -1226,11 +1227,38 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         };
         let pj_call_id = unsafe { pd_call_make(pj_acc_id, dst.as_ptr()) };
         if pj_call_id < 0 {
-            log_engine(
-                LogLevel::Error,
-                &format!("CallStart: pd_call_make failed for uri={uri}"),
-            );
-            return EngineErrorCode::InternalError;
+            // pd_call_make returns negated PJSIP status codes
+            let status = -pj_call_id;
+            
+            // Check for specific error codes
+            let error_code = match status {
+                // PJMEDIA_EAUD_NODEVICES (-450000 + specific offset)
+                // Device ID out of range error (450002)
+                450002 => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: audio device not available for uri={uri}. Please check audio device settings."),
+                    );
+                    EngineErrorCode::MediaNotReady
+                }
+                // Other media-related errors
+                430000..=439999 => {
+                    // PJMEDIA error range
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: media subsystem error for uri={uri} (status={status})"),
+                    );
+                    EngineErrorCode::MediaNotReady
+                }
+                _ => {
+                    log_engine(
+                        LogLevel::Error,
+                        &format!("CallStart: pd_call_make failed for uri={uri} (status={status})"),
+                    );
+                    EngineErrorCode::InternalError
+                }
+            };
+            return error_code;
         }
         let call = Call {
             id: call_id,
