@@ -10,12 +10,11 @@ import 'package:flutter/services.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'dart:io';
 import 'dart:async';
-import 'dart:convert';
 import 'core/app_theme.dart';
 import 'core/sip_uri_utils.dart';
 import 'core/engine_channel.dart';
 import 'core/account_service.dart';
-import 'core/incoming_call_controller.dart';
+import 'core/multi_window/controllers/incoming_call_controller.dart';
 import 'core/window_prefs.dart';
 import 'models/account_schema.dart';
 import 'models/call_history_schema.dart';
@@ -25,7 +24,8 @@ import 'screens/accounts_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/history_screen.dart';
-import 'screens/incoming_call_popup.dart';
+import 'core/multi_window/window_router.dart';
+import 'core/multi_window/window_type.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,19 +34,14 @@ void main(List<String> args) async {
   // If launched as a sub-window, route to the appropriate popup.
   final windowController = await WindowController.fromCurrentEngine();
   final windowArgs = windowController.arguments;
-  if (windowArgs.startsWith('incoming_call|')) {
-    // Parse call info and launch the incoming call popup
-    final jsonStr = windowArgs.substring('incoming_call|'.length);
-    Map<String, dynamic> callInfo = {};
-    try {
-      callInfo = jsonDecode(jsonStr) as Map<String, dynamic>;
-    } catch (_) {}
-    await windowManager.ensureInitialized();
-    await windowManager.setAlwaysOnTop(true);
-    runApp(IncomingCallPopup(
-      windowController: windowController,
-      callInfo: callInfo,
-    ));
+
+  final subWindowApp = WindowRouter.getAppForArgs(windowArgs, windowController);
+  if (subWindowApp != null) {
+    if (windowArgs.startsWith('${WindowType.incomingCall.key}|')) {
+      await windowManager.ensureInitialized();
+      await windowManager.setAlwaysOnTop(true);
+    }
+    runApp(subWindowApp);
     return;
   }
   // ── Main window continues below ────────────────────────────────────────

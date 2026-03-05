@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
 import 'dart:async';
 
-import 'engine_channel.dart';
+import '../../engine_channel.dart';
+import '../window_type.dart';
 
 /// Manages the incoming call popup window lifecycle.
 ///
@@ -60,21 +62,36 @@ class IncomingCallController {
       final account = EngineChannel.instance.accounts[accountId];
       final accountName = account?.accountName ?? 'SIP Account';
 
-      final callInfo = jsonEncode({
-        'uri': uri,
-        'direction': 'Incoming',
-        'account': accountName,
-      });
+      // Get main window bounds for positioning
+      final mainWindowRect = await windowManager.getBounds();
+
+      final payload = {
+        'callData': {
+          'uri': uri,
+          'direction': 'Incoming',
+          'account': accountName,
+        },
+        'parentBounds': {
+          'x': mainWindowRect.left,
+          'y': mainWindowRect.top,
+          'w': mainWindowRect.width,
+          'h': mainWindowRect.height,
+        }
+      };
+
+      final jsonStr = jsonEncode(payload);
 
       // Create the popup window — it will configure its own size via windowManager
       _popupController = await WindowController.create(
         WindowConfiguration(
-          hiddenAtLaunch: false,
-          arguments: 'incoming_call|$callInfo',
+          hiddenAtLaunch: true,
+          arguments: '${WindowType.incomingCall.key}|$jsonStr',
         ),
       );
 
       _isPopupOpen = true;
+
+      await _popupController!.show();
 
       // Set up handler for answer/reject commands from the popup
       _popupController!.setWindowMethodHandler((call) async {

@@ -11,11 +11,13 @@ import '../core/sip_uri_utils.dart';
 class IncomingCallPopup extends StatefulWidget {
   final WindowController windowController;
   final Map<String, dynamic> callInfo;
+  final Map<String, dynamic>? parentBounds;
 
   const IncomingCallPopup({
     super.key,
     required this.windowController,
     required this.callInfo,
+    this.parentBounds,
   });
 
   @override
@@ -48,11 +50,27 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
   Future<void> _configureWindow() async {
     // Configure the sub-window via windowManager
     await windowManager.ensureInitialized();
-    await windowManager.setSize(const Size(320, 240));
+    const size = Size(320, 240);
+    await windowManager.setSize(size);
     await windowManager.setAlwaysOnTop(true);
     await windowManager.setTitle('Incoming Call');
     await windowManager.setSkipTaskbar(true);
-    await windowManager.center();
+
+    // Position relative to parent
+    if (widget.parentBounds != null) {
+      final pb = widget.parentBounds!;
+      final double px = (pb['x'] as num).toDouble();
+      final double py = (pb['y'] as num).toDouble();
+      final double pw = (pb['w'] as num).toDouble();
+      final double ph = (pb['h'] as num).toDouble();
+
+      final double x = px + (pw / 2) - (size.width / 2);
+      final double y = py + (ph / 2) - (size.height / 2);
+      await windowManager.setPosition(Offset(x, y));
+    } else {
+      await windowManager.center();
+    }
+
     await windowManager.show();
     await windowManager.focus();
   }
@@ -100,40 +118,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
           ),
           child: Column(
             children: [
-              // Title bar for dragging
-              GestureDetector(
-                onPanStart: (_) => windowManager.startDragging(),
-                child: Container(
-                  height: 28,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceVariant.withValues(alpha: 0.5),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.phone_callback,
-                          size: 12, color: AppTheme.callGreen),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Incoming Call',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      const Spacer(),
-                      InkWell(
-                        onTap: _reject,
-                        child: const Icon(Icons.close,
-                            size: 14, color: AppTheme.textTertiary),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Main content
+              // Native title bar used, no internal bar needed
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
