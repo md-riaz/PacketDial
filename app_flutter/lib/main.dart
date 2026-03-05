@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
@@ -29,6 +30,22 @@ import 'core/multi_window/window_type.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Global Error Handler ────────────────────────────────────────────────
+  // Capture and log all uncaught Flutter errors
+  FlutterError.onError = (FlutterErrorDetails details) {
+    debugPrint('[FLUTTER ERROR] ${details.exception}');
+    debugPrint('[FLUTTER ERROR STACK] ${details.stack}');
+    // In release mode, you might want to send this to a crash reporting service
+  };
+
+  // Capture all uncaught Dart isolate errors
+  ui.PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[ISOLATE ERROR] $error');
+    debugPrint('[ISOLATE ERROR STACK] $stack');
+    return true; // Continue execution (don't crash)
+  };
+  // ────────────────────────────────────────────────────────────────────────
 
   // ── Multi-window routing ────────────────────────────────────────────────
   // If launched as a sub-window, route to the appropriate popup.

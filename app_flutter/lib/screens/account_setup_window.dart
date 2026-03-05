@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:window_manager/window_manager.dart';
 import '../core/app_theme.dart';
 import '../models/account_schema.dart';
 
@@ -39,6 +41,9 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
   String? registrationError;
 
   @override
+  bool _isClosing = false;
+
+  @override
   void initState() {
     super.initState();
     if (widget.existing != null) {
@@ -66,10 +71,48 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
       appWindow.title =
           widget.existing == null ? 'Add SIP Account' : 'Edit Account';
     });
+    
+    // Set up window method handler for close requests (desktop_multi_window pattern)
+    _setupWindowHandler();
   }
 
-  void _closeWindow() {
-    appWindow.close();
+  Future<void> _setupWindowHandler() async {
+    await widget.windowController.setWindowMethodHandler((call) async {
+      debugPrint('[AccountSetupWindow] Method called: ${call.method}');
+      if (call.method == 'window_close') {
+        await windowManager.close();
+        return null;
+      }
+      throw MissingPluginException('Not implemented: ${call.method}');
+    });
+  }
+
+  void _closeWindow() async {
+    if (_isClosing) return;
+    _isClosing = true;
+    try {
+      debugPrint('[AccountSetupWindow] Closing window');
+      // Use invokeMethod('window_close') as per desktop_multi_window documentation
+      await widget.windowController.invokeMethod('window_close');
+    } catch (e) {
+      debugPrint('[AccountSetupWindow] Error closing window: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    debugPrint('[AccountSetupWindow] Disposing');
+    nameCtrl.dispose();
+    displayCtrl.dispose();
+    serverCtrl.dispose();
+    userCtrl.dispose();
+    passCtrl.dispose();
+    authUserCtrl.dispose();
+    domainCtrl.dispose();
+    proxyCtrl.dispose();
+    stunCtrl.dispose();
+    turnCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -399,10 +442,10 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
 
       await widget.windowController
           .invokeMethod('saveAccount', jsonEncode(schemaData));
-      
-      // Close via appWindow since the controller may have cleaned up
-      if (mounted) {
-        appWindow.close();
+
+      // Close via the coordinated close method
+      if (mounted && !_isClosing) {
+        _closeWindow();
       }
     } catch (e) {
       if (mounted) {

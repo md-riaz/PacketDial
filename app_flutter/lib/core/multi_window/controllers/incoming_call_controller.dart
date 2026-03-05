@@ -130,7 +130,9 @@ class IncomingCallController {
         return null;
       });
 
-      await _popupController!.show();
+      await _popupController!.show().catchError((e) {
+        debugPrint('[IncomingCallController] Error showing popup: $e');
+      });
     } catch (e) {
       debugPrint('[IncomingCallController] Failed to create popup: $e');
       _isPopupOpen = false;

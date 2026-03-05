@@ -95,7 +95,8 @@ class AccountSetupController {
           return jsonEncode({'success': true});
         } else if (call.method == 'close') {
           debugPrint(
-              '[AccountSetupController] Closing controller for $windowId');
+              '[AccountSetupController] Close request received for $windowId');
+          // Cleanup immediately - window will close on its own
           _activeControllers.remove(windowId);
           if (_windowId == windowId) _windowId = null;
           return null;
@@ -118,7 +119,9 @@ class AccountSetupController {
       if (exists) {
         // Already open, just show/focus (implementation details of focusing depend on plugin)
         final window = WindowController.fromWindowId(_windowId!);
-        await window.show();
+        await window.show().catchError((e) {
+          debugPrint('[AccountSetupController] Error showing existing window: $e');
+        });
         return;
       } else {
         // State was stale, reset
@@ -134,19 +137,27 @@ class AccountSetupController {
     };
 
     final jsonStr = jsonEncode(payload);
-    final window = await WindowController.create(
-      WindowConfiguration(
-        arguments: '${WindowType.accountSetup.key}|$jsonStr',
-      ),
-    );
+    
+    try {
+      final window = await WindowController.create(
+        WindowConfiguration(
+          arguments: '${WindowType.accountSetup.key}|$jsonStr',
+        ),
+      );
 
-    final id = window.windowId;
-    _windowId = id;
-    _activeControllers[id] = this;
+      final id = window.windowId;
+      _windowId = id;
+      _activeControllers[id] = this;
 
-    _setupHandler(id);
+      _setupHandler(id);
 
-    // Initial show
-    await window.show();
+      // Initial show
+      await window.show().catchError((e) {
+        debugPrint('[AccountSetupController] Error showing new window: $e');
+      });
+    } catch (e) {
+      debugPrint('[AccountSetupController] Failed to create window: $e');
+      _windowId = null;
+    }
   }
 }

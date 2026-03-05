@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
@@ -26,6 +28,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
   bool _answered = false;
+  bool _isClosing = false;
 
   String get callerName =>
       SipUriUtils.friendlyName(widget.callInfo['uri'] as String?);
@@ -43,6 +46,9 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     )..repeat(reverse: true);
 
     _configureWindow();
+    
+    // Set up window method handler for close requests (desktop_multi_window pattern)
+    _setupWindowHandler();
   }
 
   void _configureWindow() {
@@ -54,6 +60,17 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
       appWindow.show();
     });
   }
+  
+  Future<void> _setupWindowHandler() async {
+    await widget.windowController.setWindowMethodHandler((call) async {
+      debugPrint('[IncomingCallPopup] Method called: ${call.method}');
+      if (call.method == 'window_close') {
+        await windowManager.close();
+        return null;
+      }
+      throw MissingPluginException('Not implemented: ${call.method}');
+    });
+  }
 
   @override
   void dispose() {
@@ -61,20 +78,41 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     super.dispose();
   }
 
-  void _answer() {
+  void _answer() async {
+    if (_isClosing) return;
     setState(() => _answered = true);
-    widget.windowController.invokeMethod('answer');
+    try {
+      await widget.windowController.invokeMethod('answer');
+    } catch (e) {
+      debugPrint('[IncomingCallPopup] Error sending answer: $e');
+    }
     // Close after a brief delay to show the "Connecting..." state
-    Future.delayed(const Duration(milliseconds: 500), _closeWindow);
-  }
-
-  void _reject() {
-    widget.windowController.invokeMethod('reject');
+    await Future.delayed(const Duration(milliseconds: 500));
     _closeWindow();
   }
 
-  void _closeWindow() {
-    appWindow.close();
+  void _reject() async {
+    if (_isClosing) return;
+    try {
+      await widget.windowController.invokeMethod('reject');
+    } catch (e) {
+      debugPrint('[IncomingCallPopup] Error sending reject: $e');
+    }
+    _closeWindow();
+  }
+
+  void _closeWindow() async {
+    if (_isClosing) return;
+    _isClosing = true;
+    try {
+      debugPrint('[IncomingCallPopup] Closing window');
+      // Give the main window time to process the answer/reject
+      await Future.delayed(const Duration(milliseconds: 200));
+      // Use invokeMethod('window_close') as per desktop_multi_window documentation
+      await widget.windowController.invokeMethod('window_close');
+    } catch (e) {
+      debugPrint('[IncomingCallPopup] Error closing window: $e');
+    }
   }
 
   @override
