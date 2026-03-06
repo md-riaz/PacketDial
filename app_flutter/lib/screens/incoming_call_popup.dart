@@ -138,7 +138,7 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'This will open in your default browser:',
               style: TextStyle(color: AppTheme.textSecondary),
             ),

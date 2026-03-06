@@ -277,7 +277,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                       ),
                       subtitle: Text(
                         '${account.username}@${account.server}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppTheme.textTertiary,
                           fontSize: 11,
                         ),
@@ -334,8 +334,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
         icon: const Icon(Icons.warning, color: AppTheme.warningAmber, size: 48),
-        title: Text('Audio Device Warning',
-            style: const TextStyle(color: AppTheme.textPrimary)),
+        title: const Text('Audio Device Warning',
+            style: TextStyle(color: AppTheme.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,9 +401,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Transfer this call to:',
-                  style: const TextStyle(color: AppTheme.textSecondary),
+                  style: TextStyle(color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -425,39 +425,45 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'Transfer Type:',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                RadioListTile<bool>(
-                  title: const Text('Blind Transfer',
-                      style: TextStyle(color: AppTheme.textPrimary)),
-                  subtitle: const Text('Transfer immediately without consulting',
-                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
-                  value: false,
-                  groupValue: isConsultTransfer,
-                  onChanged: (value) {
-                    setDialogState(() => isConsultTransfer = value!);
-                  },
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: AppTheme.primary,
-                ),
-                RadioListTile<bool>(
-                  title: const Text('Consult Transfer',
-                      style: TextStyle(color: AppTheme.textPrimary)),
-                  subtitle: const Text('Speak to target first, then transfer',
-                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
-                  value: true,
-                  groupValue: isConsultTransfer,
-                  onChanged: (value) {
-                    setDialogState(() => isConsultTransfer = value!);
-                  },
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: AppTheme.primary,
+                Column(
+                  children: [
+                    ListTile(
+                      leading: Radio<bool>(
+                        value: false,
+                        groupValue: isConsultTransfer,
+                        onChanged: (value) {
+                          setDialogState(() => isConsultTransfer = value!);
+                        },
+                        activeColor: AppTheme.primary,
+                      ),
+                      title: const Text('Blind Transfer',
+                          style: TextStyle(color: AppTheme.textPrimary)),
+                      subtitle: const Text('Transfer immediately without consulting',
+                          style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    ListTile(
+                      leading: Radio<bool>(
+                        value: true,
+                        groupValue: isConsultTransfer,
+                        onChanged: (value) {
+                          setDialogState(() => isConsultTransfer = value!);
+                        },
+                        activeColor: AppTheme.primary,
+                      ),
+                      title: const Text('Consult Transfer',
+                          style: TextStyle(color: AppTheme.textPrimary)),
+                      subtitle: const Text('Speak to target first, then transfer',
+                          style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -559,7 +565,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             ],
             Text(
               'This will connect the held call to ${consultationTarget ?? 'the consultation target'} and end your consultation call.',
-              style: TextStyle(
+              style: const TextStyle(
                   color: AppTheme.textTertiary, fontSize: 12),
             ),
           ],
@@ -610,9 +616,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Add this participant to the call:',
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -640,7 +646,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               },
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'This will put the current call on hold and dial the participant. Once they answer, you can create a 3-way conference.',
               style: TextStyle(
                   color: AppTheme.textTertiary, fontSize: 12),
@@ -778,17 +784,17 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     
     if (result == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              const Text('Completing transfer...'),
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Completing transfer...'),
             ],
           ),
           backgroundColor: AppTheme.callGreen,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
 
@@ -867,7 +873,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            Text(
+            const Text(
               'This will merge all parties into a single conference call.',
               style: TextStyle(
                   color: AppTheme.textTertiary, fontSize: 12),
@@ -902,17 +908,17 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
     if (result == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              const Text('Joining calls into conference...'),
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Text('Joining calls into conference...'),
             ],
           ),
           backgroundColor: AppTheme.callGreen,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: Duration(seconds: 2),
         ),
       );
 

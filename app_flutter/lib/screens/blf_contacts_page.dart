@@ -32,8 +32,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           colors: [Color(0xFF0D0D1A), Color(0xFF1A1040)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -114,7 +114,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
                     child: TextField(
                       decoration: InputDecoration(
                         hintText: 'Search contacts...',
-                        hintStyle: TextStyle(color: AppTheme.textTertiary),
+                        hintStyle: const TextStyle(color: AppTheme.textTertiary),
                         filled: true,
                         fillColor: AppTheme.inputFill,
                         border: OutlineInputBorder(
@@ -232,7 +232,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
             const SizedBox(height: 16),
             Text(
               _searchQuery.isEmpty ? 'No contacts yet' : 'No contacts found',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 16,
               ),
@@ -280,7 +280,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               controller: nameCtrl,
               decoration: InputDecoration(
                 labelText: 'Name',
-                labelStyle: TextStyle(color: AppTheme.textTertiary),
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.inputFill,
                 border: OutlineInputBorder(
@@ -295,7 +295,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               controller: uriCtrl,
               decoration: InputDecoration(
                 labelText: 'SIP URI',
-                labelStyle: TextStyle(color: AppTheme.textTertiary),
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 hintText: 'sip:user@domain.com',
                 filled: true,
                 fillColor: AppTheme.inputFill,
@@ -311,7 +311,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               controller: extCtrl,
               decoration: InputDecoration(
                 labelText: 'Extension (optional)',
-                labelStyle: TextStyle(color: AppTheme.textTertiary),
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.inputFill,
                 border: OutlineInputBorder(
@@ -366,7 +366,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               controller: nameCtrl,
               decoration: InputDecoration(
                 labelText: 'Name',
-                labelStyle: TextStyle(color: AppTheme.textTertiary),
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.inputFill,
                 border: OutlineInputBorder(
@@ -381,7 +381,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               controller: uriCtrl,
               decoration: InputDecoration(
                 labelText: 'SIP URI',
-                labelStyle: TextStyle(color: AppTheme.textTertiary),
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.inputFill,
                 border: OutlineInputBorder(
@@ -396,7 +396,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               controller: extCtrl,
               decoration: InputDecoration(
                 labelText: 'Extension',
-                labelStyle: TextStyle(color: AppTheme.textTertiary),
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.inputFill,
                 border: OutlineInputBorder(
@@ -577,7 +577,7 @@ class _ContactTile extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               contact.sipUri,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 11,
                 fontFamily: 'monospace',
@@ -597,7 +597,7 @@ class _ContactTile extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 contact.activity!,
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppTheme.textTertiary,
                   fontSize: 10,
                   fontStyle: FontStyle.italic,

@@ -60,8 +60,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           colors: [Color(0xFF0D0D1A), Color(0xFF1A1040)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -162,10 +162,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 color: AppTheme.primary.withValues(alpha: 0.3),
               ),
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'PacketDial',
                   style: TextStyle(
                     color: AppTheme.primary,
@@ -173,7 +173,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                     fontSize: 18,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   'Version 1.0.0',
                   style: TextStyle(
@@ -181,7 +181,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                     fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Text(
                   'Modern Windows SIP softphone with advanced features',
                   style: TextStyle(
@@ -286,7 +286,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         children: [
           _buildSectionTitle('Codec Priority'),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Drag to reorder. Higher priority codecs are preferred during call negotiation.',
             style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
@@ -326,7 +326,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   ),
                   subtitle: Text(
                     codec['id'] as String,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 11,
                       fontFamily: 'monospace',
@@ -350,7 +350,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                         AppSettingsService.instance.setCodecPriorities(_codecPriorities);
                       });
                     },
-                    activeColor: AppTheme.primary,
+                    activeThumbColor: AppTheme.primary,
                   ),
                 ),
               );
@@ -439,10 +439,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 color: AppTheme.primary.withValues(alpha: 0.3),
               ),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.info_outline, color: AppTheme.primary, size: 24),
-                const SizedBox(width: 12),
+                Icon(Icons.info_outline, color: AppTheme.primary, size: 24),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'These settings apply to all accounts. Changes take effect immediately.',
@@ -467,7 +467,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 8),
           Text(
             '${ContactsService.instance.contacts.length} contacts loaded',
-            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
           
           const SizedBox(height: 24),
@@ -560,7 +560,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         ),
         subtitle: Text(
           subtitle,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textTertiary,
             fontSize: 12,
           ),
