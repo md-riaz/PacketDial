@@ -1,4 +1,7 @@
-name: Release
+# PacketDial Release Workflow
+# Creates GitHub releases with both portable ZIP and Windows installer
+
+name: release
 
 on:
   workflow_dispatch:
@@ -15,6 +18,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Validate version format
         shell: bash
@@ -35,7 +40,7 @@ jobs:
       - name: Build Windows app
         uses: ./.github/actions/build-windows
 
-      - name: Package release artifact
+      - name: Create portable package
         shell: pwsh
         run: |
           # Check if X: is already mapped, if not map it
@@ -43,22 +48,132 @@ jobs:
             subst X: "$env:GITHUB_WORKSPACE"
           }
           X:
-          .\scripts\package.ps1
+          .\scripts\build_package.ps1 -Version "${{ inputs.release_version }}" -NoClean
+
+      - name: Create installer
+        shell: pwsh
+        run: |
+          # Check if X: is already mapped, if not map it
+          if (-not (Test-Path X:)) {
+            subst X: "$env:GITHUB_WORKSPACE"
+          }
+          X:
+          .\scripts\build_installer.ps1 -Version "${{ inputs.release_version }}" -NoClean
 
       - name: List dist directory
         shell: pwsh
         run: |
-          if (Test-Path "$env:GITHUB_WORKSPACE\dist") {
-            Get-ChildItem -Path "$env:GITHUB_WORKSPACE\dist"
-          } else {
-            Write-Error "dist directory not found at $env:GITHUB_WORKSPACE\dist"
-            exit 1
-          }
+          Write-Host "Contents of dist directory:"
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE\dist"
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: packetdial-portable
+          path: ${{ github.workspace }}/dist/PacketDial-*-Portable.zip
+          retention-days: 30
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: packetdial-installer
+          path: ${{ github.workspace }}/dist/PacketDial-Setup-*.exe
+          retention-days: 30
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.release_version }}
           name: PacketDial v${{ inputs.release_version }}
+          body: |
+            ## PacketDial v${{ inputs.release_version }}
+
+            ### 📦 Installation Options
+
+            #### Option 1: Windows Installer (Recommended)
+            Download and run `PacketDial-Setup-${{ inputs.release_version }}.exe`
+            
+            - Professional setup wizard
+            - Installs to Program Files
+            - Start Menu & Desktop shortcuts
+            - Uninstaller in Control Panel
+
+            #### Option 2: Portable Version
+            Download `PacketDial-${{ inputs.release_version }}-Portable.zip`
+            
+            - No installation required
+            - Extract and run
+            - Perfect for USB drives
+            - Includes uninstaller script
+
+            ### ✨ What's New
+
+            - **Multi-Account Support** - Multiple SIP accounts with selection per call
+            - **BLF/Presence Contacts** - Real-time presence monitoring with dedicated Contacts tab
+            - **Unified Settings** - All settings in one page (Codecs, Auto Answer, DND, DTMF)
+            - **Call Transfer** - Blind and attended (consult) transfer
+            - **3-Way Conference** - Merge two calls into conference
+            - **Call Forwarding** - Per-account forwarding rules
+            - **Caller Lookup** - Custom URL for caller ID lookup
+            - **Do Not Disturb** - App-wide DND with quick footer toggle
+            - **Professional Installer** - Inno Setup Windows installer
+            - **Portable Version** - No-install ZIP package
+
+            ### 📋 Features
+
+            #### Call Management
+            - ✅ Multi-account support with account selection
+            - ✅ Blind and attended transfer
+            - ✅ 3-way conference calling
+            - ✅ Call hold/mute
+            - ✅ Call history with details
+
+            #### Contacts & Presence
+            - ✅ BLF contacts with presence indicators
+            - ✅ Filter by presence state (Available/Busy/Unknown)
+            - ✅ Import/export contacts to JSON
+
+            #### Settings
+            - ✅ Codec priority selection (drag-to-reorder)
+            - ✅ Auto answer incoming calls
+            - ✅ Do Not Disturb (DND) with footer toggle
+            - ✅ DTMF method selection (In-band/RFC2833/SIP INFO)
+            - ✅ Call forwarding per account
+            - ✅ Caller lookup URL customization
+
+            ### 🔧 Technical Details
+
+            - **SIP Engine:** PJSIP 2.14.1
+            - **Core:** Rust FFI layer
+            - **UI:** Flutter Desktop
+            - **Platform:** Windows 10/11 x64
+            - **Settings:** File-based JSON (`%APPDATA%\PacketDial\`)
+
+            ### 📖 Documentation
+
+            - [Complete Features List](https://github.com/${{ github.repository }}/blob/main/docs/FEATURES.md)
+            - [Build & Installation Guide](https://github.com/${{ github.repository }}/blob/main/docs/BUILD_AND_INSTALL.md)
+            - [Quick Start Guide](https://github.com/${{ github.repository }}/blob/main/docs/quickstart.md)
+            - [Architecture Overview](https://github.com/${{ github.repository }}/blob/main/docs/architecture.md)
+
+            ### 🙏 Thanks
+
+            Thank you to all contributors and users!
+
+            ---
+            **PacketDial** - Modern Windows SIP Client
+          files: |
+            ${{ github.workspace }}/dist/PacketDial-*-Portable.zip
+            ${{ github.workspace }}/dist/PacketDial-Setup-*.exe
+          draft: false
+          prerelease: false
           generate_release_notes: true
-          files: ${{ github.workspace }}/dist/PacketDial-windows-x64.zip
+
+      - name: Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          # Unmap X: drive
+          if (Test-Path X:) {
+            subst X: /D
+          }

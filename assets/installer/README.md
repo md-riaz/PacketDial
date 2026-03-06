@@ -1,35 +1,48 @@
 # Installer Icon
 
-Place a 256x256 ICO file named `icon.ico` in this directory.
+✅ **Icon Ready!** - `icon.ico` is already in place (19.9 KB)
 
-## Requirements
+This icon is copied from the Flutter app's Windows resources and is ready for use with the Inno Setup installer.
 
-- Format: `.ico` (Windows icon format)
-- Size: 256x256 pixels (or multi-resolution with 256x256 as largest)
-- Colors: 32-bit with alpha channel
+## Icon Details
 
-## How to Create
+- **File:** `icon.ico`
+- **Size:** ~20 KB
+- **Format:** Windows ICO (multi-resolution)
+- **Source:** `app_flutter\windows\runner\resources\app_icon.ico`
 
-### Option 1: Convert from PNG
-1. Create/export your logo as 256x256 PNG
-2. Use an online converter:
-   - https://convertio.co/png-ico/
-   - https://www.icoconverter.com/
-3. Save as `icon.ico` in this folder
+## How It's Used
 
-### Option 2: Use GIMP
-1. Open your logo in GIMP
+1. **Installer EXE** - The icon appears on the setup wizard
+2. **Start Menu Shortcut** - The icon is used for the installed app shortcut
+3. **Desktop Icon** - If user selects desktop shortcut option
+4. **Uninstaller** - Icon appears in Control Panel > Programs and Features
+
+## Replace Icon (Optional)
+
+If you want to use a different icon:
+
+1. Create/export as 256x256 ICO file
+2. Save as `icon.ico` in this folder
+3. Overwrite the existing file
+
+### Convert from PNG
+
+**Online:**
+- https://convertio.co/png-ico/
+- https://www.icoconverter.com/
+
+**GIMP:**
+1. Open PNG in GIMP
 2. Image → Scale Image → 256x256
 3. File → Export As → `icon.ico`
-4. Select "Windows Icon" format
 
-### Option 3: Use Inkscape
-1. Open SVG logo in Inkscape
+**Inkscape:**
+1. Open SVG in Inkscape
 2. Set document size to 256x256
-3. File → Save As → PNG
-4. Convert PNG to ICO using online tool
+3. Export as PNG
+4. Convert to ICO using online tool
 
-## Note
+---
 
-If no icon is provided, the installer will use the default Inno Setup icon.
-The application executable will use the Flutter default icon.
+**Icon Status: ✅ Ready for Build**

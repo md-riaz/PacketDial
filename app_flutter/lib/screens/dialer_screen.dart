@@ -443,6 +443,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   },
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: AppTheme.primary,
                 ),
                 RadioListTile<bool>(
                   title: const Text('Consult Transfer',
@@ -456,6 +457,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   },
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: AppTheme.primary,
                 ),
               ],
             ),

@@ -51,9 +51,13 @@ New-Item -ItemType Directory -Path $StagingDir | Out-Null
 # Copy Flutter build output
 Copy-Item -Path "$BuildDir\*" -Destination $StagingDir -Recurse
 
-# Copy additional files
-if (Test-Path "assets\installer\icon.ico") {
-    Copy-Item -Path "assets\installer\icon.ico" -Destination $StagingDir
+# Copy installer icon (if exists)
+$IconSource = "assets\installer\icon.ico"
+if (Test-Path $IconSource) {
+    Copy-Item -Path $IconSource -Destination "$InstallerDir\app_icon.ico"
+    Write-Host "  Icon copied: $IconSource" -ForegroundColor Gray
+} else {
+    Write-Host "  No custom icon found, using default" -ForegroundColor Gray
 }
 
 Write-Host "[3/5] Creating Inno Setup script..." -ForegroundColor Yellow
@@ -84,6 +88,11 @@ WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
+
+; Use custom app icon if available
+#if FileExists("app_icon.ico")
+SetupIconFile=app_icon.ico
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

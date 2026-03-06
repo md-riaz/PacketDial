@@ -1,12 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../core/app_theme.dart';
 import '../core/contacts_service.dart';
-import '../core/engine_channel.dart';
 
 /// BLF Contacts management page.
 class BlfContactsPage extends ConsumerStatefulWidget {

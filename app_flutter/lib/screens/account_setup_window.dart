@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
-import 'package:window_manager/window_manager.dart';
 import '../core/app_theme.dart';
 import '../models/account_schema.dart';
 import '../core/multi_window/window_controller_extension.dart';
@@ -40,7 +39,6 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
   bool isRegistering = false;
   String? registrationError;
 
-  @override
   bool _isClosing = false;
 
   @override

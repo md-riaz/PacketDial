@@ -22,6 +22,7 @@ PacketDial is a modern, developer-grade Windows SIP softphone built with:
 
 **Release & Distribution?**
 - [Release Process](docs/release-process.md) — Versioning and artifact creation
+- [Release Guide](docs/RELEASE_GUIDE.md) — GitHub release workflow instructions
 
 **Architecture & Design?**
 - [Architecture](docs/architecture.md) — System overview and component interaction
@@ -69,6 +70,41 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 **Output:** `dist\PacketDial-Setup-1.0.0.exe` + `dist\PacketDial-1.0.0-Portable.zip`
 
 See [Build & Installation Guide](docs/BUILD_AND_INSTALL.md) for detailed instructions.
+
+---
+
+## Key Features
+
+### 📞 Call Management
+- **Multi-Account Support** - Multiple SIP accounts simultaneously
+- **Account Selection** - Choose account per outgoing call
+- **Call Transfer** - Blind or attended (consult) transfer
+- **3-Way Conference** - Merge two calls into conference
+- **Call Hold/Mute** - Standard call controls
+- **Call History** - Complete call tracking
+
+### 👥 Contacts & Presence
+- **BLF Contacts** - Real-time presence monitoring
+- **Presence States** - Available/Busy/Ringing/Unknown
+- **Contact Filtering** - Filter by presence state
+- **Quick Dial** - One-click calling from contacts
+- **Import/Export** - Backup contacts to JSON
+
+### ⚙️ Settings & Configuration
+- **Unified Settings** - All settings in one place
+- **Codec Selection** - Drag-to-reorder priority
+- **Do Not Disturb** - Auto-reject calls (with footer toggle)
+- **Auto Answer** - Automatically answer calls
+- **DTMF Method** - In-band/RFC2833/SIP INFO
+- **Call Forwarding** - Per-account forwarding rules
+- **Caller Lookup** - Custom URL for caller ID
+
+### 📦 Distribution
+- **Windows Installer** - Professional setup (Inno Setup)
+- **Portable Version** - No installation required
+- **File-Based Settings** - Easy backup (`%APPDATA%\PacketDial\`)
+
+See [Complete Features List](docs/FEATURES.md) for detailed documentation.
 
 ---
 
@@ -225,20 +261,55 @@ cargo clippy -- -D warnings
 |-----------|----------|
 | `engine_pjsip/` | PJSIP source (vendored pjproject 2.14.1) |
 | `core_rust/` | Rust FFI wrapper → `voip_core.dll` |
-| `app_flutter/` | Flutter Windows desktop UI (5 screens) |
-| `scripts/` | Build & deployment automation |
-| `docs/` | Architecture, API reference, guides |
-| `dist/` | Release artifacts (ZIP files) |
+| `app_flutter/` | Flutter Windows desktop UI |
+| `app_flutter/lib/screens/` | 5 main screens (Dialer, Contacts, History, Accounts, Settings) |
+| `scripts/` | Build automation (build_all.ps1, build_installer.ps1, etc.) |
+| `docs/` | Complete documentation |
+| `dist/` | Release artifacts (installer + portable ZIP) |
+| `assets/` | Application assets and icons |
+
+### Documentation Files
+
+| File | Description |
+|------|-------------|
+| [FEATURES.md](docs/FEATURES.md) | Complete feature list with status |
+| [BUILD_AND_INSTALL.md](docs/BUILD_AND_INSTALL.md) | Build and installation guide |
+| [QUICKSTART.md](docs/quickstart.md) | 5-minute setup guide |
+| [ARCHITECTURE.md](docs/architecture.md) | System architecture overview |
+| [FFI_API.md](docs/FFI_API.md) | Rust FFI API reference |
 
 ---
 
 ## Known Limitations / TODOs
 
-- **Conference calling:** Multi-party bridging not yet wired
-- **TLS/SRTP:** Config flags exist in PJSIP but are not surfaced in the UI
-- **Credential persistence:** Currently in-memory only — Windows Credential Manager integration planned
-- **Audio device hot-swap:** Device list is static at startup; runtime refresh not yet supported
-- **Linux / macOS builds:** Only Windows x64 is supported at this time
+### ✅ Implemented (v1.0)
+- **Multi-Account Support** - Multiple SIP accounts with selection
+- **Call Transfer** - Blind and attended transfer
+- **3-Way Conference** - Merge two calls
+- **BLF/Presence** - File-based contacts with presence
+- **Unified Settings** - All settings in one page
+- **DND** - App-wide with footer toggle
+- **Call Forwarding** - Per-account
+- **Caller Lookup** - Custom URL per account
+- **Codec Selection** - App-wide priority
+- **Auto Answer** - App-wide
+- **DTMF Method** - App-wide selection
+- **Packaging** - Installer + Portable versions
+
+### ⏳ In Progress
+- **Windows Credential Manager** - Secure password storage (currently in-memory)
+- **Audio Device Hot-Swap** - Runtime device refresh (requires restart)
+- **Multiple Active Calls UI** - Backend ready, UI needs enhancement
+- **Call Recording** - Backend hooks ready, UI pending
+
+### 🔜 Planned
+- **Video Calls** - SIP video support
+- **Instant Messaging** - SIP SIMPLE
+- **Conference Bridge** - 5+ party conferences
+- **Linux/macOS** - Cross-platform builds
+- **Mobile Apps** - iOS/Android Flutter apps
+
+See [Features](docs/FEATURES.md) for complete implementation status.
 
 ---
 
@@ -306,17 +377,19 @@ Located in [`scripts/`](file:///c:/Users/vm_user/Downloads/PacketDial/scripts/):
 
 ## Milestones
 
-| Milestone | Status | Notes |
-|-----------|--------|-------|
+| Milestone | Status | Description |
+|-----------|--------|-------------|
 | M0 - Build System | ✅ Done | CI, CMake, Rust cdylib, Flutter Windows desktop |
 | M1 - Registration | ✅ Done | Account model, command/event channel, stub SIP registration |
-| M2 - Calling | ✅ Done | Dialer UI, call state machine, hold/mute/hangup (stub) |
+| M2 - Calling | ✅ Done | Dialer UI, call state machine, hold/mute/hangup |
 | M3 - Diagnostics | ✅ Done | SIP capture + log masking, media stats, export bundle |
-| M4 - Packaging | ✅ Done | `scripts/package.ps1`, GitHub Release workflow |
+| M4 - Packaging | ✅ Done | Installer + portable ZIP, GitHub Release workflow |
 | M5 - Windows Build | ✅ Done | CI build with PJSIP cache, `subst X:` workaround |
 | M6 - Hardening & TLS | ✅ Done | TLS/SRTP flags, credential store, `cargo clippy -D warnings` |
-| M7 - PJSIP Integration | ✅ Done | C shim + Rust FFI: real SIP registration, outgoing/incoming calls, audio, SIP capture |
-| M8 - FFI Standardization | ✅ Done | Direct C ABI functions (`engine_register`, `engine_make_call`, `engine_hangup`, `engine_set_event_callback`), structured event callbacks, Dart/Rust test suites |
+| M7 - PJSIP Integration | ✅ Done | C shim + Rust FFI: real SIP registration, calls, audio, capture |
+| M8 - FFI Standardization | ✅ Done | Direct C ABI functions, structured events, test suites |
+| M9 - Advanced Features | ✅ Done | Transfer, conference, BLF, DND, forwarding, multi-account |
+| M10 - Packaging System | ✅ Done | Inno Setup installer, portable ZIP, build automation |
 
 > **Note:** PJSIP is required for all SIP functionality. Build it with `scripts/build_pjsip.ps1`
 > before compiling the Rust core. The thin C shim (`pjsip_shim.c`) bridges PJSIP and the Rust FFI layer.

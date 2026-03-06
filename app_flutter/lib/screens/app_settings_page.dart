@@ -2,12 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:convert';
 
 import '../core/app_theme.dart';
 import '../core/app_settings_service.dart';
 import '../core/contacts_service.dart';
-import '../core/engine_channel.dart';
 import 'diagnostics_screen.dart';
 
 /// Unified app-wide settings page.
@@ -211,7 +209,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 setState(() => _blfEnabled = value);
                 await AppSettingsService.instance.setBlfEnabled(value);
               },
-              activeColor: AppTheme.primary,
+              activeThumbColor: AppTheme.primary,
             ),
           ),
           
@@ -385,7 +383,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 setState(() => _dndEnabled = value);
                 await AppSettingsService.instance.setDndEnabled(value);
               },
-              activeColor: AppTheme.errorRed,
+              activeThumbColor: AppTheme.errorRed,
             ),
           ),
           
@@ -404,7 +402,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 setState(() => _autoAnswerEnabled = value);
                 await AppSettingsService.instance.setAutoAnswer(value);
               },
-              activeColor: AppTheme.callGreen,
+              activeThumbColor: AppTheme.callGreen,
             ),
           ),
           
@@ -739,16 +737,15 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               await AppSettingsService.instance.setAutoAnswer(false);
               await AppSettingsService.instance.setBlfEnabled(true);
               await _loadSettings();
-              
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Settings reset to defaults'),
-                    backgroundColor: AppTheme.callGreen,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
+
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Settings reset to defaults'),
+                  backgroundColor: AppTheme.callGreen,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
             style: FilledButton.styleFrom(backgroundColor: AppTheme.warningAmber),
             child: const Text('Reset'),

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
 import '../core/contacts_service.dart';
 import '../core/engine_channel.dart';
-import 'dialer_screen.dart';
 
 /// Contacts tab for main navigation - shows BLF contacts with presence.
 class ContactsScreen extends ConsumerStatefulWidget {

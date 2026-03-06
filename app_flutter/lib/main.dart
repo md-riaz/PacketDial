@@ -25,7 +25,6 @@ import 'ffi/engine.dart';
 import 'providers/engine_provider.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/contacts_screen.dart';
-import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/app_settings_page.dart';
