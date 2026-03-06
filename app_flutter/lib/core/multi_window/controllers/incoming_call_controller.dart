@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import '../../engine_channel.dart';
+import '../../contacts_service.dart';
+import '../../app_settings_service.dart';
 import '../window_type.dart';
 
 /// Manages the incoming call popup window lifecycle.
@@ -57,6 +59,14 @@ class IncomingCallController {
       final state = payload['state'] as String? ?? '';
 
       if (direction == 'Incoming' && state == 'Ringing') {
+        // Check DND mode
+        if (AppSettingsService.instance.dndEnabled) {
+          debugPrint('[IncomingCallController] DND enabled - rejecting call');
+          // Reject the call
+          EngineChannel.instance.engine.hangup();
+          return;
+        }
+        
         _showPopup(
           uri: payload['uri'] as String? ?? '',
           accountId: payload['account_id'] as String? ?? '',
@@ -64,6 +74,13 @@ class IncomingCallController {
       } else if (state == 'InCall' || state == 'Ended') {
         _dismissPopup();
       }
+    } else if (type == 'BlfStatus') {
+      // Update contact presence state
+      final uri = payload['uri'] as String? ?? '';
+      final state = payload['state'] as String? ?? 'Unknown';
+      final activity = payload['activity'] as String?;
+      
+      ContactsService.instance.updatePresence(uri, state, activity);
     }
   }
 
@@ -91,6 +108,18 @@ class IncomingCallController {
       final account = EngineChannel.instance.accounts[accountId];
       final accountName = account?.accountName ?? 'SIP Account';
       final accountUser = account?.username ?? '';
+      
+      // Get lookup URL from account (if configured)
+      String lookupUrl = '';
+      if (account != null) {
+        // Request lookup URL from engine
+        EngineChannel.instance.engine.sendCommand(
+          'AccountGetLookupUrl',
+          '{"account_id":"$accountId"}',
+        );
+        // Note: In production, you'd wait for the response before showing popup
+        // For now, lookup URL will be fetched asynchronously
+      }
 
       final payload = {
         'callData': {
@@ -98,6 +127,7 @@ class IncomingCallController {
           'direction': 'Incoming',
           'account_name': accountName,
           'account_user': accountUser,
+          'lookup_url': lookupUrl,
         },
       };
 

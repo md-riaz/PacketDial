@@ -81,6 +81,14 @@ typedef void (*PdOnSipMsg)(int call_id, int is_tx, const char *msg);
 typedef void (*PdOnCallTransferStatus)(int call_id, int status_code,
                                         const char *reason, int is_final);
 
+/**
+ * BLF/Presence status notification.
+ * @param uri         SIP URI of the monitored extension
+ * @param state       Presence state: 0=Unknown, 1=Available, 2=Busy, 3=Ringing
+ * @param activity    NUL-terminated activity description
+ */
+typedef void (*PdOnBlfStatus)(const char *uri, int state, const char *activity);
+
 /* -----------------------------------------------------------------------
  * Lifecycle
  * ----------------------------------------------------------------------- */
@@ -107,7 +115,8 @@ int pd_init(const char *user_agent,
             PdOnCallMedia    on_media,
             PdOnLog          on_log,
             PdOnSipMsg       on_sip_msg,
-            PdOnCallTransferStatus on_transfer_status);
+            PdOnCallTransferStatus on_transfer_status,
+            PdOnBlfStatus    on_blf_status);
 
 /** Destroy pjsua and release all resources. */
 int pd_shutdown(void);
@@ -226,6 +235,200 @@ int pd_call_complete_xfer(int call_a, int call_b);
  * @return 0 on success, non-zero on error.
  */
 int pd_call_merge_conference(int call_a, int call_b);
+
+/**
+ * Set call forwarding for an account.
+ * @param acc_id        pjsua_acc_id.
+ * @param fwd_uri       Forward-to SIP URI (NULL to disable).
+ * @param fwd_flags     Forward flags: 1=Unconditional, 2=OnBusy, 4=OnNoAnswer.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_forward(int acc_id, const char *fwd_uri, int fwd_flags);
+
+/**
+ * Get current call forwarding settings for an account.
+ * @param acc_id        pjsua_acc_id.
+ * @param fwd_uri_buf   Buffer to receive forward-to URI.
+ * @param fwd_uri_len   Size of fwd_uri_buf.
+ * @param fwd_flags_out Receives forward flags.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_get_forward(int acc_id, char *fwd_uri_buf, int fwd_uri_len,
+                        int *fwd_flags_out);
+
+/**
+ * Enable/Disable Do Not Disturb (DND) mode.
+ * @param acc_id    pjsua_acc_id.
+ * @param enabled   1 to enable DND, 0 to disable.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_dnd(int acc_id, int enabled);
+
+/**
+ * Subscribe to BLF/Presence for a list of URIs.
+ * @param acc_id    pjsua_acc_id to use for subscription.
+ * @param uris      Array of SIP URIs to monitor.
+ * @param count     Number of URIs in the array.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_blf_subscribe(int acc_id, const char **uris, int count);
+
+/**
+ * Unsubscribe from all BLF/Presence subscriptions.
+ * @param acc_id    pjsua_acc_id.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_blf_unsubscribe(int acc_id);
+
+/**
+ * Set caller lookup URL for an account.
+ * @param acc_id        pjsua_acc_id.
+ * @param lookup_url    URL template for caller lookup (e.g., "https://example.com/search?q={number}").
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_lookup_url(int acc_id, const char *lookup_url);
+
+/**
+ * Get caller lookup URL for an account.
+ * @param acc_id        pjsua_acc_id.
+ * @param url_buf       Buffer to receive lookup URL.
+ * @param url_len       Size of url_buf.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_get_lookup_url(int acc_id, char *url_buf, int url_len);
+
+/**
+ * Set codec priority for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param codec_priorities  JSON array of {codec: "PCMU", priority: 1}, ...
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_codec_priority(int acc_id, const char *codec_priorities);
+
+/**
+ * Get codec priority settings for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param json_buf          Buffer to receive JSON codec priorities.
+ * @param json_len          Size of json_buf.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_get_codec_priority(int acc_id, char *json_buf, int json_len);
+
+/**
+ * Enable/disable specific codec for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param codec_id          Codec ID (e.g., "PCMU", "PCMA", "G729", "OPUS").
+ * @param enabled           1 to enable, 0 to disable.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_codec(int acc_id, const char *codec_id, int enabled);
+
+/**
+ * Set auto-answer settings for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param enabled           1 to enable auto-answer, 0 to disable.
+ * @param delay_ms          Delay in milliseconds before auto-answering.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_auto_answer(int acc_id, int enabled, int delay_ms);
+
+/**
+ * Get auto-answer settings for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param enabled_out       Receives enabled setting.
+ * @param delay_ms_out      Receives delay in milliseconds.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_get_auto_answer(int acc_id, int *enabled_out, int *delay_ms_out);
+
+/**
+ * Set DTMF transmission method for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param dtmf_method       Method: 0=In-band, 1=RFC2833, 2=SIP INFO.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_set_dtmf_method(int acc_id, int dtmf_method);
+
+/**
+ * Get DTMF transmission method for an account.
+ * @param acc_id            pjsua_acc_id.
+ * @param method_out        Receives DTMF method.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_get_dtmf_method(int acc_id, int *method_out);
+
+/**
+ * Export account configuration to JSON string.
+ * @param acc_id            pjsua_acc_id.
+ * @param json_buf          Buffer to receive JSON configuration.
+ * @param json_len          Size of json_buf.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_export_config(int acc_id, char *json_buf, int json_len);
+
+/**
+ * Import account configuration from JSON string.
+ * @param json_str          JSON configuration string.
+ * @param new_acc_id_out    Receives new account ID if successful.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_import_config(const char *json_str, int *new_acc_id_out);
+
+/**
+ * Delete an account profile by UUID.
+ * @param uuid              Account UUID string.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_acc_delete_profile(const char *uuid);
+
+/* -----------------------------------------------------------------------
+ * Global (App-Wide) Settings
+ * ----------------------------------------------------------------------- */
+
+/**
+ * Set global codec priority (applies to all accounts).
+ * @param codec_priorities  JSON array of {codec: "PCMU", priority: 1}, ...
+ * @return 0 on success, non-zero on error.
+ */
+int pd_set_global_codec_priority(const char *codec_priorities);
+
+/**
+ * Get global codec priority settings.
+ * @param json_buf          Buffer to receive JSON codec priorities.
+ * @param json_len          Size of json_buf.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_get_global_codec_priority(char *json_buf, int json_len);
+
+/**
+ * Set global DTMF transmission method (applies to all accounts).
+ * @param dtmf_method       Method: 0=In-band, 1=RFC2833, 2=SIP INFO.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_set_global_dtmf_method(int dtmf_method);
+
+/**
+ * Get global DTMF transmission method.
+ * @param method_out        Receives DTMF method.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_get_global_dtmf_method(int *method_out);
+
+/**
+ * Set global auto-answer settings (applies to all accounts).
+ * @param enabled           1 to enable auto-answer, 0 to disable.
+ * @param delay_ms          Delay in milliseconds before auto-answering.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_set_global_auto_answer(int enabled, int delay_ms);
+
+/**
+ * Get global auto-answer settings.
+ * @param enabled_out       Receives enabled setting.
+ * @param delay_ms_out      Receives delay in milliseconds.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_get_global_auto_answer(int *enabled_out, int *delay_ms_out);
 
 /* -----------------------------------------------------------------------
  * Audio device management

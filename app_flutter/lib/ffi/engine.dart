@@ -30,6 +30,8 @@ typedef _EngineCompleteXferC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineMergeConferenceC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineSendCommandC = ffi.Int32 Function(
     ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
+typedef _EngineExportProfileC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineImportProfileC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineSetEventCallbackC = ffi.Void Function(
     ffi.Pointer<
         ffi
@@ -90,6 +92,12 @@ class VoipEngine {
       .lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
   late final int Function() _hangup =
       _lib.lookupFunction<_EngineHangupC, int Function()>('engine_hangup');
+  late final int Function(ffi.Pointer<ffi.Int8>) _exportProfile = _lib
+      .lookupFunction<_EngineExportProfileC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_export_profile');
+  late final int Function(ffi.Pointer<ffi.Int8>) _importProfile = _lib
+      .lookupFunction<_EngineImportProfileC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_import_profile');
   late final int Function(int) _setMute = _lib
       .lookupFunction<_EngineSetMuteC, int Function(int)>('engine_set_mute');
   late final int Function(int) _setHold = _lib
@@ -115,17 +123,17 @@ class VoipEngine {
   late final int Function(ffi.Pointer<ffi.Int8>) _playDtmf = _lib
       .lookupFunction<_EnginePlayDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_play_dtmf');
-  late final int Function(ffi.Pointer<ffi.Int8>) _transferCall = _lib
-      .lookupFunction<_EngineTransferCallC, int Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>(
+  late final int Function(int, ffi.Pointer<ffi.Int8>) _transferCall = _lib
+      .lookupFunction<_EngineTransferCallC, int Function(int, ffi.Pointer<ffi.Int8>)>(
           'engine_transfer_call');
-  late final int Function(ffi.Int32, ffi.Pointer<ffi.Int8>) _startAttendedXfer = _lib
-      .lookupFunction<_EngineStartAttendedXferC, int Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>(
+  late final int Function(int, ffi.Pointer<ffi.Int8>) _startAttendedXfer = _lib
+      .lookupFunction<_EngineStartAttendedXferC, int Function(int, ffi.Pointer<ffi.Int8>)>(
           'engine_start_attended_xfer');
-  late final int Function(ffi.Int32, ffi.Int32) _completeXfer = _lib
-      .lookupFunction<_EngineCompleteXferC, int Function(ffi.Int32, ffi.Int32)>(
+  late final int Function(int, int) _completeXfer = _lib
+      .lookupFunction<_EngineCompleteXferC, int Function(int, int)>(
           'engine_complete_xfer');
-  late final int Function(ffi.Int32, ffi.Int32) _mergeConference = _lib
-      .lookupFunction<_EngineMergeConferenceC, int Function(ffi.Int32, ffi.Int32)>(
+  late final int Function(int, int) _mergeConference = _lib
+      .lookupFunction<_EngineMergeConferenceC, int Function(int, int)>(
           'engine_merge_conference');
   late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
       _sendCommand = _lib.lookupFunction<
@@ -219,6 +227,28 @@ class VoipEngine {
   /// Answer an incoming call.
   /// Returns 0 on success, non-zero on error.
   int answerCall() => _answerCall();
+
+  /// Export account profile configuration.
+  /// Returns 0 on success, non-zero on error.
+  int exportProfile(String accountId) {
+    final ptr = _allocCString(accountId);
+    try {
+      return _exportProfile(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Import account profile configuration.
+  /// Returns 0 on success, non-zero on error.
+  int importProfile(String configJson) {
+    final ptr = _allocCString(configJson);
+    try {
+      return _importProfile(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
 
   /// Hang up the current active call.
   /// Returns 0 on success, non-zero on error.

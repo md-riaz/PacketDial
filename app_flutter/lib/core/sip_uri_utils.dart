@@ -89,6 +89,41 @@ class SipUriUtils {
     return null;
   }
 
+  /// Extracts the number/username from a SIP URI.
+  ///
+  /// "sip:1000@pbx.example.com" → "1000"
+  static String? extractNumber(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+
+    String input = raw.trim();
+
+    // Strip angle brackets
+    final angleMatch = RegExp(r'<([^>]+)>').firstMatch(input);
+    if (angleMatch != null) {
+      input = angleMatch.group(1)!;
+    }
+
+    // Strip parameters
+    final semiIdx = input.indexOf(';');
+    if (semiIdx > 0) {
+      input = input.substring(0, semiIdx);
+    }
+
+    // Strip scheme
+    if (input.toLowerCase().startsWith('sip:')) {
+      input = input.substring(4);
+    } else if (input.toLowerCase().startsWith('sips:')) {
+      input = input.substring(5);
+    }
+
+    // Get username part (before @)
+    final atIdx = input.indexOf('@');
+    if (atIdx > 0) {
+      return input.substring(0, atIdx);
+    }
+    return input.isNotEmpty ? input : null;
+  }
+
   /// Attempts to format a string as a phone number using phone_numbers_parser.
   /// Falls back to the original string if it doesn't look like a phone number.
   static String _tryFormatPhone(String input) {

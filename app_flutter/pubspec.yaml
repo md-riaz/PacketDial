@@ -27,6 +27,8 @@ dependencies:
   desktop_multi_window: ^0.3.0
   phone_numbers_parser: ^8.3.0
   audioplayers: ^5.2.1
+  file_picker: ^6.1.1
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:

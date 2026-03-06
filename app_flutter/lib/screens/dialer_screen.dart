@@ -220,7 +220,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     }
 
     if (registeredAccounts.length == 1) {
-      return registeredAccounts.first;
+      // Convert Account to AccountSchema
+      final acc = registeredAccounts.first;
+      return AccountSchema()
+        ..uuid = acc.uuid
+        ..accountName = acc.accountName
+        ..displayName = acc.displayName
+        ..server = acc.server
+        ..username = acc.username
+        ..password = '';
     }
 
     // Multiple accounts - show selection dialog
@@ -492,7 +500,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
         icon: const Icon(Icons.check_circle,
-            color: AppTheme.success, size: 48),
+            color: AppTheme.callGreen, size: 48),
         title: const Text('Complete Transfer',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: Column(
@@ -758,8 +766,6 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     }
   }
 
-  /// Check if there's a consultation call active.
-  bool _hasConsultationCall() => _consultationCallId != null;
 
   /// Complete a consult transfer - transfer the held call to the consultation target.
   void _completeTransfer(ActiveCall heldCall) {
@@ -778,7 +784,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               const Text('Completing transfer...'),
             ],
           ),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppTheme.callGreen,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -902,7 +908,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               const Text('Joining calls into conference...'),
             ],
           ),
-          backgroundColor: AppTheme.success,
+          backgroundColor: AppTheme.callGreen,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1401,10 +1407,10 @@ class _ActiveCallCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.15),
+                      color: AppTheme.callGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: AppTheme.success.withValues(alpha: 0.4),
+                        color: AppTheme.callGreen.withValues(alpha: 0.4),
                       ),
                     ),
                     child: const Row(
@@ -1412,14 +1418,14 @@ class _ActiveCallCard extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.check_circle,
-                          color: AppTheme.success,
+                          color: AppTheme.callGreen,
                           size: 12,
                         ),
                         SizedBox(width: 4),
                         Text(
                           'Active',
                           style: TextStyle(
-                            color: AppTheme.success,
+                            color: AppTheme.callGreen,
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                           ),

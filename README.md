@@ -32,8 +32,27 @@ PacketDial is a modern, developer-grade Windows SIP softphone built with:
 
 ## Quick Start
 
-### One-click build (fresh Windows 10/11)
+### For End Users (Download & Install)
 
+**Option 1: Windows Installer (Recommended)**
+```powershell
+# Download PacketDial-Setup-X.X.X.exe from Releases
+# Run the installer
+# Launch PacketDial from Start Menu
+```
+
+**Option 2: Portable Version**
+```powershell
+# Download PacketDial-X.X.X-Portable.zip from Releases
+# Extract to any folder (e.g., C:\Program Files\PacketDial)
+# Run PacketDial.exe
+```
+
+See [Build & Installation Guide](docs/BUILD_AND_INSTALL.md) for detailed instructions.
+
+### For Developers (Build from Source)
+
+**One-click build (fresh Windows 10/11)**
 ```powershell
 git clone --recurse-submodules https://github.com/md-riaz/PacketDial
 cd PacketDial
@@ -41,10 +60,15 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 .\scripts\setup_windows.ps1
 ```
 
-**Duration:** 20–40 minutes (first run)  
-**Output:** `dist\PacketDial-windows-x64.zip`
+**Complete build with installer:**
+```powershell
+.\scripts\build_all.ps1 -Version 1.0.0
+```
 
-See [Quick Start](docs/quickstart.md) for more details and options.
+**Duration:** 20–40 minutes (first run)  
+**Output:** `dist\PacketDial-Setup-1.0.0.exe` + `dist\PacketDial-1.0.0-Portable.zip`
+
+See [Build & Installation Guide](docs/BUILD_AND_INSTALL.md) for detailed instructions.
 
 ---
 

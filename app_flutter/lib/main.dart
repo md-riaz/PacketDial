@@ -15,6 +15,8 @@ import 'core/app_theme.dart';
 import 'core/sip_uri_utils.dart';
 import 'core/engine_channel.dart';
 import 'core/account_service.dart';
+import 'core/contacts_service.dart';
+import 'core/app_settings_service.dart';
 import 'core/multi_window/controllers/incoming_call_controller.dart';
 import 'core/window_prefs.dart';
 import 'models/account_schema.dart';
@@ -22,9 +24,11 @@ import 'models/call_history_schema.dart';
 import 'ffi/engine.dart';
 import 'providers/engine_provider.dart';
 import 'screens/accounts_screen.dart';
+import 'screens/contacts_screen.dart';
 import 'screens/diagnostics_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/app_settings_page.dart';
 import 'core/multi_window/window_router.dart';
 import 'core/multi_window/window_type.dart';
 
@@ -76,6 +80,12 @@ void main(List<String> args) async {
   // Initialize window preferences (position, always-on-top)
   final windowPrefs = WindowPrefs();
   await windowPrefs.init();
+
+  // Initialize app settings service
+  await AppSettingsService.instance.loadSettings();
+
+  // Initialize BLF contacts service
+  await ContactsService.instance.loadContacts();
 
   WindowOptions windowOptions = const WindowOptions(
     size: Size(360, 760),
@@ -172,9 +182,10 @@ class _AppState extends State<App>
 
   static final _screens = [
     const DialerScreen(),
+    const ContactsScreen(),
     const HistoryScreen(),
     const AccountsScreen(),
-    const DiagnosticsScreen(),
+    const AppSettingsPage(),
   ];
 
   late final AnimationController _splashCtrl;
@@ -531,6 +542,11 @@ class _AppState extends State<App>
             label: 'Dialer',
           ),
           NavigationDestination(
+            icon: Icon(Icons.contacts_outlined),
+            selectedIcon: Icon(Icons.contacts),
+            label: 'Contacts',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: 'History',
@@ -541,9 +557,9 @@ class _AppState extends State<App>
             label: 'Accounts',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bug_report_outlined),
-            selectedIcon: Icon(Icons.bug_report),
-            label: 'Diagnostics',
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
@@ -663,6 +679,58 @@ class CockpitFooter extends ConsumerWidget {
           ],
 
           const Spacer(),
+
+          // DND Toggle
+          Consumer(
+            builder: (context, ref, _) {
+              final dndEnabled = AppSettingsService.instance.dndEnabled;
+              return InkWell(
+                onTap: () async {
+                  await AppSettingsService.instance.setDndEnabled(!dndEnabled);
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: dndEnabled 
+                        ? AppTheme.errorRed.withValues(alpha: 0.2)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: dndEnabled 
+                          ? AppTheme.errorRed.withValues(alpha: 0.4)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.do_not_disturb,
+                        size: 12,
+                        color: dndEnabled 
+                            ? AppTheme.errorRed
+                            : AppTheme.textTertiary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'DND',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: dndEnabled 
+                              ? AppTheme.errorRed
+                              : AppTheme.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          
+          const SizedBox(width: 12),
 
           // App Version
           Text('v1.0.0',

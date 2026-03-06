@@ -305,6 +305,7 @@ extern "C" {
         on_log: extern "C" fn(i32, *const c_char),
         on_sip_msg: extern "C" fn(i32, i32, *const c_char),
         on_transfer_status: extern "C" fn(i32, i32, *const c_char, i32),
+        on_blf_status: extern "C" fn(*const c_char, i32, *const c_char),
     ) -> i32;
     fn pd_shutdown() -> i32;
     fn pd_acc_add(
@@ -345,6 +346,30 @@ extern "C" {
     fn pd_call_start_attended_xfer(call_id: i32, dest_uri: *const c_char) -> i32;
     fn pd_call_complete_xfer(call_a: i32, call_b: i32) -> i32;
     fn pd_call_merge_conference(call_a: i32, call_b: i32) -> i32;
+    fn pd_acc_set_forward(acc_id: i32, fwd_uri: *const c_char, fwd_flags: i32) -> i32;
+    fn pd_acc_get_forward(acc_id: i32, fwd_uri_buf: *mut c_char, fwd_uri_len: i32,
+                           fwd_flags_out: *mut i32) -> i32;
+    fn pd_acc_set_dnd(acc_id: i32, enabled: i32) -> i32;
+    fn pd_blf_subscribe(acc_id: i32, uris: *const *const c_char, count: i32) -> i32;
+    fn pd_blf_unsubscribe(acc_id: i32) -> i32;
+    fn pd_acc_set_lookup_url(acc_id: i32, lookup_url: *const c_char) -> i32;
+    fn pd_acc_get_lookup_url(acc_id: i32, url_buf: *mut c_char, url_len: i32) -> i32;
+    fn pd_acc_set_codec_priority(acc_id: i32, codec_priorities: *const c_char) -> i32;
+    fn pd_acc_get_codec_priority(acc_id: i32, json_buf: *mut c_char, json_len: i32) -> i32;
+    fn pd_acc_set_codec(acc_id: i32, codec_id: *const c_char, enabled: i32) -> i32;
+    fn pd_acc_set_auto_answer(acc_id: i32, enabled: i32, delay_ms: i32) -> i32;
+    fn pd_acc_get_auto_answer(acc_id: i32, enabled_out: *mut i32, delay_ms_out: *mut i32) -> i32;
+    fn pd_acc_set_dtmf_method(acc_id: i32, dtmf_method: i32) -> i32;
+    fn pd_acc_get_dtmf_method(acc_id: i32, method_out: *mut i32) -> i32;
+    fn pd_acc_export_config(acc_id: i32, json_buf: *mut c_char, json_len: i32) -> i32;
+    fn pd_acc_import_config(json_str: *const c_char, new_acc_id_out: *mut i32) -> i32;
+    fn pd_acc_delete_profile(uuid: *const c_char) -> i32;
+    fn pd_set_global_codec_priority(codec_priorities: *const c_char) -> i32;
+    fn pd_get_global_codec_priority(json_buf: *mut c_char, json_len: i32) -> i32;
+    fn pd_set_global_dtmf_method(dtmf_method: i32) -> i32;
+    fn pd_get_global_dtmf_method(method_out: *mut i32) -> i32;
+    fn pd_set_global_auto_answer(enabled: i32, delay_ms: i32) -> i32;
+    fn pd_get_global_auto_answer(enabled_out: *mut i32, delay_ms_out: *mut i32) -> i32;
     fn pd_aud_play_dtmf(digits: *const c_char) -> i32;
 }
 
@@ -701,6 +726,62 @@ extern "C" fn pjsip_on_transfer_status(
     );
 }
 
+/// PJSIP BLF/Presence notification callback.
+/// Notifies the Dart/Flutter UI about presence state changes.
+extern "C" fn pjsip_on_blf_status(
+    uri_ptr: *const c_char,
+    state: i32,
+    activity_ptr: *const c_char,
+) {
+    let uri = if uri_ptr.is_null() {
+        String::new()
+    } else {
+        unsafe {
+            match CStr::from_ptr(uri_ptr).to_str() {
+                Ok(s) => s.to_owned(),
+                Err(_) => {
+                    log_engine(
+                        LogLevel::Warn,
+                        "pjsip_on_blf_status: URI contains invalid UTF-8",
+                    );
+                    return;
+                }
+            }
+        }
+    };
+
+    let activity = if activity_ptr.is_null() {
+        String::from("Unknown")
+    } else {
+        unsafe {
+            match CStr::from_ptr(activity_ptr).to_str() {
+                Ok(s) => s.to_owned(),
+                Err(_) => String::from("Unknown"),
+            }
+        }
+    };
+
+    // Map state: 0=Unknown, 1=Available, 2=Busy
+    let state_str = match state {
+        1 => "Available",
+        2 => "Busy",
+        3 => "Ringing",
+        _ => "Unknown",
+    };
+
+    // Push BLF status event
+    let event = serde_json::json!({
+        "type": "BlfStatus",
+        "payload": {
+            "uri": uri,
+            "state": state_str,
+            "state_code": state,
+            "activity": activity,
+        }
+    });
+    push_event(event.to_string());
+}
+
 /// Poll real-time media statistics for a PJSIP call and push a MediaStatsUpdated event.
 fn pjsip_poll_media_stats(pj_call_id: i32) {
     let our_call_id = {
@@ -975,6 +1056,29 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "CallHold" => cmd_call_hold(payload),
         "CallSendDtmf" => cmd_call_send_dtmf(payload),
         "MediaStatsUpdate" => cmd_media_stats_update(payload),
+        "AccountSetForwarding" => cmd_account_set_forwarding(payload),
+        "AccountGetForwarding" => cmd_account_get_forwarding(payload),
+        "AccountSetDnd" => cmd_account_set_dnd(payload),
+        "AccountSetLookupUrl" => cmd_account_set_lookup_url(payload),
+        "AccountGetLookupUrl" => cmd_account_get_lookup_url(payload),
+        "AccountSetCodecPriority" => cmd_account_set_codec_priority(payload),
+        "AccountGetCodecPriority" => cmd_account_get_codec_priority(payload),
+        "AccountSetCodec" => cmd_account_set_codec(payload),
+        "AccountSetAutoAnswer" => cmd_account_set_auto_answer(payload),
+        "AccountGetAutoAnswer" => cmd_account_get_auto_answer(payload),
+        "AccountSetDtmfMethod" => cmd_account_set_dtmf_method(payload),
+        "AccountGetDtmfMethod" => cmd_account_get_dtmf_method(payload),
+        "AccountExportConfig" => cmd_account_export_config(payload),
+        "AccountImportConfig" => cmd_account_import_config(payload),
+        "AccountDeleteProfile" => cmd_account_delete_profile(payload),
+        "SetGlobalCodecPriority" => cmd_set_global_codec_priority(payload),
+        "GetGlobalCodecPriority" => cmd_get_global_codec_priority(payload),
+        "SetGlobalDtmfMethod" => cmd_set_global_dtmf_method(payload),
+        "GetGlobalDtmfMethod" => cmd_get_global_dtmf_method(payload),
+        "SetGlobalAutoAnswer" => cmd_set_global_auto_answer(payload),
+        "GetGlobalAutoAnswer" => cmd_get_global_auto_answer(payload),
+        "BlfSubscribe" => cmd_blf_subscribe(payload),
+        "BlfUnsubscribe" => cmd_blf_unsubscribe(payload),
         "AudioListDevices" => cmd_audio_list_devices(payload),
         "AudioSetDevices" => cmd_audio_set_devices(payload),
         "CallHistoryQuery" => cmd_call_history_query(payload),
@@ -1771,6 +1875,736 @@ fn cmd_call_history_query(_p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
+// ---------------------------------------------------------------------------
+// Call Forwarding, DND, BLF Commands
+// ---------------------------------------------------------------------------
+
+/// Set call forwarding for an account.
+fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let fwd_uri = match p["fwd_uri"].as_str() {
+        Some(s) => s.to_owned(),
+        None => String::new(),
+    };
+    let fwd_flags = match p["fwd_flags"].as_i64() {
+        Some(v) => v as i32,
+        None => 0,
+    };
+
+    log_engine(
+        LogLevel::Info,
+        &format!("Setting forwarding for {}: {} (flags={})", account_id, fwd_uri, fwd_flags),
+    );
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let fwd_cstr = match CString::new(fwd_uri.clone()) {
+                    Ok(s) => s,
+                    Err(_) => return EngineErrorCode::InvalidUtf8,
+                };
+                let rc = unsafe { pd_acc_set_forward(pj_acc_id, fwd_cstr.as_ptr(), fwd_flags) };
+                if rc != 0 {
+                    log_engine(LogLevel::Error, &format!("Set forwarding failed: {}", rc));
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"ForwardingUpdated","payload":{{"account_id":"{}","fwd_uri":"{}","fwd_flags":{}}}}}"#,
+        account_id, fwd_uri, fwd_flags
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get call forwarding settings for an account.
+fn cmd_account_get_forwarding(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let (fwd_uri, fwd_flags) = {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let mut uri_buf = vec![0u8; 256];
+                let mut flags: i32 = 0;
+                let rc = unsafe {
+                    pd_acc_get_forward(
+                        pj_acc_id,
+                        uri_buf.as_mut_ptr() as *mut c_char,
+                        uri_buf.len() as i32,
+                        &mut flags,
+                    )
+                };
+                if rc == 0 {
+                    let uri = String::from_utf8_lossy(&uri_buf)
+                        .trim_end_matches('\0')
+                        .to_string();
+                    (uri, flags)
+                } else {
+                    (String::new(), 0)
+                }
+            } else {
+                (String::new(), 0)
+            }
+        } else {
+            (String::new(), 0)
+        }
+    };
+
+    push_event(format!(
+        r#"{{"type":"ForwardingResult","payload":{{"account_id":"{}","fwd_uri":"{}","fwd_flags":{}}}}}"#,
+        account_id, fwd_uri, fwd_flags
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Set DND (Do Not Disturb) for an account.
+fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let enabled = match p["enabled"].as_bool() {
+        Some(v) => v,
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    log_engine(
+        LogLevel::Info,
+        &format!("Setting DND for {}: {}", account_id, if enabled { "ON" } else { "OFF" }),
+    );
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let rc = unsafe { pd_acc_set_dnd(pj_acc_id, if enabled { 1 } else { 0 }) };
+                if rc != 0 {
+                    log_engine(LogLevel::Error, &format!("Set DND failed: {}", rc));
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"DndUpdated","payload":{{"account_id":"{}","enabled":{}}}}}"#,
+        account_id, enabled
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Subscribe to BLF/Presence for a list of URIs.
+fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let uris = match p["uris"].as_array() {
+        Some(arr) => arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_owned()))
+            .collect::<Vec<_>>(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    if uris.is_empty() {
+        return EngineErrorCode::InvalidJson;
+    }
+
+    log_engine(
+        LogLevel::Info,
+        &format!("Subscribing to BLF for {} URIs on account {}", uris.len(), account_id),
+    );
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                // Create C string array
+                let c_strings: Vec<CString> = uris.iter()
+                    .filter_map(|uri| CString::new(uri.as_str()).ok())
+                    .collect();
+                let c_ptrs: Vec<*const c_char> = c_strings.iter()
+                    .map(|s| s.as_ptr())
+                    .collect();
+
+                let rc = unsafe { pd_blf_subscribe(pj_acc_id, c_ptrs.as_ptr(), c_ptrs.len() as i32) };
+                if rc != 0 {
+                    log_engine(LogLevel::Error, &format!("BLF subscribe failed: {}", rc));
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"BlfSubscribed","payload":{{"account_id":"{}","uris":{}}}}}"#,
+        account_id,
+        serde_json::to_string(&uris).unwrap_or("[]".to_string())
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Unsubscribe from all BLF/Presence.
+fn cmd_blf_unsubscribe(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    log_engine(
+        LogLevel::Info,
+        &format!("Unsubscribing from BLF for account {}", account_id),
+    );
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let rc = unsafe { pd_blf_unsubscribe(pj_acc_id) };
+                if rc != 0 {
+                    log_engine(LogLevel::Error, &format!("BLF unsubscribe failed: {}", rc));
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"BlfUnsubscribed","payload":{{"account_id":"{}"}}}}"#,
+        account_id
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Set caller lookup URL for an account.
+fn cmd_account_set_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let lookup_url = match p["lookup_url"].as_str() {
+        Some(s) => s.to_owned(),
+        None => String::new(),
+    };
+
+    log_engine(
+        LogLevel::Info,
+        &format!("Setting lookup URL for {}: {}", account_id, lookup_url),
+    );
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let url_cstr = match CString::new(lookup_url.clone()) {
+                    Ok(s) => s,
+                    Err(_) => return EngineErrorCode::InvalidUtf8,
+                };
+                let rc = unsafe { pd_acc_set_lookup_url(pj_acc_id, url_cstr.as_ptr()) };
+                if rc != 0 {
+                    log_engine(LogLevel::Error, &format!("Set lookup URL failed: {}", rc));
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"LookupUrlUpdated","payload":{{"account_id":"{}","lookup_url":"{}"}}}}"#,
+        account_id, lookup_url
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get caller lookup URL for an account.
+fn cmd_account_get_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let lookup_url = {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let mut url_buf = vec![0u8; 512];
+                let rc = unsafe {
+                    pd_acc_get_lookup_url(
+                        pj_acc_id,
+                        url_buf.as_mut_ptr() as *mut c_char,
+                        url_buf.len() as i32,
+                    )
+                };
+                if rc == 0 {
+                    String::from_utf8_lossy(&url_buf)
+                        .trim_end_matches('\0')
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    };
+
+    push_event(format!(
+        r#"{{"type":"LookupUrlResult","payload":{{"account_id":"{}","lookup_url":"{}"}}}}"#,
+        account_id, lookup_url
+    ));
+    EngineErrorCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// Codec, Auto Answer, DTMF, Profile Commands
+// ---------------------------------------------------------------------------
+
+/// Set codec priority for an account.
+fn cmd_account_set_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let codec_priorities = match p["codec_priorities"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let priorities_cstr = match CString::new(codec_priorities.clone()) {
+                    Ok(s) => s,
+                    Err(_) => return EngineErrorCode::InvalidUtf8,
+                };
+                let rc = unsafe { pd_acc_set_codec_priority(pj_acc_id, priorities_cstr.as_ptr()) };
+                if rc != 0 {
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"CodecPriorityUpdated","payload":{{"account_id":"{}"}}}}"#,
+        account_id
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get codec priority for an account.
+fn cmd_account_get_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let codec_priorities = {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let mut json_buf = vec![0u8; 1024];
+                let rc = unsafe {
+                    pd_acc_get_codec_priority(
+                        pj_acc_id,
+                        json_buf.as_mut_ptr() as *mut c_char,
+                        json_buf.len() as i32,
+                    )
+                };
+                if rc == 0 {
+                    String::from_utf8_lossy(&json_buf)
+                        .trim_end_matches('\0')
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    };
+
+    push_event(format!(
+        r#"{{"type":"CodecPriorityResult","payload":{{"account_id":"{}","codec_priorities":{}}}}}"#,
+        account_id,
+        if codec_priorities.is_empty() { "[]" } else { &codec_priorities }
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Enable/disable a specific codec.
+fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let codec_id = match p["codec_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let enabled = match p["enabled"].as_bool() {
+        Some(v) => v,
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let codec_cstr = match CString::new(codec_id.clone()) {
+                    Ok(s) => s,
+                    Err(_) => return EngineErrorCode::InvalidUtf8,
+                };
+                let rc = unsafe { pd_acc_set_codec(pj_acc_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 }) };
+                if rc != 0 {
+                    return EngineErrorCode::NotFound;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"CodecUpdated","payload":{{"account_id":"{}","codec_id":"{}","enabled":{}}}}}"#,
+        account_id, codec_id, if enabled { "true" } else { "false" }
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Set auto-answer for an account.
+fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let enabled = match p["enabled"].as_bool() {
+        Some(v) => v,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let delay_ms = match p["delay_ms"].as_i64() {
+        Some(v) => v as i32,
+        None => 0,
+    };
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let rc = unsafe { pd_acc_set_auto_answer(pj_acc_id, if enabled { 1 } else { 0 }, delay_ms) };
+                if rc != 0 {
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"AutoAnswerUpdated","payload":{{"account_id":"{}","enabled":{},"delay_ms":{}}}}}"#,
+        account_id, if enabled { "true" } else { "false" }, delay_ms
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get auto-answer for an account.
+fn cmd_account_get_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let (enabled, delay_ms) = {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let mut enabled_out: i32 = 0;
+                let mut delay_out: i32 = 0;
+                let rc = unsafe { pd_acc_get_auto_answer(pj_acc_id, &mut enabled_out, &mut delay_out) };
+                if rc == 0 {
+                    (enabled_out != 0, delay_out)
+                } else {
+                    (false, 0)
+                }
+            } else {
+                (false, 0)
+            }
+        } else {
+            (false, 0)
+        }
+    };
+
+    push_event(format!(
+        r#"{{"type":"AutoAnswerResult","payload":{{"account_id":"{}","enabled":{},"delay_ms":{}}}}}"#,
+        account_id, if enabled { "true" } else { "false" }, delay_ms
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Set DTMF method for an account.
+fn cmd_account_set_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let dtmf_method = match p["dtmf_method"].as_i64() {
+        Some(v) => v as i32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let rc = unsafe { pd_acc_set_dtmf_method(pj_acc_id, dtmf_method) };
+                if rc != 0 {
+                    return EngineErrorCode::InternalError;
+                }
+            }
+        }
+    }
+
+    push_event(format!(
+        r#"{{"type":"DtmfMethodUpdated","payload":{{"account_id":"{}","dtmf_method":{}}}}}"#,
+        account_id, dtmf_method
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get DTMF method for an account.
+fn cmd_account_get_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let dtmf_method = {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let mut method_out: i32 = 0;
+                let rc = unsafe { pd_acc_get_dtmf_method(pj_acc_id, &mut method_out) };
+                if rc == 0 {
+                    method_out
+                } else {
+                    1 /* Default RFC2833 */
+                }
+            } else {
+                1
+            }
+        } else {
+            1
+        }
+    };
+
+    push_event(format!(
+        r#"{{"type":"DtmfMethodResult","payload":{{"account_id":"{}","dtmf_method":{}}}}}"#,
+        account_id, dtmf_method
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Export account configuration.
+fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
+    let account_id = match p["account_id"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let config_json = {
+        let accounts = ACCOUNTS.lock().unwrap();
+        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
+            if let Some(pj_acc_id) = acc.pjsip_acc_id {
+                let mut json_buf = vec![0u8; 2048];
+                let rc = unsafe {
+                    pd_acc_export_config(
+                        pj_acc_id,
+                        json_buf.as_mut_ptr() as *mut c_char,
+                        json_buf.len() as i32,
+                    )
+                };
+                if rc == 0 {
+                    String::from_utf8_lossy(&json_buf)
+                        .trim_end_matches('\0')
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    };
+
+    push_event(format!(
+        r#"{{"type":"AccountConfigExported","payload":{{"account_id":"{}","config":{}}}}}"#,
+        account_id,
+        if config_json.is_empty() { "{}" } else { &config_json }
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Import account configuration.
+fn cmd_account_import_config(p: &serde_json::Value) -> EngineErrorCode {
+    let _config = match p["config"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    
+    /* TODO: Implement account import */
+    push_event(r#"{"type":"AccountConfigImported","payload":{"success":false,"error":"Not implemented"}}"#.to_string());
+    EngineErrorCode::Ok
+}
+
+/// Delete account profile.
+fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
+    let _uuid = match p["uuid"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+    
+    /* TODO: Implement profile deletion */
+    push_event(r#"{"type":"AccountProfileDeleted","payload":{"success":false,"error":"Not implemented"}}"#.to_string());
+    EngineErrorCode::Ok
+}
+
+// ---------------------------------------------------------------------------
+// Global (App-Wide) Settings Commands
+// ---------------------------------------------------------------------------
+
+/// Set global codec priority.
+fn cmd_set_global_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
+    let codec_priorities = match p["codec_priorities"].as_str() {
+        Some(s) => s.to_owned(),
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let priorities_cstr = match CString::new(codec_priorities.clone()) {
+        Ok(s) => s,
+        Err(_) => return EngineErrorCode::InvalidUtf8,
+    };
+    
+    let rc = unsafe { pd_set_global_codec_priority(priorities_cstr.as_ptr()) };
+    if rc != 0 {
+        return EngineErrorCode::InternalError;
+    }
+
+    push_event(r#"{"type":"GlobalCodecPriorityUpdated","payload":{}}"#.to_string());
+    EngineErrorCode::Ok
+}
+
+/// Get global codec priority.
+fn cmd_get_global_codec_priority(_p: &serde_json::Value) -> EngineErrorCode {
+    let mut json_buf = vec![0u8; 1024];
+    let rc = unsafe {
+        pd_get_global_codec_priority(
+            json_buf.as_mut_ptr() as *mut c_char,
+            json_buf.len() as i32,
+        )
+    };
+    
+    let codec_priorities = if rc == 0 {
+        String::from_utf8_lossy(&json_buf).trim_end_matches('\0').to_string()
+    } else {
+        String::new()
+    };
+
+    push_event(format!(
+        r#"{{"type":"GlobalCodecPriorityResult","payload":{{"codec_priorities":{}}}}}"#,
+        if codec_priorities.is_empty() { "[]" } else { &codec_priorities }
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Set global DTMF method.
+fn cmd_set_global_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
+    let dtmf_method = match p["dtmf_method"].as_i64() {
+        Some(v) => v as i32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+
+    let rc = unsafe { pd_set_global_dtmf_method(dtmf_method) };
+    if rc != 0 {
+        return EngineErrorCode::InternalError;
+    }
+
+    push_event(format!(
+        r#"{{"type":"GlobalDtmfMethodUpdated","payload":{{"dtmf_method":{}}}}}"#,
+        dtmf_method
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get global DTMF method.
+fn cmd_get_global_dtmf_method(_p: &serde_json::Value) -> EngineErrorCode {
+    let mut method_out: i32 = 1; /* Default RFC2833 */
+    let rc = unsafe { pd_get_global_dtmf_method(&mut method_out) };
+    
+    if rc != 0 {
+        method_out = 1;
+    }
+
+    push_event(format!(
+        r#"{{"type":"GlobalDtmfMethodResult","payload":{{"dtmf_method":{}}}}}"#,
+        method_out
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Set global auto-answer.
+fn cmd_set_global_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
+    let enabled = match p["enabled"].as_bool() {
+        Some(v) => v,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let delay_ms = match p["delay_ms"].as_i64() {
+        Some(v) => v as i32,
+        None => 0,
+    };
+
+    let rc = unsafe { pd_set_global_auto_answer(if enabled { 1 } else { 0 }, delay_ms) };
+    if rc != 0 {
+        return EngineErrorCode::InternalError;
+    }
+
+    push_event(format!(
+        r#"{{"type":"GlobalAutoAnswerUpdated","payload":{{"enabled":{},"delay_ms":{}}}}}"#,
+        if enabled { "true" } else { "false" }, delay_ms
+    ));
+    EngineErrorCode::Ok
+}
+
+/// Get global auto-answer.
+fn cmd_get_global_auto_answer(_p: &serde_json::Value) -> EngineErrorCode {
+    let mut enabled_out: i32 = 0;
+    let mut delay_out: i32 = 0;
+    
+    let rc = unsafe { pd_get_global_auto_answer(&mut enabled_out, &mut delay_out) };
+    
+    let enabled = if rc == 0 { enabled_out != 0 } else { false };
+    let delay = if rc == 0 { delay_out } else { 0 };
+
+    push_event(format!(
+        r#"{{"type":"GlobalAutoAnswerResult","payload":{{"enabled":{},"delay_ms":{}}}}}"#,
+        if enabled { "true" } else { "false" }, delay
+    ));
+    EngineErrorCode::Ok
+}
+
 fn cmd_sip_capture(p: &serde_json::Value) -> EngineErrorCode {
     let direction = p["direction"].as_str().unwrap_or("?");
     let raw = p["raw"].as_str().unwrap_or("");
@@ -1966,6 +2800,7 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
                 pjsip_on_log,
                 pjsip_on_sip_msg,
                 pjsip_on_transfer_status,
+                pjsip_on_blf_status,
             )
         };
         if rc != 0 {
@@ -2122,6 +2957,30 @@ pub enum EngineEventId {
     CallTransferStatus = 18,
     CallTransferCompleted = 19,
     ConferenceMerged = 20,
+    ForwardingUpdated = 21,
+    ForwardingResult = 22,
+    DndUpdated = 23,
+    BlfSubscribed = 24,
+    BlfUnsubscribed = 25,
+    BlfStatus = 26,
+    LookupUrlUpdated = 27,
+    LookupUrlResult = 28,
+    CodecPriorityUpdated = 29,
+    CodecPriorityResult = 30,
+    CodecUpdated = 31,
+    AutoAnswerUpdated = 32,
+    AutoAnswerResult = 33,
+    DtmfMethodUpdated = 34,
+    DtmfMethodResult = 35,
+    AccountConfigExported = 36,
+    AccountConfigImported = 37,
+    AccountProfileDeleted = 38,
+    GlobalCodecPriorityUpdated = 39,
+    GlobalCodecPriorityResult = 40,
+    GlobalDtmfMethodUpdated = 41,
+    GlobalDtmfMethodResult = 42,
+    GlobalAutoAnswerUpdated = 43,
+    GlobalAutoAnswerResult = 44,
 }
 
 /// C callback: `void (*)(int event_id, const char* message)`

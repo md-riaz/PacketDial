@@ -48,6 +48,10 @@ static PdOnCallMedia         g_on_media         = NULL;
 static PdOnLog               g_on_log           = NULL;
 static PdOnSipMsg            g_on_sip_msg       = NULL;
 static PdOnCallTransferStatus g_on_transfer_status = NULL;
+static PdOnBlfStatus         g_on_blf_status    = NULL;
+
+/* DND state per account */
+static pj_bool_t g_dnd_enabled = PJ_FALSE;
 
 /* Transport ids created at init time */
 static pjsua_transport_id g_udp_tp = PJSUA_INVALID_ID;
@@ -137,6 +141,17 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                               pjsip_rx_data *rdata)
 {
     (void)rdata;
+    
+    /* Check DND mode */
+    if (g_dnd_enabled) {
+        if (g_on_log) {
+            g_on_log(4, "DND enabled - auto-rejecting incoming call");
+        }
+        /* Auto-reject with 486 Busy Here */
+        pjsua_call_hangup(call_id, 486, NULL, NULL);
+        return;
+    }
+    
     if (!g_on_incoming) return;
 
     pjsua_call_info ci;
@@ -233,6 +248,41 @@ static void on_call_transfer_status(pjsua_call_id call_id,
 {
     if (!g_on_transfer_status) return;
     g_on_transfer_status((int)call_id, status_code, reason, final ? 1 : 0);
+}
+
+/**
+ * PJSIP BLF/Presence notification callback.
+ * Called when a subscribed presence state changes.
+ */
+static void on_blf_notify(pjsua_buddy_id buddy_id, pjsua_buddy_info *info)
+{
+    if (!g_on_blf_status || !info) return;
+    
+    /* Map PJSIP buddy state to our state */
+    int state = 0; /* Unknown */
+    const char *activity = "Unknown";
+    
+    if (info->state == PJSUA_BUDDY_STATE_SUBSCRIBED) {
+        if (info->pres_status.online) {
+            state = 1; /* Available */
+            activity = info->pres_status.activity_txt.ptr;
+        } else {
+            state = 2; /* Busy/Offline */
+            activity = "Offline";
+        }
+    } else if (info->state == PJSUA_BUDDY_STATE_TERMINATED) {
+        state = 0; /* Unknown */
+        activity = "Subscription terminated";
+    }
+    
+    /* Get URI from buddy info */
+    char uri[256];
+    pj_ssize_t len = info->uri.slen;
+    if (len >= (pj_ssize_t)sizeof(uri)) len = (pj_ssize_t)sizeof(uri) - 1;
+    memcpy(uri, info->uri.ptr, (size_t)len);
+    uri[len] = '\0';
+    
+    g_on_blf_status(uri, state, activity);
 }
 
 /* PJSIP log writer — forwards to the Rust log callback */
@@ -338,7 +388,8 @@ int pd_init(const char *user_agent,
             PdOnCallMedia    on_media,
             PdOnLog          on_log,
             PdOnSipMsg       on_sip_msg,
-            PdOnCallTransferStatus on_transfer_status)
+            PdOnCallTransferStatus on_transfer_status,
+            PdOnBlfStatus    on_blf_status)
 {
     pj_status_t status;
 
@@ -350,6 +401,7 @@ int pd_init(const char *user_agent,
     g_on_log      = on_log;
     g_on_sip_msg  = on_sip_msg;
     g_on_transfer_status = on_transfer_status;
+    g_on_blf_status = on_blf_status;
 
     /* pjsua_create */
     status = pjsua_create();
@@ -374,6 +426,7 @@ int pd_init(const char *user_agent,
     ua_cfg.cb.on_call_state     = on_call_state;
     ua_cfg.cb.on_call_media_state = on_call_media_state;
     ua_cfg.cb.on_call_tsx_state = on_call_tsx_state;
+    ua_cfg.cb.on_buddy_state    = on_blf_notify;
     ua_cfg.cb.on_call_transfer_status = on_call_transfer_status;
 
     if (user_agent && user_agent[0] != '\0') {
@@ -1154,4 +1207,494 @@ int pd_aud_play_dtmf(const char *digits)
 
     pj_status_t status = pjmedia_tonegen_play_digits(g_tone_port, (unsigned)count, tone_digits, 0);
     return (int)status;
+}
+
+/* -----------------------------------------------------------------------
+ * Call Forwarding, DND, BLF
+ * ----------------------------------------------------------------------- */
+
+int pd_acc_set_forward(int acc_id, const char *fwd_uri, int fwd_flags)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    pjsua_acc_config cfg;
+    pjsua_acc_config_default(&cfg);
+    
+    /* Copy existing config */
+    cfg.id = info.acc_uri;
+    cfg.reg_uri = info.reg_uri;
+    cfg.cred_count = info.cred_count;
+    for (int i = 0; i < info.cred_count && i < PJSUA_ACC_MAX_PROXIES; i++) {
+        cfg.cred_info[i] = info.cred_info[i];
+    }
+    
+    /* Set forwarding */
+    if (fwd_uri && fwd_uri[0] != '\0' && fwd_flags != 0) {
+        cfg.fwd_uri = S(fwd_uri);
+        cfg.fwd_flags = (unsigned)fwd_flags;
+    } else {
+        cfg.fwd_uri = pj_str("");
+        cfg.fwd_flags = 0;
+    }
+    
+    pj_status_t status = pjsua_acc_modify((pjsua_acc_id)acc_id, &cfg);
+    return (int)status;
+}
+
+int pd_acc_get_forward(int acc_id, char *fwd_uri_buf, int fwd_uri_len,
+                        int *fwd_flags_out)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    if (fwd_uri_buf && fwd_uri_len > 0 && info.fwd_uri.slen > 0) {
+        pj_ssize_t len = info.fwd_uri.slen;
+        if (len >= fwd_uri_len) len = fwd_uri_len - 1;
+        memcpy(fwd_uri_buf, info.fwd_uri.ptr, (size_t)len);
+        fwd_uri_buf[len] = '\0';
+    } else if (fwd_uri_buf && fwd_uri_len > 0) {
+        fwd_uri_buf[0] = '\0';
+    }
+    
+    if (fwd_flags_out) {
+        *fwd_flags_out = (int)info.fwd_flags;
+    }
+    
+    return 0;
+}
+
+int pd_acc_set_dnd(int acc_id, int enabled)
+{
+    pd_ensure_thread();
+    g_dnd_enabled = enabled ? PJ_TRUE : PJ_FALSE;
+    
+    if (g_on_log) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "DND %s for account %d", 
+                 enabled ? "enabled" : "disabled", acc_id);
+        g_on_log(4, buf);
+    }
+    
+    return 0;
+}
+
+int pd_blf_subscribe(int acc_id, const char **uris, int count)
+{
+    pd_ensure_thread();
+    
+    if (!uris || count <= 0) return -1;
+    
+    /* Add buddies for BLF subscription */
+    for (int i = 0; i < count; i++) {
+        if (!uris[i]) continue;
+        
+        pjsua_buddy_config buddy_cfg;
+        pjsua_buddy_config_default(&buddy_cfg);
+        
+        buddy_cfg.uri = S(uris[i]);
+        buddy_cfg.subscribe = PJ_TRUE;
+        
+        pjsua_buddy_id buddy_id;
+        pj_status_t status = pjsua_buddy_add(&buddy_cfg, &buddy_id);
+        if (status != PJ_SUCCESS && g_on_log) {
+            char buf[256];
+            snprintf(buf, sizeof(buf), "Failed to add BLF buddy %s: %d", uris[i], (int)status);
+            g_on_log(2, buf);
+        }
+    }
+    
+    return 0;
+}
+
+int pd_blf_unsubscribe(int acc_id)
+{
+    pd_ensure_thread();
+    
+    /* Get all buddies and delete them */
+    pjsua_buddy_id buddies[PJSUA_ACC_MAX_PROXIES];
+    unsigned count = PJSUA_ACC_MAX_PROXIES;
+    
+    if (pjsua_enum_buddies(buddies, &count) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    for (unsigned i = 0; i < count; i++) {
+        pjsua_buddy_del(buddies[i]);
+    }
+    
+    return 0;
+}
+
+int pd_acc_set_lookup_url(int acc_id, const char *lookup_url)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    pjsua_acc_config cfg;
+    pjsua_acc_config_default(&cfg);
+    
+    /* Copy existing config */
+    cfg.id = info.acc_uri;
+    cfg.reg_uri = info.reg_uri;
+    cfg.cred_count = info.cred_count;
+    for (int i = 0; i < info.cred_count && i < PJSUA_ACC_MAX_PROXIES; i++) {
+        cfg.cred_info[i] = info.cred_info[i];
+    }
+    
+    /* Set lookup URL as user data */
+    if (lookup_url && lookup_url[0] != '\0') {
+        cfg.user_data = S(lookup_url);
+    } else {
+        cfg.user_data = pj_str("");
+    }
+    
+    pj_status_t status = pjsua_acc_modify((pjsua_acc_id)acc_id, &cfg);
+    return (int)status;
+}
+
+int pd_acc_get_lookup_url(int acc_id, char *url_buf, int url_len)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    if (url_buf && url_len > 0 && info.user_data.slen > 0) {
+        pj_ssize_t len = info.user_data.slen;
+        if (len >= url_len) len = url_len - 1;
+        memcpy(url_buf, info.user_data.ptr, (size_t)len);
+        url_buf[len] = '\0';
+    } else if (url_buf && url_len > 0) {
+        url_buf[0] = '\0';
+    }
+    
+    return 0;
+}
+
+int pd_acc_set_codec_priority(int acc_id, const char *codec_priorities)
+{
+    pd_ensure_thread();
+    
+    /* Parse JSON and set codec priorities */
+    /* For now, store as user data - full implementation would parse JSON */
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    pjsua_acc_config cfg;
+    pjsua_acc_config_default(&cfg);
+    
+    cfg.id = info.acc_uri;
+    cfg.reg_uri = info.reg_uri;
+    cfg.cred_count = info.cred_count;
+    for (int i = 0; i < info.cred_count && i < PJSUA_ACC_MAX_PROXIES; i++) {
+        cfg.cred_info[i] = info.cred_info[i];
+    }
+    
+    if (codec_priorities && codec_priorities[0] != '\0') {
+        cfg.user_data = S(codec_priorities);
+    }
+    
+    pj_status_t status = pjsua_acc_modify((pjsua_acc_id)acc_id, &cfg);
+    return (int)status;
+}
+
+int pd_acc_get_codec_priority(int acc_id, char *json_buf, int json_len)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    if (json_buf && json_len > 0 && info.user_data.slen > 0) {
+        pj_ssize_t len = info.user_data.slen;
+        if (len >= json_len) len = json_len - 1;
+        memcpy(json_buf, info.user_data.ptr, (size_t)len);
+        json_buf[len] = '\0';
+    } else if (json_buf && json_len > 0) {
+        json_buf[0] = '\0';
+    }
+    
+    return 0;
+}
+
+int pd_acc_set_codec(int acc_id, const char *codec_id, int enabled)
+{
+    pd_ensure_thread();
+    
+    if (!codec_id) return -1;
+    
+    /* Find and enable/disable specific codec */
+    unsigned count = pjsua_codec_get_count();
+    for (unsigned i = 0; i < count; i++) {
+        const pjsua_codec_info *info = pjsua_codec_get_info(i);
+        if (info && pj_strcmp2(&info->codec_id, codec_id) == 0) {
+            pjsua_codec_set_priority(i, enabled ? 1 : 0);
+            return 0;
+        }
+    }
+    
+    return -1; /* Codec not found */
+}
+
+int pd_acc_set_auto_answer(int acc_id, int enabled, int delay_ms)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    pjsua_acc_config cfg;
+    pjsua_acc_config_default(&cfg);
+    
+    cfg.id = info.acc_uri;
+    cfg.reg_uri = info.reg_uri;
+    cfg.cred_count = info.cred_count;
+    for (int i = 0; i < info.cred_count && i < PJSUA_ACC_MAX_PROXIES; i++) {
+        cfg.cred_info[i] = info.cred_info[i];
+    }
+    
+    cfg.auto_answer = enabled ? 200 : 0;
+    
+    pj_status_t status = pjsua_acc_modify((pjsua_acc_id)acc_id, &cfg);
+    return (int)status;
+}
+
+int pd_acc_get_auto_answer(int acc_id, int *enabled_out, int *delay_ms_out)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    if (enabled_out) {
+        *enabled_out = (info.auto_answer == 200) ? 1 : 0;
+    }
+    if (delay_ms_out) {
+        *delay_ms_out = 0; /* PJSIP doesn't support delay natively */
+    }
+    
+    return 0;
+}
+
+int pd_acc_set_dtmf_method(int acc_id, int dtmf_method)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    pjsua_acc_config cfg;
+    pjsua_acc_config_default(&cfg);
+    
+    cfg.id = info.acc_uri;
+    cfg.reg_uri = info.reg_uri;
+    cfg.cred_count = info.cred_count;
+    for (int i = 0; i < info.cred_count && i < PJSUA_ACC_MAX_PROXIES; i++) {
+        cfg.cred_info[i] = info.cred_info[i];
+    }
+    
+    /* DTMF method: 0=In-band, 1=RFC2833, 2=SIP INFO */
+    cfg.dtmf_type = (pjmedia_dtmf_type)dtmf_method;
+    
+    pj_status_t status = pjsua_acc_modify((pjsua_acc_id)acc_id, &cfg);
+    return (int)status;
+}
+
+int pd_acc_get_dtmf_method(int acc_id, int *method_out)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    if (method_out) {
+        *method_out = (int)info.dtmf_type;
+    }
+    
+    return 0;
+}
+
+int pd_acc_export_config(int acc_id, char *json_buf, int json_len)
+{
+    pd_ensure_thread();
+    
+    pjsua_acc_info info;
+    pj_bzero(&info, sizeof(info));
+    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
+        return -1;
+    }
+    
+    if (!json_buf || json_len <= 0) return -1;
+    
+    /* Build JSON config */
+    char codec_buf[512] = {0};
+    pd_acc_get_codec_priority(acc_id, codec_buf, sizeof(codec_buf));
+    
+    int written = snprintf(json_buf, (size_t)json_len,
+        "{"
+        "\"acc_uri\":\"%.*s\","
+        "\"reg_uri\":\"%.*s\","
+        "\"user_data\":\"%.*s\","
+        "\"auto_answer\":%d,"
+        "\"dtmf_type\":%d,"
+        "\"codec_priority\":%s"
+        "}",
+        (int)info.acc_uri.slen, info.acc_uri.ptr,
+        (int)info.reg_uri.slen, info.reg_uri.ptr,
+        (int)info.user_data.slen, info.user_data.ptr,
+        info.auto_answer == 200 ? 1 : 0,
+        (int)info.dtmf_type,
+        codec_buf);
+    
+    return (written > 0 && written < json_len) ? 0 : -1;
+}
+
+int pd_acc_import_config(const char *json_str, int *new_acc_id_out)
+{
+    /* Full implementation would parse JSON and create account */
+    /* For now, return not implemented */
+    (void)json_str;
+    (void)new_acc_id_out;
+    return -1;
+}
+
+int pd_acc_delete_profile(const char *uuid)
+{
+    /* Delete account by UUID - requires account map lookup */
+    /* For now, return not implemented */
+    (void)uuid;
+    return -1;
+}
+
+/* -----------------------------------------------------------------------
+ * Global (App-Wide) Settings Implementation
+ * ----------------------------------------------------------------------- */
+
+/* Global settings storage */
+static int g_global_dtmf_method = 1; /* Default RFC2833 */
+static int g_global_auto_answer = 0;
+static int g_global_auto_answer_delay = 0;
+static char g_global_codec_priority[1024] = "[]";
+
+int pd_set_global_codec_priority(const char *codec_priorities)
+{
+    if (!codec_priorities) return -1;
+    
+    /* Store globally and apply to all accounts */
+    strncpy(g_global_codec_priority, codec_priorities, sizeof(g_global_codec_priority) - 1);
+    g_global_codec_priority[sizeof(g_global_codec_priority) - 1] = '\0';
+    
+    /* Apply to all active accounts */
+    int acc_count = pjsua_acc_get_count();
+    for (int i = 0; i < acc_count; i++) {
+        pjsua_acc_id acc_id = pjsua_acc_get_id(i);
+        if (acc_id != PJSUA_INVALID_ID) {
+            /* Would apply codec priority here in full implementation */
+        }
+    }
+    
+    return 0;
+}
+
+int pd_get_global_codec_priority(char *json_buf, int json_len)
+{
+    if (!json_buf || json_len <= 0) return -1;
+    
+    strncpy(json_buf, g_global_codec_priority, (size_t)json_len - 1);
+    json_buf[json_len - 1] = '\0';
+    return 0;
+}
+
+int pd_set_global_dtmf_method(int dtmf_method)
+{
+    g_global_dtmf_method = dtmf_method;
+    
+    /* Apply to all accounts */
+    int acc_count = pjsua_acc_get_count();
+    for (int i = 0; i < acc_count; i++) {
+        pjsua_acc_id acc_id = pjsua_acc_get_id(i);
+        if (acc_id != PJSUA_INVALID_ID) {
+            pjsua_acc_info info;
+            pj_bzero(&info, sizeof(info));
+            if (pjsua_acc_get_info(acc_id, &info) == PJ_SUCCESS) {
+                pjsua_acc_config cfg;
+                pjsua_acc_config_default(&cfg);
+                cfg.id = info.acc_uri;
+                cfg.reg_uri = info.reg_uri;
+                cfg.cred_count = info.cred_count;
+                for (int j = 0; j < info.cred_count && j < PJSUA_ACC_MAX_PROXIES; j++) {
+                    cfg.cred_info[j] = info.cred_info[j];
+                }
+                cfg.dtmf_type = (pjmedia_dtmf_type)dtmf_method;
+                pjsua_acc_modify(acc_id, &cfg);
+            }
+        }
+    }
+    
+    return 0;
+}
+
+int pd_get_global_dtmf_method(int *method_out)
+{
+    if (method_out) {
+        *method_out = g_global_dtmf_method;
+    }
+    return 0;
+}
+
+int pd_set_global_auto_answer(int enabled, int delay_ms)
+{
+    g_global_auto_answer = enabled;
+    g_global_auto_answer_delay = delay_ms;
+    
+    /* Note: PJSIP auto-answer is per-account, would need to apply to all */
+    return 0;
+}
+
+int pd_get_global_auto_answer(int *enabled_out, int *delay_ms_out)
+{
+    if (enabled_out) {
+        *enabled_out = g_global_auto_answer;
+    }
+    if (delay_ms_out) {
+        *delay_ms_out = g_global_auto_answer_delay;
+    }
+    return 0;
 }

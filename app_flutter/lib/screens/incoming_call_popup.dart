@@ -38,6 +38,10 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
       widget.callInfo['account_name'] as String? ?? 'SIP Account';
   String get accountUser =>
       widget.callInfo['account_user'] as String? ?? '';
+  String? get callerNumber =>
+      SipUriUtils.extractNumber(widget.callInfo['uri'] as String?);
+  String? get lookupUrlTemplate =>
+      widget.callInfo['lookup_url'] as String?;
 
   @override
   void initState() {
@@ -111,6 +115,79 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     } catch (e) {
       debugPrint('[IncomingCallPopup] Error closing window: $e');
     }
+  }
+
+  void _openCallerLookup() {
+    if (lookupUrlTemplate == null || callerNumber == null) return;
+    
+    // Replace {number} variable with actual caller number
+    final lookupUrl = lookupUrlTemplate!.replaceAll('{number}', callerNumber!);
+    
+    debugPrint('[IncomingCallPopup] Opening caller lookup: $lookupUrl');
+    
+    // In production, use url_launcher package:
+    // await launchUrl(Uri.parse(lookupUrl), mode: LaunchMode.externalApplication);
+    
+    // For now, show a dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: const Text('Open Caller Lookup?',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This will open in your default browser:',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.inputFill,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                lookupUrl,
+                style: const TextStyle(
+                  color: AppTheme.primary,
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              // TODO: Use url_launcher to open the URL
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Would open: $lookupUrl'),
+                  backgroundColor: AppTheme.primary,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            },
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: const Text('Open Browser'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -249,6 +326,32 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                         ),
                       ),
                       const SizedBox(height: 20),
+
+                      // Caller lookup button (if URL configured)
+                      if (lookupUrlTemplate != null &&
+                          lookupUrlTemplate!.isNotEmpty &&
+                          callerNumber != null) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _openCallerLookup(),
+                            icon: const Icon(Icons.search,
+                                color: AppTheme.primary, size: 18),
+                            label: const Text(
+                              'Lookup Caller',
+                              style: TextStyle(color: AppTheme.primary),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppTheme.primary),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // Action buttons
                       if (!_answered)

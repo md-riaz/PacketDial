@@ -28,6 +28,7 @@ class AppTheme {
   static const Color textPrimary = Color(0xFFE8E8F0);
   static const Color textSecondary = Color(0xFF9999B5);
   static const Color textTertiary = Color(0xFF6B6B88);
+  static const Color inputFill = Color(0xFF14142B); // Same as surfaceVariant
 
   // ── Gradients ──────────────────────────────────────────────────────────────
   static const LinearGradient titleBarGradient = LinearGradient(
