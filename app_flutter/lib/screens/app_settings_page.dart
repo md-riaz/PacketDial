@@ -7,6 +7,7 @@ import '../core/app_theme.dart';
 import '../core/app_settings_service.dart';
 import '../core/contacts_service.dart';
 import 'diagnostics_screen.dart';
+import 'integration_settings_page.dart';
 
 /// Unified app-wide settings page.
 class AppSettingsPage extends ConsumerStatefulWidget {
@@ -28,10 +29,17 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   bool _dndEnabled = false;
   bool _blfEnabled = true;
 
+  // Integration state
+  String _ringWebhookUrl = '';
+  String _endWebhookUrl = '';
+  bool _clipboardMonitoringEnabled = false;
+  String _recordingUploadUrl = '';
+  String _recordingFileFieldName = 'recording';
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadSettings();
   }
 
@@ -53,6 +61,13 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       _autoAnswerEnabled = AppSettingsService.instance.autoAnswerEnabled;
       _dndEnabled = AppSettingsService.instance.dndEnabled;
       _blfEnabled = AppSettingsService.instance.blfEnabled;
+      _ringWebhookUrl = AppSettingsService.instance.ringWebhookUrl;
+      _endWebhookUrl = AppSettingsService.instance.endWebhookUrl;
+      _clipboardMonitoringEnabled =
+          AppSettingsService.instance.clipboardMonitoringEnabled;
+      _recordingUploadUrl = AppSettingsService.instance.recordingUploadUrl;
+      _recordingFileFieldName =
+          AppSettingsService.instance.recordingFileFieldName;
       _isLoading = false;
     });
   }
@@ -78,7 +93,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           ),
           title: const Text(
             'Settings',
-            style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
           ),
           actions: [
             PopupMenuButton<String>(
@@ -121,6 +137,9 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               Tab(icon: Icon(Icons.audio_file), text: 'Codecs'),
               Tab(icon: Icon(Icons.phone_in_talk), text: 'Calls'),
               Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
+              Tab(
+                  icon: Icon(Icons.integration_instructions),
+                  text: 'Integrations'),
             ],
           ),
         ),
@@ -137,6 +156,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   _buildCodecsTab(),
                   _buildCallsTab(),
                   _buildContactsTab(),
+                  _buildIntegrationsTab(), // Added new tab view
                 ],
               ),
       ),
@@ -151,7 +171,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         children: [
           _buildSectionTitle('Application Settings'),
           const SizedBox(height: 16),
-          
+
           // App Info Card
           Container(
             padding: const EdgeInsets.all(16),
@@ -192,12 +212,12 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               ],
             ),
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           _buildSectionTitle('Preferences'),
           const SizedBox(height: 16),
-          
+
           // BLF Toggle
           _buildSettingCard(
             icon: Icons.visibility,
@@ -212,9 +232,9 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               activeThumbColor: AppTheme.primary,
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Reset Settings
           SizedBox(
             width: double.infinity,
@@ -234,9 +254,9 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Diagnostics
           SizedBox(
             width: double.infinity,
@@ -290,9 +310,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             'Drag to reorder. Higher priority codecs are preferred during call negotiation.',
             style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
-          
           const SizedBox(height: 24),
-          
           ReorderableListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -310,7 +328,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               final isEnabled = _codecPriorities.any(
                 (c) => c['codec'] == codec['id'] && c['enabled'] == true,
               );
-              
+
               return Card(
                 key: ValueKey(codec['id']),
                 color: AppTheme.surfaceCard,
@@ -318,7 +336,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 child: ListTile(
                   leading: ReorderableDragStartListener(
                     index: index,
-                    child: const Icon(Icons.drag_handle, color: AppTheme.textTertiary),
+                    child: const Icon(Icons.drag_handle,
+                        color: AppTheme.textTertiary),
                   ),
                   title: Text(
                     codec['name'] as String,
@@ -347,7 +366,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                             (c) => c['codec'] == codec['id'],
                           );
                         }
-                        AppSettingsService.instance.setCodecPriorities(_codecPriorities);
+                        AppSettingsService.instance
+                            .setCodecPriorities(_codecPriorities);
                       });
                     },
                     activeThumbColor: AppTheme.primary,
@@ -369,12 +389,12 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         children: [
           _buildSectionTitle('Call Settings'),
           const SizedBox(height: 16),
-          
+
           // DND Toggle
           _buildSettingCard(
             icon: Icons.do_not_disturb,
             title: 'Do Not Disturb',
-            subtitle: _dndEnabled 
+            subtitle: _dndEnabled
                 ? 'Enabled - All incoming calls rejected'
                 : 'Disabled - Calls ring normally',
             trailing: Switch(
@@ -386,14 +406,14 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               activeThumbColor: AppTheme.errorRed,
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Auto Answer
           _buildSettingCard(
             icon: Icons.phone_callback,
             title: 'Auto Answer',
-            subtitle: _autoAnswerEnabled 
+            subtitle: _autoAnswerEnabled
                 ? 'Enabled - All calls answered automatically'
                 : 'Disabled - Calls ring normally',
             trailing: Switch(
@@ -405,9 +425,9 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               activeThumbColor: AppTheme.callGreen,
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // DTMF Method
           _buildSettingCard(
             icon: Icons.dialpad,
@@ -426,9 +446,9 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               ],
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Info card
           Container(
             padding: const EdgeInsets.all(16),
@@ -446,7 +466,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 Expanded(
                   child: Text(
                     'These settings apply to all accounts. Changes take effect immediately.',
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                   ),
                 ),
               ],
@@ -469,9 +490,9 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             '${ContactsService.instance.contacts.length} contacts loaded',
             style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Contact stats
           Row(
             children: [
@@ -479,7 +500,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 child: _buildStatCard(
                   Icons.circle,
                   AppTheme.callGreen,
-                  ContactsService.instance.getByPresence('Available').length.toString(),
+                  ContactsService.instance
+                      .getByPresence('Available')
+                      .length
+                      .toString(),
                   'Available',
                 ),
               ),
@@ -488,7 +512,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 child: _buildStatCard(
                   Icons.circle,
                   AppTheme.errorRed,
-                  ContactsService.instance.getByPresence('Busy').length.toString(),
+                  ContactsService.instance
+                      .getByPresence('Busy')
+                      .length
+                      .toString(),
                   'Busy',
                 ),
               ),
@@ -497,15 +524,18 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 child: _buildStatCard(
                   Icons.circle,
                   AppTheme.textTertiary,
-                  ContactsService.instance.getByPresence('Unknown').length.toString(),
+                  ContactsService.instance
+                      .getByPresence('Unknown')
+                      .length
+                      .toString(),
                   'Unknown',
                 ),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Actions
           SizedBox(
             width: double.infinity,
@@ -570,7 +600,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
     );
   }
 
-  Widget _buildStatCard(IconData icon, Color color, String count, String label) {
+  Widget _buildStatCard(
+      IconData icon, Color color, String count, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
@@ -604,10 +635,14 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
 
   String _getDtmfMethodName(int method) {
     switch (method) {
-      case 0: return 'In-band Audio';
-      case 1: return 'RFC2833 (Recommended)';
-      case 2: return 'SIP INFO';
-      default: return 'Unknown';
+      case 0:
+        return 'In-band Audio';
+      case 1:
+        return 'RFC2833 (Recommended)';
+      case 2:
+        return 'SIP INFO';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -637,16 +672,16 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
-      
+
       if (result != null) {
         final file = File(result);
         final success = await AppSettingsService.instance.exportSettings(file);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(success 
-                  ? 'Settings exported to ${file.path}' 
+              content: Text(success
+                  ? 'Settings exported to ${file.path}'
                   : 'Export failed'),
               backgroundColor: success ? AppTheme.callGreen : AppTheme.errorRed,
               behavior: SnackBarBehavior.floating,
@@ -673,21 +708,20 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
-      
+
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
         final success = await AppSettingsService.instance.importSettings(file);
-        
+
         if (success) {
           await _loadSettings();
         }
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(success 
-                  ? 'Settings imported successfully' 
-                  : 'Import failed'),
+              content: Text(
+                  success ? 'Settings imported successfully' : 'Import failed'),
               backgroundColor: success ? AppTheme.callGreen : AppTheme.errorRed,
               behavior: SnackBarBehavior.floating,
             ),
@@ -747,10 +781,158 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 ),
               );
             },
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.warningAmber),
+            style:
+                FilledButton.styleFrom(backgroundColor: AppTheme.warningAmber),
             child: const Text('Reset'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildIntegrationsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Integration Features'),
+          const SizedBox(height: 8),
+          const Text(
+            'Configure webhooks, CRM lookup, screen pop, and more.',
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+          ),
+          const SizedBox(height: 24),
+          
+          // Main integration settings card
+          Card(
+            color: AppTheme.surfaceCard,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Advanced Integration Settings',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Configure webhooks, CRM customer lookup, screen pop, '
+                    'call recording upload, clipboard monitoring, and dialing rules.',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const IntegrationSettingsPage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.settings),
+                      label: const Text('Open Integration Settings'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Quick toggles
+          _buildSectionTitle('Quick Toggles'),
+          const SizedBox(height: 16),
+          
+          // Clipboard monitoring quick toggle
+          _buildSettingCard(
+            icon: Icons.content_paste_search,
+            title: 'Clipboard Monitoring',
+            subtitle: 'Detect phone numbers in clipboard and offer to dial.',
+            trailing: Switch(
+              value: AppSettingsService.instance.clipboardMonitoringEnabled,
+              onChanged: (value) async {
+                await AppSettingsService.instance
+                    .setClipboardMonitoringEnabled(value);
+                setState(() {});
+              },
+              activeThumbColor: AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextFieldSetting({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String value,
+    required Function(String) onChanged,
+  }) {
+    return Card(
+      color: AppTheme.surfaceCard,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(icon, color: AppTheme.primary, size: 28),
+              title: Text(
+                title,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: TextEditingController(text: value)
+                ..selection = TextSelection.fromPosition(
+                  TextPosition(offset: value.length),
+                ),
+              onSubmitted: onChanged,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: Colors.black26,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                hintText: 'http://example.com/...',
+                hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

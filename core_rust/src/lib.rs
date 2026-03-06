@@ -198,6 +198,8 @@ struct Call {
     /// PJSIP call id used for shim operations
     /// (None before the call is wired to PJSIP).
     pjsip_call_id: Option<i32>,
+    /// Path to the recording file (if recording was enabled)
+    recording_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -371,6 +373,10 @@ extern "C" {
     fn pd_set_global_auto_answer(enabled: i32, delay_ms: i32) -> i32;
     fn pd_get_global_auto_answer(enabled_out: *mut i32, delay_ms_out: *mut i32) -> i32;
     fn pd_aud_play_dtmf(digits: *const c_char) -> i32;
+    /* Call Recording */
+    fn pd_call_start_recording(call_id: i32, file_path: *const c_char) -> i32;
+    fn pd_call_stop_recording(call_id: i32) -> i32;
+    fn pd_call_is_recording(call_id: i32) -> i32;
 }
 
 // ---------------------------------------------------------------------------
@@ -508,6 +514,7 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
         accumulated_active_secs: 0,
         last_resumed_at: None,
         pjsip_call_id: Some(pj_call_id),
+        recording_path: None,
     };
 
     push_call_state(&call);
@@ -1018,8 +1025,22 @@ fn push_call_state(call: &Call) {
         .last_resumed_at
         .map(|v| v.to_string())
         .unwrap_or_else(|| "null".to_owned());
+
+    // Include recording_path only when call ends
+    let recording_path_json = if call.state == CallState::Ended {
+        match &call.recording_path {
+            Some(path) => {
+                let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
+                format!(r#","recording_path":"{}""#, escaped)
+            }
+            None => String::from(r#","recording_path":null"#),
+        }
+    } else {
+        String::new()
+    };
+
     push_event(format!(
-        r#"{{"type":"CallStateChanged","payload":{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","state":"{}","muted":{},"on_hold":{},"accumulated_active_secs":{},"last_resumed_at":{}}}}}"#,
+        r#"{{"type":"CallStateChanged","payload":{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","state":"{}","muted":{},"on_hold":{},"accumulated_active_secs":{},"last_resumed_at":{}{}}}}}"#,
         call.id,
         call.account_id,
         call.uri,
@@ -1028,7 +1049,8 @@ fn push_call_state(call: &Call) {
         call.muted,
         call.on_hold,
         call.accumulated_active_secs,
-        last_resumed_at_val
+        last_resumed_at_val,
+        recording_path_json
     ));
 }
 
@@ -1472,6 +1494,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             accumulated_active_secs: 0,
             last_resumed_at: None,
             pjsip_call_id: Some(pj_call_id),
+            recording_path: None,
         };
         push_call_state(&call);
         CALLS.lock().unwrap().push(call);
@@ -3409,6 +3432,160 @@ pub extern "C" fn engine_play_dtmf(digits: *const c_char) -> i32 {
         unsafe { pd_aud_play_dtmf(digits) }
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Start recording the current active call.
+///
+/// `file_path` must be a null-terminated UTF-8 string with the full path to the output WAV file.
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_start_recording(file_path: *const c_char) -> i32 {
+    if file_path.is_null() {
+        return EngineErrorCode::InvalidUtf8 as i32;
+    }
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        let file_path_s = match unsafe { CStr::from_ptr(file_path) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
+        };
+
+        // Find the first active call
+        let (call_id, pjsip_call_id) = {
+            let calls = CALLS.lock().unwrap();
+            let call = calls.iter().find(|c| c.state != CallState::Ended);
+            match call {
+                Some(c) => (c.id, c.pjsip_call_id),
+                None => return EngineErrorCode::NotFound as i32,
+            }
+        };
+
+        let pjsip_call_id = match pjsip_call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        unsafe {
+            let path_cstr = CString::new(file_path_s.clone()).unwrap();
+            let rc = pd_call_start_recording(pjsip_call_id, path_cstr.as_ptr());
+            if rc != 0 {
+                log_engine(LogLevel::Error, &format!("Failed to start recording: {}", rc));
+                return EngineErrorCode::InternalError as i32;
+            }
+        }
+
+        // Store recording path in the call struct
+        {
+            let mut calls = CALLS.lock().unwrap();
+            if let Some(call) = calls.iter_mut().find(|c| c.state != CallState::Ended) {
+                call.recording_path = Some(file_path_s.clone());
+            }
+        }
+
+        // Emit event
+        let event = serde_json::json!({
+            "type": "RecordingStarted",
+            "payload": {
+                "call_id": call_id,
+                "file_path": file_path_s,
+            }
+        });
+        push_event(event.to_string());
+
+        0
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Stop recording the current active call.
+///
+/// Returns 0 on success, non-zero on error.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_stop_recording() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return EngineErrorCode::NotInitialized as i32;
+        }
+
+        // Find the first active call
+        let (call_id, pjsip_call_id) = {
+            let calls = CALLS.lock().unwrap();
+            let call = calls.iter().find(|c| c.state != CallState::Ended);
+            match call {
+                Some(c) => (c.id, c.pjsip_call_id),
+                None => return EngineErrorCode::NotFound as i32,
+            }
+        };
+
+        let pjsip_call_id = match pjsip_call_id {
+            Some(id) => id,
+            None => return EngineErrorCode::NotFound as i32,
+        };
+
+        unsafe {
+            let rc = pd_call_stop_recording(pjsip_call_id);
+            if rc != 0 {
+                log_engine(LogLevel::Error, &format!("Failed to stop recording: {}", rc));
+                return EngineErrorCode::InternalError as i32;
+            }
+        }
+
+        // Get call ID for event
+        let call_id = {
+            let calls = CALLS.lock().unwrap();
+            calls.iter().find(|c| c.state != CallState::Ended).map(|c| c.id).unwrap_or(0)
+        };
+
+        // Emit event
+        let event = serde_json::json!({
+            "type": "RecordingStopped",
+            "payload": {
+                "call_id": call_id,
+            }
+        });
+        push_event(event.to_string());
+
+        0
+    }));
+    result.unwrap_or(EngineErrorCode::InternalError as i32)
+}
+
+/// Check if the current call is being recorded.
+///
+/// Returns 1 if recording, 0 if not recording or no active call.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn engine_is_recording() -> i32 {
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        if !INITIALIZED.load(Ordering::SeqCst) {
+            return 0;
+        }
+
+        let pjsip_call_id = {
+            let calls = CALLS.lock().unwrap();
+            let call = calls.iter().find(|c| c.state != CallState::Ended);
+            match call {
+                Some(c) => c.pjsip_call_id,
+                None => return 0,
+            }
+        };
+
+        let pjsip_call_id = match pjsip_call_id {
+            Some(id) => id,
+            None => return 0,
+        };
+
+        unsafe {
+            let rc = pd_call_is_recording(pjsip_call_id);
+            rc
+        }
+    }));
+    result.unwrap_or(0)
 }
 
 /// Transfer call (blind or attended completion).

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
 import '../core/multi_window/window_controller_extension.dart';
+import '../models/customer_data.dart';
 
 /// Incoming call popup window — launched as a sub-window by the main app.
 ///
@@ -28,6 +30,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
   late final AnimationController _pulseCtrl;
   bool _answered = false;
   bool _isClosing = false;
+  CustomerData? _customerData;
+  bool _isLoadingCustomer = false;
 
   String get callerName =>
       SipUriUtils.friendlyName(widget.callInfo['uri'] as String?);
@@ -41,6 +45,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
       SipUriUtils.extractNumber(widget.callInfo['uri'] as String?);
   String? get lookupUrlTemplate =>
       widget.callInfo['lookup_url'] as String?;
+  String? get extId =>
+      widget.callInfo['extid'] as String?;
 
   @override
   void initState() {
@@ -51,7 +57,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     )..repeat(reverse: true);
 
     _configureWindow();
-    
+    _loadCustomerData();
+
     // Set up window method handler for close requests (non-blocking)
     _setupWindowHandler();
   }
@@ -65,12 +72,26 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
       appWindow.show();
     });
   }
-  
+
   void _setupWindowHandler() {
     // Fire and forget - handler will be ready before any close request
     widget.windowController.initWindowMethodHandler().catchError((e) {
       debugPrint('[IncomingCallPopup] Handler setup error: $e');
     });
+  }
+
+  Future<void> _loadCustomerData() async {
+    // Customer data may be passed from main window
+    final customerJson = widget.callInfo['customer_data'] as Map<String, dynamic>?;
+    if (customerJson != null) {
+      setState(() {
+        _customerData = CustomerData.fromJson(customerJson);
+      });
+      return;
+    }
+
+    // Otherwise, if we have a lookup URL, we could fetch it here
+    // For now, customer data is fetched by IntegrationService and passed via callInfo
   }
 
   @override
@@ -116,81 +137,23 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
     }
   }
 
-  void _openCallerLookup() {
-    if (lookupUrlTemplate == null || callerNumber == null) return;
-    
-    // Replace {number} variable with actual caller number
-    final lookupUrl = lookupUrlTemplate!.replaceAll('{number}', callerNumber!);
-    
-    debugPrint('[IncomingCallPopup] Opening caller lookup: $lookupUrl');
-    
-    // In production, use url_launcher package:
-    // await launchUrl(Uri.parse(lookupUrl), mode: LaunchMode.externalApplication);
-    
-    // For now, show a dialog
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        title: const Text('Open Caller Lookup?',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This will open in your default browser:',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.inputFill,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                lookupUrl,
-                style: const TextStyle(
-                  color: AppTheme.primary,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Use url_launcher to open the URL
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Would open: $lookupUrl'),
-                  backgroundColor: AppTheme.primary,
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            },
-            icon: const Icon(Icons.open_in_new, size: 18),
-            label: const Text('Open Browser'),
-          ),
-        ],
-      ),
-    );
+  void _openCallerLink() {
+    if (_customerData == null || !_customerData!.hasContactLink) return;
+
+    final url = _customerData!.contactLink;
+    debugPrint('[IncomingCallPopup] Opening CRM link: $url');
+
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasCustomerData = _customerData != null && _customerData!.hasData;
+    final displayName = hasCustomerData 
+        ? _customerData!.contactName 
+        : (callerName.isNotEmpty ? callerName : 'Unknown Caller');
+    final displayCompany = hasCustomerData ? _customerData!.company : null;
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
@@ -210,8 +173,6 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
           ),
           child: Column(
             children: [
-              // Use bitsdojo_window for title bar interaction if needed,
-              // but here we just rely on native decorations.
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -241,8 +202,8 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                           backgroundColor:
                               AppTheme.callGreen.withValues(alpha: 0.15),
                           child: Text(
-                            callerName.isNotEmpty
-                                ? callerName[0].toUpperCase()
+                            displayName!.isNotEmpty
+                                ? displayName![0].toUpperCase()
                                 : '?',
                             style: const TextStyle(
                               fontSize: 24,
@@ -254,9 +215,9 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                       ),
                       const SizedBox(height: 14),
 
-                      // Caller name
+                      // Caller name / Customer name
                       Text(
-                        callerName.isNotEmpty ? callerName : 'Unknown Caller',
+                        displayName!,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -266,6 +227,45 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
+                      
+                      // Company name
+                      if (displayCompany != null && displayCompany.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            displayCompany,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                      
+                      // Caller number (if different from name)
+                      if (callerNumber != null && 
+                          callerNumber != displayName && 
+                          callerNumber!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          callerNumber!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textTertiary,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                      
                       if (callerDomain != null && callerDomain!.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -326,22 +326,16 @@ class _IncomingCallPopupState extends State<IncomingCallPopup>
                       ),
                       const SizedBox(height: 20),
 
-                      // Caller lookup button (if URL configured)
-                      if (lookupUrlTemplate != null &&
-                          lookupUrlTemplate!.isNotEmpty &&
-                          callerNumber != null) ...[
+                      // CRM Open Link button (if customer data has link)
+                      if (_customerData?.hasContactLink == true) ...[
                         SizedBox(
                           width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _openCallerLookup(),
-                            icon: const Icon(Icons.search,
-                                color: AppTheme.primary, size: 18),
-                            label: const Text(
-                              'Lookup Caller',
-                              style: TextStyle(color: AppTheme.primary),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: AppTheme.primary),
+                          child: FilledButton.icon(
+                            onPressed: _openCallerLink,
+                            icon: const Icon(Icons.open_in_browser, size: 18),
+                            label: const Text('Open CRM Record'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),

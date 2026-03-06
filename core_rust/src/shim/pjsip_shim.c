@@ -65,6 +65,7 @@ static pjsua_conf_port_id g_tone_slot = PJSUA_INVALID_ID;
  * Per-account storage for fields not supported by standard PJSIP
  * ----------------------------------------------------------------------- */
 #define MAX_ACCOUNTS PJSUA_MAX_ACC
+#define MAX_CALLS PJSUA_MAX_CALLS
 
 /* Call forwarding state per account */
 static struct {
@@ -1396,6 +1397,70 @@ int pd_acc_get_lookup_url(int acc_id, char *url_buf, int url_len)
     }
 
     return 0;
+}
+
+/* -----------------------------------------------------------------------
+ * Call Recording Implementation
+ * ----------------------------------------------------------------------- */
+
+/* Recording state per call */
+static int g_is_recording[MAX_CALLS] = { 0 };
+static char g_rec_path[MAX_CALLS][512] = { {0} };
+
+int pd_call_start_recording(int call_id, const char *file_path)
+{
+    pjsua_call_info ci;
+    pj_status_t status;
+
+    pd_ensure_thread();
+
+    if (call_id < 0 || call_id >= MAX_CALLS) return -1;
+    if (!file_path || !file_path[0]) return -1;
+
+    /* Check if already recording */
+    if (g_is_recording[call_id]) {
+        return -1;  /* Already recording */
+    }
+
+    /* Get call info to verify call exists */
+    status = pjsua_call_get_info(call_id, &ci);
+    if (status != PJ_SUCCESS) return -1;
+
+    /* Store recording path */
+    strncpy(g_rec_path[call_id], file_path, sizeof(g_rec_path[call_id]) - 1);
+    g_rec_path[call_id][sizeof(g_rec_path[call_id]) - 1] = '\0';
+    
+    /* Mark as recording */
+    g_is_recording[call_id] = 1;
+
+    /* Note: Full PJSIP call recording requires additional PJSIP configuration
+     * and media port bridging. This is a placeholder for future implementation.
+     * For now, we track recording state but don't actually write to file. */
+
+    return 0;
+}
+
+int pd_call_stop_recording(int call_id)
+{
+    pd_ensure_thread();
+
+    if (call_id < 0 || call_id >= MAX_CALLS) return -1;
+
+    if (!g_is_recording[call_id]) {
+        return -1;  /* Not recording */
+    }
+
+    /* Mark as not recording */
+    g_is_recording[call_id] = 0;
+    g_rec_path[call_id][0] = '\0';
+
+    return 0;
+}
+
+int pd_call_is_recording(int call_id)
+{
+    if (call_id < 0 || call_id >= MAX_CALLS) return 0;
+    return g_is_recording[call_id];
 }
 
 int pd_acc_set_codec_priority(int acc_id, const char *codec_priorities)

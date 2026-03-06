@@ -28,6 +28,9 @@ typedef _EngineTransferCallC = ffi.Int32 Function(ffi.Int32, ffi.Pointer<ffi.Int
 typedef _EngineStartAttendedXferC = ffi.Int32 Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
 typedef _EngineCompleteXferC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineMergeConferenceC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
+typedef _EngineStartRecordingC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
+typedef _EngineStopRecordingC = ffi.Int32 Function();
+typedef _EngineIsRecordingC = ffi.Int32 Function();
 typedef _EngineSendCommandC = ffi.Int32 Function(
     ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
 typedef _EngineExportProfileC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
@@ -135,6 +138,15 @@ class VoipEngine {
   late final int Function(int, int) _mergeConference = _lib
       .lookupFunction<_EngineMergeConferenceC, int Function(int, int)>(
           'engine_merge_conference');
+  late final int Function(ffi.Pointer<ffi.Int8>) _startRecording = _lib
+      .lookupFunction<_EngineStartRecordingC, int Function(ffi.Pointer<ffi.Int8>)>(
+          'engine_start_recording');
+  late final int Function() _stopRecording = _lib
+      .lookupFunction<_EngineStopRecordingC, int Function()>(
+          'engine_stop_recording');
+  late final int Function() _isRecording = _lib
+      .lookupFunction<_EngineIsRecordingC, int Function()>(
+          'engine_is_recording');
   late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
       _sendCommand = _lib.lookupFunction<
           _EngineSendCommandC,
@@ -353,6 +365,30 @@ class VoipEngine {
   /// Returns 0 on success, non-zero on error.
   int mergeConference(int callAId, int callBId) {
     return _mergeConference(callAId, callBId);
+  }
+
+  /// Start recording the current active call.
+  /// [filePath] is the full path to the output WAV file.
+  /// Returns 0 on success, non-zero on error.
+  int startRecording(String filePath) {
+    final ptr = _allocCString(filePath);
+    try {
+      return _startRecording(ptr);
+    } finally {
+      _freeNative(ptr);
+    }
+  }
+
+  /// Stop recording the current active call.
+  /// Returns 0 on success, non-zero on error.
+  int stopRecording() {
+    return _stopRecording();
+  }
+
+  /// Check if the current call is being recorded.
+  /// Returns 1 if recording, 0 if not.
+  int isRecording() {
+    return _isRecording();
   }
 
   /// Send a structured command to the engine as JSON.

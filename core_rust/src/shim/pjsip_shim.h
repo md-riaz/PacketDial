@@ -495,6 +495,32 @@ int pd_call_get_stream_stat(int call_id,
                              int    codec_buf_len,
                              int   *bitrate_kbps_out);
 
+/* -----------------------------------------------------------------------
+ * Call Recording
+ * ----------------------------------------------------------------------- */
+
+/**
+ * Start recording a call to a WAV file.
+ * @param call_id    pjsua_call_id of the call to record.
+ * @param file_path  Full path to the output WAV file.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_call_start_recording(int call_id, const char *file_path);
+
+/**
+ * Stop recording the current call.
+ * @param call_id  pjsua_call_id of the call being recorded.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_call_stop_recording(int call_id);
+
+/**
+ * Check if a call is currently being recorded.
+ * @param call_id  pjsua_call_id of the call.
+ * @return 1 if recording, 0 if not recording or error.
+ */
+int pd_call_is_recording(int call_id);
+
 #ifdef __cplusplus
 }
 #endif

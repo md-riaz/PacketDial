@@ -6,6 +6,7 @@ import 'dart:async';
 import '../../engine_channel.dart';
 import '../../contacts_service.dart';
 import '../../app_settings_service.dart';
+import '../../integration_service.dart';
 import '../window_type.dart';
 
 /// Manages the incoming call popup window lifecycle.
@@ -66,7 +67,7 @@ class IncomingCallController {
           EngineChannel.instance.engine.hangup();
           return;
         }
-        
+
         _showPopup(
           uri: payload['uri'] as String? ?? '',
           accountId: payload['account_id'] as String? ?? '',
@@ -79,7 +80,7 @@ class IncomingCallController {
       final uri = payload['uri'] as String? ?? '';
       final state = payload['state'] as String? ?? 'Unknown';
       final activity = payload['activity'] as String?;
-      
+
       ContactsService.instance.updatePresence(uri, state, activity);
     }
   }
@@ -108,18 +109,10 @@ class IncomingCallController {
       final account = EngineChannel.instance.accounts[accountId];
       final accountName = account?.accountName ?? 'SIP Account';
       final accountUser = account?.username ?? '';
-      
-      // Get lookup URL from account (if configured)
-      String lookupUrl = '';
-      if (account != null) {
-        // Request lookup URL from engine
-        EngineChannel.instance.engine.sendCommand(
-          'AccountGetLookupUrl',
-          '{"account_id":"$accountId"}',
-        );
-        // Note: In production, you'd wait for the response before showing popup
-        // For now, lookup URL will be fetched asynchronously
-      }
+
+      // Get customer data from integration service (if lookup was performed)
+      final customerData = IntegrationService.instance.lastCustomerData;
+      final extId = IntegrationService.instance.lastExtId;
 
       final payload = {
         'callData': {
@@ -127,7 +120,8 @@ class IncomingCallController {
           'direction': 'Incoming',
           'account_name': accountName,
           'account_user': accountUser,
-          'lookup_url': lookupUrl,
+          'extid': extId ?? '',
+          'customer_data': customerData?.toJson() ?? {},
         },
       };
 

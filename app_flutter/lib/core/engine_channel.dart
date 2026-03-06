@@ -15,6 +15,8 @@ import '../models/media_stats.dart';
 import '../models/call_history_schema.dart';
 import 'package:isar/isar.dart';
 import 'audio_service.dart';
+import 'integration_service.dart';
+import 'recording_service.dart';
 
 /// Maximum number of structured log entries retained in memory.
 const _kLogBufferMax = 500;
@@ -98,7 +100,7 @@ class EngineChannel {
 
     // Request audio device list on startup
     engine.listAudioDevices();
-    
+
     // Re-request audio devices after a short delay to catch late-initialized devices
     // This helps with Windows audio subsystem initialization timing issues
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -335,14 +337,28 @@ class EngineChannel {
         if (state == CallState.ringing) {
           if (payload['direction'] == 'Incoming') {
             AudioService.instance.startRingtone();
+            // Trigger CRM Ring Hook
+            if (activeCall != null) {
+              IntegrationService.instance.onIncomingCall(activeCall!);
+            }
           } else {
             AudioService.instance.startRingback();
           }
         } else if (state == CallState.inCall || state == CallState.ended) {
           AudioService.instance.stopAll();
+          
+          // Auto-start recording on call answer (if enabled in future)
+          if (state == CallState.inCall && activeCall == null) {
+            // Recording can be started manually via UI
+          }
         }
 
         if (state == CallState.ended) {
+          // Stop recording if active
+          if (RecordingService.instance.isRecording) {
+            RecordingService.instance.stopRecording();
+          }
+          
           if (activeCall?.callId == callId) {
             // Save to Isar
             if (_isar != null) {
@@ -391,6 +407,15 @@ class EngineChannel {
 
               _isar!.writeTxn(() => _isar!.callHistorySchemas.put(entry));
             }
+
+            // Trigger CRM End Hook and Recording Upload
+            if (activeCall != null) {
+              IntegrationService.instance.onCallEnd(
+                activeCall!,
+                recordingPath: payload['recording_path'] as String?,
+              );
+            }
+
             activeCall = null;
           }
           mediaStats.remove(callId);
@@ -488,6 +513,17 @@ class EngineChannel {
         final callBId = (payload['call_b_id'] as num?)?.toInt() ?? 0;
         debugPrint(
             '[EngineChannel] Conference merged: call A=$callAId, call B=$callBId');
+
+      case 'RecordingStarted':
+        // Recording started
+        final filePath = payload['file_path'] as String?;
+        debugPrint('[EngineChannel] Recording started: $filePath');
+
+      case 'RecordingStopped':
+        // Recording stopped
+        debugPrint('[EngineChannel] Recording stopped');
+        // Reset recording service state
+        RecordingService.instance.reset();
     }
   }
 }

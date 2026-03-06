@@ -30,6 +30,9 @@ import 'screens/history_screen.dart';
 import 'screens/app_settings_page.dart';
 import 'core/multi_window/window_router.dart';
 import 'core/multi_window/window_type.dart';
+import 'core/cli_service.dart';
+import 'core/clipboard_service.dart';
+import 'widgets/clipboard_popup.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -135,6 +138,20 @@ void main(List<String> args) async {
     },
   );
 
+  // Pre-process protocol URIs (tel:, sip:, callto:)
+  final processedArgs = <String>[...args];
+  for (int i = 0; i < processedArgs.length; i++) {
+    final arg = processedArgs[i];
+    if (arg.startsWith('tel:') ||
+        arg.startsWith('sip:') ||
+        arg.startsWith('callto:')) {
+      final number = arg.split(':').last;
+      processedArgs[i] = '-call';
+      processedArgs.insert(i + 1, number);
+      break;
+    }
+  }
+
   runApp(
     UncontrolledProviderScope(
       container: container,
@@ -142,6 +159,7 @@ void main(List<String> args) async {
         isar: isar,
         accountService: accountService,
         windowPrefs: windowPrefs,
+        args: processedArgs, // Pass processed args
       ),
     ),
   );
@@ -161,11 +179,13 @@ class App extends StatefulWidget {
   final Isar isar;
   final AccountService accountService;
   final WindowPrefs windowPrefs;
+  final List<String> args;
   const App({
     super.key,
     required this.isar,
     required this.accountService,
     required this.windowPrefs,
+    required this.args,
   });
 
   @override
@@ -253,6 +273,19 @@ class _AppState extends State<App>
             }
           }
         });
+
+        // Initialize clipboard monitoring
+        ClipboardService.instance.init();
+        
+        // Listen for clipboard phone number detections
+        _clipboardSub = ClipboardService.instance.onPhoneDetected.listen((number) {
+          if (mounted) {
+            ClipboardPopupOverlay.show(context, number);
+          }
+        });
+
+        // Handle CLI arguments
+        CliService.instance.handleArgs(widget.args);
       }
     } catch (e) {
       log("Failed to load engine: $e");
@@ -263,6 +296,7 @@ class _AppState extends State<App>
   }
 
   StreamSubscription? _regFailureSub;
+  StreamSubscription? _clipboardSub;
 
   void _onRegistrationFailed(String accountId) async {
     if (!mounted) return;
@@ -359,7 +393,9 @@ class _AppState extends State<App>
   void dispose() {
     windowManager.removeListener(this);
     _regFailureSub?.cancel();
+    _clipboardSub?.cancel();
     _splashCtrl.dispose();
+    ClipboardService.instance.dispose();
     EngineChannel.instance.dispose();
     super.dispose();
   }
@@ -689,14 +725,15 @@ class CockpitFooter extends ConsumerWidget {
                 },
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: dndEnabled 
+                    color: dndEnabled
                         ? AppTheme.errorRed.withValues(alpha: 0.2)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                      color: dndEnabled 
+                      color: dndEnabled
                           ? AppTheme.errorRed.withValues(alpha: 0.4)
                           : Colors.transparent,
                     ),
@@ -707,7 +744,7 @@ class CockpitFooter extends ConsumerWidget {
                       Icon(
                         Icons.do_not_disturb,
                         size: 12,
-                        color: dndEnabled 
+                        color: dndEnabled
                             ? AppTheme.errorRed
                             : AppTheme.textTertiary,
                       ),
@@ -717,7 +754,7 @@ class CockpitFooter extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
-                          color: dndEnabled 
+                          color: dndEnabled
                               ? AppTheme.errorRed
                               : AppTheme.textTertiary,
                         ),
@@ -728,7 +765,7 @@ class CockpitFooter extends ConsumerWidget {
               );
             },
           ),
-          
+
           const SizedBox(width: 12),
 
           // App Version
