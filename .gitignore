@@ -10,7 +10,8 @@
 /app_flutter/build/
 /app_flutter/.flutter-plugins*
 /app_flutter/.metadata
-# Note: app_flutter/windows/flutter/ is intentionally tracked (Flutter engine CMake stubs)
+# Note: Flutter regenerates ephemeral/ during build - do not commit
+/app_flutter/windows/flutter/ephemeral/
 
 # PJSIP builds
 /engine_pjsip/build/
@@ -43,3 +44,6 @@ _codeql_detected_source_root
 # Build distributions
 /dist/
 /app_flutter/dist/
+
+# Installer build output
+/installer/

@@ -81,7 +81,6 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\$OutputDir
 OutputBaseFilename=PacketDial-Setup-$Version
-SetupIconFile=compiler:SetupClassicIcon.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -89,9 +88,11 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 
-; Use custom app icon if available
+; Use custom app icon if available, otherwise use default
 #if FileExists("app_icon.ico")
 SetupIconFile=app_icon.ico
+#else
+SetupIconFile=compiler:SetupClassicIcon.ico
 #endif
 
 [Languages]
