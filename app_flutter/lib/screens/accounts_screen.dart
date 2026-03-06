@@ -4,7 +4,7 @@ import '../core/app_theme.dart';
 import '../core/account_service.dart';
 import '../models/account_schema.dart';
 import '../providers/engine_provider.dart';
-import '../core/multi_window/controllers/account_setup_controller.dart';
+import '../core/multi_window/controllers/account_setup_window_controller.dart';
 
 final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
   return ref.watch(accountServiceProvider).getAllAccounts();
@@ -19,7 +19,12 @@ class AccountsScreen extends ConsumerStatefulWidget {
 
 class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   void _showAccountDialog([AccountSchema? existing]) {
-    ref.read(accountSetupControllerProvider).showWindow(existing);
+    // Use Riverpod provider if available, otherwise use singleton instance
+    if (mounted) {
+      ref.read(accountSetupWindowControllerProvider).showWindow(existing);
+    } else if (AccountSetupWindowController.instance != null) {
+      AccountSetupWindowController.instance!.showWindow(existing);
+    }
   }
 
   @override

@@ -40,12 +40,29 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
   String? registrationError;
 
   bool _isClosing = false;
+  bool _isWindowReady = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.existing != null) {
-      final e = widget.existing!;
+    _loadAccountData(widget.existing);
+
+    // Set window size and center using bitsdojo_window
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      appWindow.minSize = const Size(400, 600);
+      appWindow.size = const Size(450, 650);
+      appWindow.alignment = Alignment.center;
+      appWindow.title =
+          widget.existing == null ? 'Add SIP Account' : 'Edit Account';
+    });
+
+    // Set up window method handler
+    _setupWindowHandler();
+  }
+
+  void _loadAccountData(AccountSchema? existing) {
+    if (existing != null) {
+      final e = existing;
       nameCtrl.text = e.accountName;
       displayCtrl.text = e.displayName;
       serverCtrl.text = e.server;
@@ -59,26 +76,68 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
       turnCtrl.text = e.turnServer;
       autoRegister = e.autoRegister;
       srtpEnabled = e.srtpEnabled;
+    } else {
+      // Clear all fields for new account
+      nameCtrl.clear();
+      displayCtrl.clear();
+      serverCtrl.clear();
+      userCtrl.clear();
+      passCtrl.clear();
+      authUserCtrl.clear();
+      domainCtrl.clear();
+      proxyCtrl.clear();
+      stunCtrl.clear();
+      turnCtrl.clear();
+      transport = 'udp';
+      autoRegister = true;
+      srtpEnabled = false;
     }
-
-    // Set window size and center using bitsdojo_window
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      appWindow.minSize = const Size(400, 600);
-      appWindow.size = const Size(450, 650);
-      appWindow.alignment = Alignment.center;
-      appWindow.title =
-          widget.existing == null ? 'Add SIP Account' : 'Edit Account';
-    });
-    
-    // Set up window method handler for close requests (non-blocking)
-    // Don't await - let it initialize in background
-    _setupWindowHandler();
   }
 
   void _setupWindowHandler() {
-    // Fire and forget - handler will be ready before any close request
-    widget.windowController.initWindowMethodHandler().catchError((e) {
+    widget.windowController.initWindowMethodHandler().then((_) {
+      setState(() => _isWindowReady = true);
+      // Notify main window that we're ready
+      widget.windowController.invokeMethod('windowReady', '').catchError((e) {
+        debugPrint('[AccountSetupWindow] Error sending windowReady: $e');
+      });
+    }).catchError((e) {
       debugPrint('[AccountSetupWindow] Handler setup error: $e');
+    });
+
+    // Listen for setContent method
+    final channel = WindowMethodChannel(
+      'mixin.one/window_controller/${widget.windowController.windowId}',
+    );
+    
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'setContent') {
+        final args = jsonDecode(call.arguments as String) as Map<String, dynamic>;
+        final existingJson = args['existing'] as Map<String, dynamic>?;
+        final existing = existingJson != null 
+            ? AccountSchema.fromJson(existingJson) 
+            : null;
+        
+        setState(() {
+          _loadAccountData(existing);
+          registrationError = null;
+          isRegistering = false;
+        });
+
+        // Update window title
+        appWindow.title = existing == null ? 'Add SIP Account' : 'Edit Account';
+        
+        // Show window
+        await widget.windowController.show().catchError((e) {
+          debugPrint('[AccountSetupWindow] Error showing window: $e');
+        });
+        
+        return null;
+      } else if (call.method == 'close') {
+        _closeWindow();
+        return null;
+      }
+      return null;
     });
   }
 
@@ -87,7 +146,6 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
     _isClosing = true;
     try {
       debugPrint('[AccountSetupWindow] Closing window');
-      // Use the extension method to close (desktop_multi_window pattern)
       await widget.windowController.closeWindow();
     } catch (e) {
       debugPrint('[AccountSetupWindow] Error closing window: $e');
@@ -117,7 +175,6 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
       theme: AppTheme.dark,
       home: Scaffold(
         backgroundColor: AppTheme.surface,
-        // Native window title is used, so we remove the custom title bar
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
