@@ -14,18 +14,116 @@ final historyListProvider = FutureProvider<List<CallHistorySchema>>((ref) {
   return isar.callHistorySchemas.where().sortByTimestampDesc().findAll();
 });
 
-class HistoryScreen extends ConsumerWidget {
+/// Provider for call statistics
+final callStatsProvider = FutureProvider<CallStats>((ref) {
+  final isar = ref.read(accountServiceProvider).isar;
+  if (isar == null) {
+    return CallStats.empty();
+  }
+  
+  // Get all history entries from the last 30 days
+  final now = DateTime.now();
+  final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+  
+  return isar.callHistorySchemas.filter().timestampGreaterThan(thirtyDaysAgo).findAll().then((history) {
+    int totalCalls = history.length;
+    int incomingCalls = 0;
+    int outgoingCalls = 0;
+    int answeredCalls = 0;
+    int missedCalls = 0;
+    int totalDurationSecs = 0;
+    
+    for (final entry in history) {
+      final isOutgoing = entry.direction.toLowerCase() == 'outgoing';
+      final isAnswered = entry.result == 'Answered';
+      
+      if (isOutgoing) {
+        outgoingCalls++;
+      } else {
+        incomingCalls++;
+      }
+      
+      if (isAnswered) {
+        answeredCalls++;
+        totalDurationSecs += entry.durationSeconds;
+      } else {
+        missedCalls++;
+      }
+    }
+    
+    return CallStats(
+      totalCalls: totalCalls,
+      incomingCalls: incomingCalls,
+      outgoingCalls: outgoingCalls,
+      answeredCalls: answeredCalls,
+      missedCalls: missedCalls,
+      totalDurationSecs: totalDurationSecs,
+    );
+  });
+});
+
+/// Call statistics data class
+class CallStats {
+  final int totalCalls;
+  final int incomingCalls;
+  final int outgoingCalls;
+  final int answeredCalls;
+  final int missedCalls;
+  final int totalDurationSecs;
+  
+  const CallStats({
+    required this.totalCalls,
+    required this.incomingCalls,
+    required this.outgoingCalls,
+    required this.answeredCalls,
+    required this.missedCalls,
+    required this.totalDurationSecs,
+  });
+  
+  factory CallStats.empty() {
+    return const CallStats(
+      totalCalls: 0,
+      incomingCalls: 0,
+      outgoingCalls: 0,
+      answeredCalls: 0,
+      missedCalls: 0,
+      totalDurationSecs: 0,
+    );
+  }
+  
+  String get formattedTotalDuration {
+    final hours = totalDurationSecs ~/ 3600;
+    final minutes = (totalDurationSecs % 3600) ~/ 60;
+    final seconds = totalDurationSecs % 60;
+    if (hours > 0) {
+      return '${hours}h ${minutes}m';
+    } else if (minutes > 0) {
+      return '${minutes}m ${seconds}s';
+    } else {
+      return '${seconds}s';
+    }
+  }
+}
+
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  @override
+  Widget build(BuildContext context) {
     final historyAsync = ref.watch(historyListProvider);
+    final statsAsync = ref.watch(callStatsProvider);
 
     // Refresh when engine events indicate a change
     ref.listen(engineEventsProvider, (prev, next) {
       final type = next.value?['type'];
       if (type == 'CallHistoryResult' || type == 'CallStateChanged') {
         ref.invalidate(historyListProvider);
+        ref.invalidate(callStatsProvider);
       }
     });
 
@@ -42,30 +140,130 @@ class HistoryScreen extends ConsumerWidget {
               if (isar != null) {
                 await isar.writeTxn(() => isar.callHistorySchemas.clear());
                 ref.invalidate(historyListProvider);
+                ref.invalidate(callStatsProvider);
               }
             },
           ),
         ],
       ),
-      body: historyAsync.when(
-        data: (history) => history.isEmpty
-            ? _buildEmptyState()
-            : ListView.builder(
-                padding: const EdgeInsets.all(10),
-                itemCount: history.length,
-                itemBuilder: (_, i) => _HistoryCard(entry: history[i]),
-              ),
-        loading: () => Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor:
-                AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.6)),
+      body: Column(
+        children: [
+          // Call Statistics Summary
+          statsAsync.when(
+            data: (stats) => _buildStatsSummary(stats),
+            loading: () => const SizedBox.shrink(),
+            error: (err, _) => const SizedBox.shrink(),
           ),
+          // History list
+          Expanded(
+            child: historyAsync.when(
+              data: (history) => history.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(10),
+                      itemCount: history.length,
+                      itemBuilder: (_, i) => _HistoryCard(entry: history[i]),
+                    ),
+              loading: () => Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor:
+                      AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.6)),
+                ),
+              ),
+              error: (e, _) => Center(
+                child: Text('Error: $e',
+                    style: const TextStyle(color: AppTheme.errorRed)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsSummary(CallStats stats) {
+    if (stats.totalCalls == 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primary.withValues(alpha: 0.15),
+            AppTheme.primary.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        error: (e, _) => Center(
-          child: Text('Error: $e',
-              style: const TextStyle(color: AppTheme.errorRed)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.2),
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights, size: 18, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              const Text(
+                'Last 30 Days',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _StatItem(
+                label: 'Total',
+                value: stats.totalCalls.toString(),
+                color: AppTheme.textPrimary,
+              ),
+              _StatItem(
+                label: 'Incoming',
+                value: stats.incomingCalls.toString(),
+                color: AppTheme.callGreen,
+                icon: Icons.call_received,
+              ),
+              _StatItem(
+                label: 'Outgoing',
+                value: stats.outgoingCalls.toString(),
+                color: AppTheme.primary,
+                icon: Icons.call_made,
+              ),
+              _StatItem(
+                label: 'Answered',
+                value: stats.answeredCalls.toString(),
+                color: AppTheme.accent,
+                icon: Icons.check_circle,
+              ),
+              _StatItem(
+                label: 'Missed',
+                value: stats.missedCalls.toString(),
+                color: AppTheme.errorRed,
+                icon: Icons.call_missed,
+              ),
+              _StatItem(
+                label: 'Duration',
+                value: stats.formattedTotalDuration,
+                color: AppTheme.textSecondary,
+                icon: Icons.schedule,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -97,6 +295,54 @@ class HistoryScreen extends ConsumerWidget {
                   color: AppTheme.textTertiary.withValues(alpha: 0.7))),
         ],
       ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final IconData? icon;
+
+  const _StatItem({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 12, color: color.withValues(alpha: 0.7)),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            color: AppTheme.textTertiary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
