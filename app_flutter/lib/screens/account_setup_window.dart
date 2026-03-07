@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:window_manager/window_manager.dart';
 import '../core/app_theme.dart';
 import '../models/account_schema.dart';
 import '../core/multi_window/window_controller_extension.dart';
@@ -48,12 +50,13 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
     _loadAccountData(widget.existing);
 
     // Set window size and center using bitsdojo_window
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       appWindow.minSize = const Size(400, 600);
       appWindow.size = const Size(450, 650);
       appWindow.alignment = Alignment.center;
-      appWindow.title =
-          widget.existing == null ? 'Add SIP Account' : 'Edit Account';
+      final initialTitle = widget.existing == null ? 'Add SIP Account' : 'Edit Account';
+      await windowManager.setTitle(initialTitle);
+      appWindow.show();
     });
 
     // Set up window method handler
@@ -61,6 +64,7 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
   }
 
   void _loadAccountData(AccountSchema? existing) {
+    debugPrint('[AccountSetupWindow] _loadAccountData called with ${existing == null ? "null" : "existing account: ${existing.accountName}"}');
     if (existing != null) {
       final e = existing;
       nameCtrl.text = e.accountName;
@@ -76,6 +80,7 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
       turnCtrl.text = e.turnServer;
       autoRegister = e.autoRegister;
       srtpEnabled = e.srtpEnabled;
+      debugPrint('[AccountSetupWindow] Loaded account: ${e.accountName}, server: ${e.server}, user: ${e.username}');
     } else {
       // Clear all fields for new account
       nameCtrl.clear();
@@ -95,60 +100,89 @@ class _AccountSetupWindowState extends State<AccountSetupWindow> {
   }
 
   void _setupWindowHandler() {
-    widget.windowController.initWindowMethodHandler().then((_) {
-      setState(() => _isWindowReady = true);
-      // Notify main window that we're ready
-      widget.windowController.invokeMethod('windowReady', '').catchError((e) {
-        debugPrint('[AccountSetupWindow] Error sending windowReady: $e');
-      });
-    }).catchError((e) {
-      debugPrint('[AccountSetupWindow] Handler setup error: $e');
-    });
+    widget.windowController.setWindowMethodHandler((call) async {
+      try {
+        switch (call.method) {
+          case 'window_close':
+            // Directly close - don't invoke method to avoid infinite loop
+            _doCloseWindow();
+            return null;
+          case 'setContent':
+            final args = jsonDecode(call.arguments as String) as Map<String, dynamic>;
+            final existingJson = args['existing'] as Map<String, dynamic>?;
+            final existing = existingJson != null
+                ? AccountSchema.fromJson(existingJson)
+                : null;
 
-    // Listen for setContent method
-    final channel = WindowMethodChannel(
-      'mixin.one/window_controller/${widget.windowController.windowId}',
-    );
-    
-    channel.setMethodCallHandler((call) async {
-      if (call.method == 'setContent') {
-        final args = jsonDecode(call.arguments as String) as Map<String, dynamic>;
-        final existingJson = args['existing'] as Map<String, dynamic>?;
-        final existing = existingJson != null 
-            ? AccountSchema.fromJson(existingJson) 
-            : null;
-        
-        setState(() {
-          _loadAccountData(existing);
-          registrationError = null;
-          isRegistering = false;
-        });
+            final existingLabel = existing != null 
+                ? 'editing "${existing.accountName}"' 
+                : 'new account';
+            debugPrint('[AccountSetupWindow] Received setContent for $existingLabel');
 
-        // Update window title
-        appWindow.title = existing == null ? 'Add SIP Account' : 'Edit Account';
-        
-        // Show window
-        await widget.windowController.show().catchError((e) {
-          debugPrint('[AccountSetupWindow] Error showing window: $e');
-        });
-        
-        return null;
-      } else if (call.method == 'close') {
-        _closeWindow();
-        return null;
+            setState(() {
+              _loadAccountData(existing);
+              registrationError = null;
+              isRegistering = false;
+            });
+
+            // Update window title
+            final newTitle = existing == null ? 'Add SIP Account' : 'Edit Account';
+            await windowManager.setTitle(newTitle);
+            debugPrint('[AccountSetupWindow] Window title set to: $newTitle');
+
+            // Show window
+            await widget.windowController.show().catchError((e) {
+              debugPrint('[AccountSetupWindow] Error showing window: $e');
+            });
+
+            // Notify main window that we're ready
+            if (!_isWindowReady) {
+              _isWindowReady = true;
+              widget.windowController.invokeMethod('windowReady', '').catchError((e) {
+                debugPrint('[AccountSetupWindow] Error sending windowReady: $e');
+              });
+            }
+            return null;
+          default:
+            throw MissingPluginException('Not implemented: ${call.method}');
+        }
+      } catch (e) {
+        debugPrint('[AccountSetupWindow] Handler error: $e');
+        rethrow;
       }
-      return null;
     });
+  }
+
+  void _doCloseWindow() {
+    if (_isClosing) return;
+    _isClosing = true;
+    debugPrint('[AccountSetupWindow] Closing window directly');
+    // Close directly using windowManager to avoid IPC loop
+    windowManager.close();
   }
 
   void _closeWindow() async {
     if (_isClosing) return;
     _isClosing = true;
     try {
-      debugPrint('[AccountSetupWindow] Closing window');
-      await widget.windowController.closeWindow();
+      debugPrint('[AccountSetupWindow] Closing window via IPC');
+      // Notify main window we're closing, then close ourselves
+      await widget.windowController.invokeMethod('close', '').timeout(
+        const Duration(milliseconds: 500),
+        onTimeout: () {
+          debugPrint('[AccountSetupWindow] Timeout on close IPC, closing directly');
+        },
+      ).catchError((e) {
+        debugPrint('[AccountSetupWindow] Error in close IPC: $e');
+      });
+      // Close ourselves after a brief delay to let main window process the close
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (_isClosing) {
+        _doCloseWindow();
+      }
     } catch (e) {
       debugPrint('[AccountSetupWindow] Error closing window: $e');
+      _doCloseWindow();
     }
   }
 

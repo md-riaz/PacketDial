@@ -349,8 +349,12 @@ extern "C" {
     fn pd_call_complete_xfer(call_a: i32, call_b: i32) -> i32;
     fn pd_call_merge_conference(call_a: i32, call_b: i32) -> i32;
     fn pd_acc_set_forward(acc_id: i32, fwd_uri: *const c_char, fwd_flags: i32) -> i32;
-    fn pd_acc_get_forward(acc_id: i32, fwd_uri_buf: *mut c_char, fwd_uri_len: i32,
-                           fwd_flags_out: *mut i32) -> i32;
+    fn pd_acc_get_forward(
+        acc_id: i32,
+        fwd_uri_buf: *mut c_char,
+        fwd_uri_len: i32,
+        fwd_flags_out: *mut i32,
+    ) -> i32;
     fn pd_acc_set_dnd(acc_id: i32, enabled: i32) -> i32;
     fn pd_blf_subscribe(acc_id: i32, uris: *const *const c_char, count: i32) -> i32;
     fn pd_blf_unsubscribe(acc_id: i32) -> i32;
@@ -728,18 +732,17 @@ extern "C" fn pjsip_on_transfer_status(
         LogLevel::Info,
         &format!(
             "Call {} transfer status: {} {} (final={})",
-            call_id, status_code, reason, is_final != 0
+            call_id,
+            status_code,
+            reason,
+            is_final != 0
         ),
     );
 }
 
 /// PJSIP BLF/Presence notification callback.
 /// Notifies the Dart/Flutter UI about presence state changes.
-extern "C" fn pjsip_on_blf_status(
-    uri_ptr: *const c_char,
-    state: i32,
-    activity_ptr: *const c_char,
-) {
+extern "C" fn pjsip_on_blf_status(uri_ptr: *const c_char, state: i32, activity_ptr: *const c_char) {
     let uri = if uri_ptr.is_null() {
         String::new()
     } else {
@@ -1414,13 +1417,13 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         if pj_call_id < 0 {
             // pd_call_make returns negated PJSIP/PJMEDIA/Windows status codes
             let status = -pj_call_id;
-            
+
             // Log the exact status code for debugging
             log_engine(
                 LogLevel::Debug,
                 &format!("CallStart: pd_call_make returned status={}", status),
             );
-            
+
             // Check for specific error codes
             let error_code = match status {
                 // Device ID out of range error (Windows MMSYSERR or PJSIP audio device error)
@@ -1460,7 +1463,10 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
                 171000..=171999 => {
                     log_engine(
                         LogLevel::Error,
-                        &format!("CallStart: network/transport error for uri={uri} (status={})", status),
+                        &format!(
+                            "CallStart: network/transport error for uri={uri} (status={})",
+                            status
+                        ),
                     );
                     EngineErrorCode::InternalError
                 }
@@ -1919,7 +1925,10 @@ fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
 
     log_engine(
         LogLevel::Info,
-        &format!("Setting forwarding for {}: {} (flags={})", account_id, fwd_uri, fwd_flags),
+        &format!(
+            "Setting forwarding for {}: {} (flags={})",
+            account_id, fwd_uri, fwd_flags
+        ),
     );
 
     {
@@ -2003,7 +2012,11 @@ fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
 
     log_engine(
         LogLevel::Info,
-        &format!("Setting DND for {}: {}", account_id, if enabled { "ON" } else { "OFF" }),
+        &format!(
+            "Setting DND for {}: {}",
+            account_id,
+            if enabled { "ON" } else { "OFF" }
+        ),
     );
 
     {
@@ -2033,7 +2046,8 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let uris = match p["uris"].as_array() {
-        Some(arr) => arr.iter()
+        Some(arr) => arr
+            .iter()
             .filter_map(|v| v.as_str().map(|s| s.to_owned()))
             .collect::<Vec<_>>(),
         None => return EngineErrorCode::InvalidJson,
@@ -2045,7 +2059,11 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
 
     log_engine(
         LogLevel::Info,
-        &format!("Subscribing to BLF for {} URIs on account {}", uris.len(), account_id),
+        &format!(
+            "Subscribing to BLF for {} URIs on account {}",
+            uris.len(),
+            account_id
+        ),
     );
 
     {
@@ -2053,14 +2071,14 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
         if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
             if let Some(pj_acc_id) = acc.pjsip_acc_id {
                 // Create C string array
-                let c_strings: Vec<CString> = uris.iter()
+                let c_strings: Vec<CString> = uris
+                    .iter()
                     .filter_map(|uri| CString::new(uri.as_str()).ok())
                     .collect();
-                let c_ptrs: Vec<*const c_char> = c_strings.iter()
-                    .map(|s| s.as_ptr())
-                    .collect();
+                let c_ptrs: Vec<*const c_char> = c_strings.iter().map(|s| s.as_ptr()).collect();
 
-                let rc = unsafe { pd_blf_subscribe(pj_acc_id, c_ptrs.as_ptr(), c_ptrs.len() as i32) };
+                let rc =
+                    unsafe { pd_blf_subscribe(pj_acc_id, c_ptrs.as_ptr(), c_ptrs.len() as i32) };
                 if rc != 0 {
                     log_engine(LogLevel::Error, &format!("BLF subscribe failed: {}", rc));
                     return EngineErrorCode::InternalError;
@@ -2265,7 +2283,11 @@ fn cmd_account_get_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
     push_event(format!(
         r#"{{"type":"CodecPriorityResult","payload":{{"account_id":"{}","codec_priorities":{}}}}}"#,
         account_id,
-        if codec_priorities.is_empty() { "[]" } else { &codec_priorities }
+        if codec_priorities.is_empty() {
+            "[]"
+        } else {
+            &codec_priorities
+        }
     ));
     EngineErrorCode::Ok
 }
@@ -2293,7 +2315,9 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
                     Ok(s) => s,
                     Err(_) => return EngineErrorCode::InvalidUtf8,
                 };
-                let rc = unsafe { pd_acc_set_codec(pj_acc_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 }) };
+                let rc = unsafe {
+                    pd_acc_set_codec(pj_acc_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 })
+                };
                 if rc != 0 {
                     return EngineErrorCode::NotFound;
                 }
@@ -2303,7 +2327,9 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
 
     push_event(format!(
         r#"{{"type":"CodecUpdated","payload":{{"account_id":"{}","codec_id":"{}","enabled":{}}}}}"#,
-        account_id, codec_id, if enabled { "true" } else { "false" }
+        account_id,
+        codec_id,
+        if enabled { "true" } else { "false" }
     ));
     EngineErrorCode::Ok
 }
@@ -2327,7 +2353,9 @@ fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
         let accounts = ACCOUNTS.lock().unwrap();
         if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
             if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let rc = unsafe { pd_acc_set_auto_answer(pj_acc_id, if enabled { 1 } else { 0 }, delay_ms) };
+                let rc = unsafe {
+                    pd_acc_set_auto_answer(pj_acc_id, if enabled { 1 } else { 0 }, delay_ms)
+                };
                 if rc != 0 {
                     return EngineErrorCode::InternalError;
                 }
@@ -2337,7 +2365,9 @@ fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
 
     push_event(format!(
         r#"{{"type":"AutoAnswerUpdated","payload":{{"account_id":"{}","enabled":{},"delay_ms":{}}}}}"#,
-        account_id, if enabled { "true" } else { "false" }, delay_ms
+        account_id,
+        if enabled { "true" } else { "false" },
+        delay_ms
     ));
     EngineErrorCode::Ok
 }
@@ -2355,7 +2385,8 @@ fn cmd_account_get_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
             if let Some(pj_acc_id) = acc.pjsip_acc_id {
                 let mut enabled_out: i32 = 0;
                 let mut delay_out: i32 = 0;
-                let rc = unsafe { pd_acc_get_auto_answer(pj_acc_id, &mut enabled_out, &mut delay_out) };
+                let rc =
+                    unsafe { pd_acc_get_auto_answer(pj_acc_id, &mut enabled_out, &mut delay_out) };
                 if rc == 0 {
                     (enabled_out != 0, delay_out)
                 } else {
@@ -2371,7 +2402,9 @@ fn cmd_account_get_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
 
     push_event(format!(
         r#"{{"type":"AutoAnswerResult","payload":{{"account_id":"{}","enabled":{},"delay_ms":{}}}}}"#,
-        account_id, if enabled { "true" } else { "false" }, delay_ms
+        account_id,
+        if enabled { "true" } else { "false" },
+        delay_ms
     ));
     EngineErrorCode::Ok
 }
@@ -2476,32 +2509,69 @@ fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
     push_event(format!(
         r#"{{"type":"AccountConfigExported","payload":{{"account_id":"{}","config":{}}}}}"#,
         account_id,
-        if config_json.is_empty() { "{}" } else { &config_json }
+        if config_json.is_empty() {
+            "{}"
+        } else {
+            &config_json
+        }
     ));
     EngineErrorCode::Ok
 }
 
 /// Import account configuration.
 fn cmd_account_import_config(p: &serde_json::Value) -> EngineErrorCode {
-    let _config = match p["config"].as_str() {
-        Some(s) => s.to_owned(),
+    let config = match p["config"].as_str() {
+        Some(s) => s,
         None => return EngineErrorCode::InvalidJson,
     };
-    
-    /* TODO: Implement account import */
-    push_event(r#"{"type":"AccountConfigImported","payload":{"success":false,"error":"Not implemented"}}"#.to_string());
+
+    let config_cstr = match CString::new(config) {
+        Ok(s) => s,
+        Err(_) => return EngineErrorCode::InvalidUtf8,
+    };
+
+    let mut new_acc_id: i32 = 0;
+    let rc = unsafe { pd_acc_import_config(config_cstr.as_ptr(), &mut new_acc_id) };
+
+    if rc != 0 {
+        push_event(format!(
+            r#"{{"type":"AccountConfigImported","payload":{{"success":false,"error":"Import failed with code {}"}}}}"#,
+            rc
+        ));
+        return EngineErrorCode::InternalError;
+    }
+
+    push_event(
+        r#"{"type":"AccountConfigImported","payload":{"success":true,"error":null}}"#.to_string(),
+    );
     EngineErrorCode::Ok
 }
 
 /// Delete account profile.
 fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
-    let _uuid = match p["uuid"].as_str() {
-        Some(s) => s.to_owned(),
+    let uuid = match p["uuid"].as_str() {
+        Some(s) => s,
         None => return EngineErrorCode::InvalidJson,
     };
-    
-    /* TODO: Implement profile deletion */
-    push_event(r#"{"type":"AccountProfileDeleted","payload":{"success":false,"error":"Not implemented"}}"#.to_string());
+
+    let uuid_cstr = match CString::new(uuid) {
+        Ok(s) => s,
+        Err(_) => return EngineErrorCode::InvalidUtf8,
+    };
+
+    let rc = unsafe { pd_acc_delete_profile(uuid_cstr.as_ptr()) };
+
+    if rc != 0 {
+        push_event(format!(
+            r#"{{"type":"AccountProfileDeleted","payload":{{"success":false,"error":"Deletion failed with code {}"}}}}"#,
+            rc
+        ));
+        return EngineErrorCode::InternalError;
+    }
+
+    push_event(
+        r#"{"type":"AccountProfileDeleted","payload":{"success":true,"error":null}}"#.to_string(),
+    );
     EngineErrorCode::Ok
 }
 
@@ -2520,7 +2590,7 @@ fn cmd_set_global_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
         Ok(s) => s,
         Err(_) => return EngineErrorCode::InvalidUtf8,
     };
-    
+
     let rc = unsafe { pd_set_global_codec_priority(priorities_cstr.as_ptr()) };
     if rc != 0 {
         return EngineErrorCode::InternalError;
@@ -2534,21 +2604,24 @@ fn cmd_set_global_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
 fn cmd_get_global_codec_priority(_p: &serde_json::Value) -> EngineErrorCode {
     let mut json_buf = vec![0u8; 1024];
     let rc = unsafe {
-        pd_get_global_codec_priority(
-            json_buf.as_mut_ptr() as *mut c_char,
-            json_buf.len() as i32,
-        )
+        pd_get_global_codec_priority(json_buf.as_mut_ptr() as *mut c_char, json_buf.len() as i32)
     };
-    
+
     let codec_priorities = if rc == 0 {
-        String::from_utf8_lossy(&json_buf).trim_end_matches('\0').to_string()
+        String::from_utf8_lossy(&json_buf)
+            .trim_end_matches('\0')
+            .to_string()
     } else {
         String::new()
     };
 
     push_event(format!(
         r#"{{"type":"GlobalCodecPriorityResult","payload":{{"codec_priorities":{}}}}}"#,
-        if codec_priorities.is_empty() { "[]" } else { &codec_priorities }
+        if codec_priorities.is_empty() {
+            "[]"
+        } else {
+            &codec_priorities
+        }
     ));
     EngineErrorCode::Ok
 }
@@ -2576,7 +2649,7 @@ fn cmd_set_global_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
 fn cmd_get_global_dtmf_method(_p: &serde_json::Value) -> EngineErrorCode {
     let mut method_out: i32 = 1; /* Default RFC2833 */
     let rc = unsafe { pd_get_global_dtmf_method(&mut method_out) };
-    
+
     if rc != 0 {
         method_out = 1;
     }
@@ -2606,7 +2679,8 @@ fn cmd_set_global_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
 
     push_event(format!(
         r#"{{"type":"GlobalAutoAnswerUpdated","payload":{{"enabled":{},"delay_ms":{}}}}}"#,
-        if enabled { "true" } else { "false" }, delay_ms
+        if enabled { "true" } else { "false" },
+        delay_ms
     ));
     EngineErrorCode::Ok
 }
@@ -2615,15 +2689,16 @@ fn cmd_set_global_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
 fn cmd_get_global_auto_answer(_p: &serde_json::Value) -> EngineErrorCode {
     let mut enabled_out: i32 = 0;
     let mut delay_out: i32 = 0;
-    
+
     let rc = unsafe { pd_get_global_auto_answer(&mut enabled_out, &mut delay_out) };
-    
+
     let enabled = if rc == 0 { enabled_out != 0 } else { false };
     let delay = if rc == 0 { delay_out } else { 0 };
 
     push_event(format!(
         r#"{{"type":"GlobalAutoAnswerResult","payload":{{"enabled":{},"delay_ms":{}}}}}"#,
-        if enabled { "true" } else { "false" }, delay
+        if enabled { "true" } else { "false" },
+        delay
     ));
     EngineErrorCode::Ok
 }
@@ -3473,7 +3548,10 @@ pub extern "C" fn engine_start_recording(file_path: *const c_char) -> i32 {
             let path_cstr = CString::new(file_path_s.clone()).unwrap();
             let rc = pd_call_start_recording(pjsip_call_id, path_cstr.as_ptr());
             if rc != 0 {
-                log_engine(LogLevel::Error, &format!("Failed to start recording: {}", rc));
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Failed to start recording: {}", rc),
+                );
                 return EngineErrorCode::InternalError as i32;
             }
         }
@@ -3513,7 +3591,7 @@ pub extern "C" fn engine_stop_recording() -> i32 {
         }
 
         // Find the first active call
-        let (call_id, pjsip_call_id) = {
+        let (_call_id, pjsip_call_id) = {
             let calls = CALLS.lock().unwrap();
             let call = calls.iter().find(|c| c.state != CallState::Ended);
             match call {
@@ -3530,7 +3608,10 @@ pub extern "C" fn engine_stop_recording() -> i32 {
         unsafe {
             let rc = pd_call_stop_recording(pjsip_call_id);
             if rc != 0 {
-                log_engine(LogLevel::Error, &format!("Failed to stop recording: {}", rc));
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Failed to stop recording: {}", rc),
+                );
                 return EngineErrorCode::InternalError as i32;
             }
         }
@@ -3538,7 +3619,11 @@ pub extern "C" fn engine_stop_recording() -> i32 {
         // Get call ID for event
         let call_id = {
             let calls = CALLS.lock().unwrap();
-            calls.iter().find(|c| c.state != CallState::Ended).map(|c| c.id).unwrap_or(0)
+            calls
+                .iter()
+                .find(|c| c.state != CallState::Ended)
+                .map(|c| c.id)
+                .unwrap_or(0)
         };
 
         // Emit event
@@ -3596,7 +3681,7 @@ pub extern "C" fn engine_transfer_call(call_id: i32, dest_uri: *const c_char) ->
     if dest_uri.is_null() {
         return EngineErrorCode::InvalidUtf8 as i32;
     }
-    
+
     std::panic::catch_unwind(AssertUnwindSafe(|| {
         let dest_uri_s = match unsafe { CStr::from_ptr(dest_uri) }.to_str() {
             Ok(s) => s,
@@ -3610,7 +3695,8 @@ pub extern "C" fn engine_transfer_call(call_id: i32, dest_uri: *const c_char) ->
         // Find the call
         let pj_call_id = {
             let calls = CALLS.lock().unwrap();
-            calls.iter()
+            calls
+                .iter()
                 .find(|c| c.id == call_id as u32)
                 .and_then(|c| c.pjsip_call_id)
         };
@@ -3621,7 +3707,8 @@ pub extern "C" fn engine_transfer_call(call_id: i32, dest_uri: *const c_char) ->
         };
 
         unsafe { pd_call_transfer(pj_id, dest_uri_s.as_ptr() as *const c_char) }
-    })).unwrap_or(EngineErrorCode::InternalError as i32)
+    }))
+    .unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Start attended transfer - puts call on hold and creates consultation call.
@@ -3632,7 +3719,7 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
     if dest_uri.is_null() {
         return EngineErrorCode::InvalidUtf8 as i32;
     }
-    
+
     std::panic::catch_unwind(AssertUnwindSafe(|| {
         let dest_uri_s = match unsafe { CStr::from_ptr(dest_uri) }.to_str() {
             Ok(s) => s,
@@ -3646,7 +3733,8 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
         // Find the call and its account
         let (pj_call_id, acc_id) = {
             let calls = CALLS.lock().unwrap();
-            calls.iter()
+            calls
+                .iter()
                 .find(|c| c.id == call_id as u32)
                 .map(|c| (c.pjsip_call_id, c.account_id.clone()))
                 .unwrap_or((None, String::new()))
@@ -3657,36 +3745,47 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
             None => return EngineErrorCode::NotFound as i32,
         };
 
-        // Put current call on hold
-        unsafe { pd_call_hold(pj_id, 1) };
-
-        // Find account's PJSIP ID
-        let pj_acc_id = {
-            let accounts = ACCOUNTS.lock().unwrap();
-            accounts.iter()
-                .find(|a| a.uuid == acc_id)
-                .and_then(|a| a.pjsip_acc_id)
-        };
-
-        let acc_id = match pj_acc_id {
-            Some(id) => id,
-            None => return EngineErrorCode::NotFound as i32,
-        };
-
-        // Create consultation call
         let dest_cstr = match CString::new(dest_uri_s) {
             Ok(s) => s,
             Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
         };
 
-        let new_pj_id = unsafe { pd_call_make(acc_id, dest_cstr.as_ptr()) };
-        
+        let new_pj_id = unsafe { pd_call_start_attended_xfer(pj_id, dest_cstr.as_ptr()) };
+
         if new_pj_id < 0 {
             return EngineErrorCode::InternalError as i32;
         }
 
-        new_pj_id
-    })).unwrap_or(EngineErrorCode::InternalError as i32)
+        // --- Create and track the new Rust Call ---
+        let consultation_call_id = NEXT_CALL_ID.fetch_add(1, Ordering::SeqCst);
+        
+        let call = Call {
+            id: consultation_call_id,
+            account_id: acc_id,
+            uri: dest_uri_s.to_owned(),
+            direction: CallDirection::Outgoing,
+            state: CallState::Ringing,
+            muted: false,
+            on_hold: false,
+            started_at: now_secs(),
+            accumulated_active_secs: 0,
+            last_resumed_at: None,
+            pjsip_call_id: Some(new_pj_id),
+            recording_path: None,
+        };
+        
+        push_call_state(&call);
+        CALLS.lock().unwrap().push(call);
+        PJSIP_CALL_MAP.lock().unwrap().insert(new_pj_id, consultation_call_id);
+        
+        log_engine(
+            LogLevel::Info,
+            &format!("Consultation call start: id={consultation_call_id} pj_call={new_pj_id} uri={dest_uri_s}"),
+        );
+
+        consultation_call_id as i32
+    }))
+    .unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Complete attended transfer.
@@ -3702,14 +3801,18 @@ pub extern "C" fn engine_complete_xfer(call_a_id: i32, call_b_id: i32) -> i32 {
             let calls = CALLS.lock().unwrap();
             let call_a = calls.iter().find(|c| c.id == call_a_id as u32);
             let call_b = calls.iter().find(|c| c.id == call_b_id as u32);
-            (call_a.and_then(|c| c.pjsip_call_id), call_b.and_then(|c| c.pjsip_call_id))
+            (
+                call_a.and_then(|c| c.pjsip_call_id),
+                call_b.and_then(|c| c.pjsip_call_id),
+            )
         };
 
         match (pj_a, pj_b) {
             (Some(a), Some(b)) => unsafe { pd_call_complete_xfer(a, b) },
             _ => EngineErrorCode::NotFound as i32,
         }
-    })).unwrap_or(EngineErrorCode::InternalError as i32)
+    }))
+    .unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Merge two calls into conference.
@@ -3725,14 +3828,18 @@ pub extern "C" fn engine_merge_conference(call_a_id: i32, call_b_id: i32) -> i32
             let calls = CALLS.lock().unwrap();
             let call_a = calls.iter().find(|c| c.id == call_a_id as u32);
             let call_b = calls.iter().find(|c| c.id == call_b_id as u32);
-            (call_a.and_then(|c| c.pjsip_call_id), call_b.and_then(|c| c.pjsip_call_id))
+            (
+                call_a.and_then(|c| c.pjsip_call_id),
+                call_b.and_then(|c| c.pjsip_call_id),
+            )
         };
 
         match (pj_a, pj_b) {
             (Some(a), Some(b)) => unsafe { pd_call_merge_conference(a, b) },
             _ => EngineErrorCode::NotFound as i32,
         }
-    })).unwrap_or(EngineErrorCode::InternalError as i32)
+    }))
+    .unwrap_or(EngineErrorCode::InternalError as i32)
 }
 
 /// Request audio device list.

@@ -8,6 +8,7 @@ import '../../contacts_service.dart';
 import '../../app_settings_service.dart';
 import '../../integration_service.dart';
 import '../window_type.dart';
+import '../window_controller_extension.dart';
 
 /// Manages the incoming call popup window lifecycle.
 ///
@@ -138,10 +139,12 @@ class IncomingCallController {
       final id = _popupController!.windowId;
       _isPopupOpen = true;
 
-      // Set up handler for answer/reject commands from the popup using low-level channel
+      // Set up handler for answer/reject commands from the popup
+      final window = WindowController.fromWindowId(id);
+      await window.initWindowMethodHandler();
+
       final channel = WindowMethodChannel(
         'mixin.one/window_controller/$id',
-        mode: ChannelMode.unidirectional,
       );
 
       channel.setMethodCallHandler((call) async {
