@@ -559,22 +559,37 @@ int pd_init(const char *user_agent,
     pj_status_t aud_enum_st = pjsua_enum_aud_devs(infos, &dev_count);
 
     if (aud_enum_st == PJ_SUCCESS && dev_count > 0) {
-        /* Real devices available — try to switch away from the null device */
-        if (g_on_log) {
-            char buf[128];
-            snprintf(buf, sizeof(buf),
-                     "Found %u audio device(s), switching to device 0", dev_count);
-            g_on_log(4, buf);
+        /* Real devices available — try to switch away from the null device.
+         * Find the first suitable input and output devices. */
+        int first_in = -1, first_out = -1;
+        for (unsigned i = 0; i < dev_count; i++) {
+            if (first_in == -1 && infos[i].input_count > 0) first_in = (int)i;
+            if (first_out == -1 && infos[i].output_count > 0) first_out = (int)i;
+            if (first_in != -1 && first_out != -1) break;
         }
-        pj_status_t up_st = pjsua_set_snd_dev(0, 0);
-        if (up_st != PJ_SUCCESS && g_on_log) {
-            char err_msg[256];
-            pj_strerror(up_st, err_msg, sizeof(err_msg));
-            char buf[512];
-            snprintf(buf, sizeof(buf),
-                     "pjsua_set_snd_dev(0,0) failed: %d (%s) — "
-                     "using null device", up_st, err_msg);
-            g_on_log(2, buf);
+
+        if (first_in != -1 && first_out != -1) {
+            if (g_on_log) {
+                char buf[256];
+                snprintf(buf, sizeof(buf),
+                         "Found %u audio device(s), switching to in=%d, out=%d", 
+                         dev_count, first_in, first_out);
+                g_on_log(4, buf);
+            }
+            pj_status_t up_st = pjsua_set_snd_dev(first_in, first_out);
+            if (up_st != PJ_SUCCESS && g_on_log) {
+                char err_msg[256];
+                pj_strerror(up_st, err_msg, sizeof(err_msg));
+                char buf[512];
+                snprintf(buf, sizeof(buf),
+                         "pjsua_set_snd_dev(%d,%d) failed: %d (%s) — "
+                         "using null device", first_in, first_out, up_st, err_msg);
+                g_on_log(2, buf);
+            }
+        } else {
+            if (g_on_log) {
+                g_on_log(2, "No suitable input/output device pair found, staying on null device");
+            }
         }
     } else {
         /* No real devices — null device already set, nothing to do */
@@ -727,10 +742,10 @@ static pj_status_t pd_check_media_ready(void)
                      i, infos[i].name, infos[i].caps);
             g_on_log(4, buf);
         }
-        if (infos[i].caps & PJMEDIA_AUD_DEV_CAP_INPUT_STREAM) {
+        if (infos[i].input_count > 0) {
             has_input = 1;
         }
-        if (infos[i].caps & PJMEDIA_AUD_DEV_CAP_OUTPUT_STREAM) {
+        if (infos[i].output_count > 0) {
             has_output = 1;
         }
         if (has_input && has_output) break;
