@@ -9,7 +9,7 @@ typedef NativeCallback = ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
 
 void main() async {
   // Test with realm specified
-  const server = 'pbx.dev.ipbx.link:5061';
+  const server = 'pbx.dev.ipbx.link:5060';
   const user = '102';
   const pass = '102';
   const domain = 'pbx.dev.ipbx.link';
@@ -70,7 +70,7 @@ void main() async {
     await Future.delayed(const Duration(milliseconds: 500)); // Wait for PJSIP to fully init
     engine.sendCommand('SetLogLevel', jsonEncode({'level': 'debug'}));
 
-    print('>>> AccountUpsert (pbx.dev.ipbx.link:5061, TCP, no TLS)...');
+    print('>>> AccountUpsert (pbx.dev.ipbx.link:5060, TCP, no TLS)...');
     final payload = {
       'uuid': uuid,
       'username': user,

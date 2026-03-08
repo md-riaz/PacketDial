@@ -177,11 +177,20 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     final accountId = activeAccount.uuid;
     final server = activeAccount.server;
 
-    String uri = raw;
+    String uri = raw.trim();
+    if (uri.isEmpty) return;
+
     if (!uri.contains(':')) {
-      uri = server.isNotEmpty ? 'sip:$raw@$server' : 'sip:$raw';
-    } else if (!uri.startsWith('sip:') && !uri.startsWith('sips:')) {
-      uri = 'sip:$raw';
+      // No scheme, add sip: and domain if available
+      uri = server.isNotEmpty ? 'sip:$uri@$server' : 'sip:$uri';
+    } else if (uri.startsWith('sip:') || uri.startsWith('sips:')) {
+      // Has scheme but might be missing domain (e.g. sip:123)
+      if (!uri.contains('@') && server.isNotEmpty) {
+        uri = '$uri@$server';
+      }
+    } else {
+      // Other scheme (e.g. tel:), just prepend sip: if it looks like a number
+      uri = 'sip:$uri';
     }
 
     final rc = EngineChannel.instance.engine.makeCall(accountId, uri);

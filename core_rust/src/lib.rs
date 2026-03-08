@@ -1004,14 +1004,29 @@ fn broadcast_ipc(json: String) {
 }
 
 fn push_reg_state(account_id: &str, state: &RegistrationState) {
-    let (account_name, display_name) = if let Ok(accts) = ACCOUNTS.lock() {
+    let (account_name, display_name, server, username) = if let Ok(accts) = ACCOUNTS.lock() {
         if let Some(a) = accts.iter().find(|a| a.uuid == account_id) {
-            (a.account_name.clone(), a.display_name.clone())
+            (
+                a.account_name.clone(),
+                a.display_name.clone(),
+                a.server.clone(),
+                a.username.clone(),
+            )
         } else {
-            ("".to_owned(), "".to_owned())
+            (
+                "".to_owned(),
+                "".to_owned(),
+                "".to_owned(),
+                "".to_owned(),
+            )
         }
     } else {
-        ("".to_owned(), "".to_owned())
+        (
+            "".to_owned(),
+            "".to_owned(),
+            "".to_owned(),
+            "".to_owned(),
+        )
     };
 
     let reason = match state {
@@ -1019,10 +1034,11 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
         _ => "",
     };
     push_event(format!(
-        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","account_name":"{account_name}","display_name":"{display_name}","state":"{}","reason":"{reason}"}}}}"#,
+        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","account_name":"{account_name}","display_name":"{display_name}","server":"{server}","username":"{username}","state":"{}","reason":"{reason}"}}}}"#,
         state.variant_name()
     ));
 }
+
 
 fn push_call_state(call: &Call) {
     let last_resumed_at_val = call
@@ -1185,6 +1201,23 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             Some(a) => a.clone(),
         }
     };
+
+    if acct_snapshot.tls_enabled {
+        let fail =
+            RegistrationState::Failed("TLS transport is not enabled in this build".to_owned());
+        {
+            let mut accts = ACCOUNTS.lock().unwrap();
+            if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
+                a.reg_state = fail.clone();
+            }
+        }
+        push_reg_state(&id, &fail);
+        log_engine(
+            LogLevel::Warn,
+            &format!("Account '{id}': TLS requested but this PJSIP build has TLS disabled"),
+        );
+        return EngineErrorCode::InternalError;
+    }
 
     // Transition to Registering state and remove any existing PJSIP account
     let old_pj_id = {

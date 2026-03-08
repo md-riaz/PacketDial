@@ -334,11 +334,15 @@ class EngineChannel {
             failureReason: reason,
           );
         } else {
-          accounts[id] = accounts[id]!.copyWith(
+          final existing = accounts[id]!;
+          final newServer = payload['server'] as String? ?? '';
+          final newUsername = payload['username'] as String? ?? '';
+
+          accounts[id] = existing.copyWith(
             accountName: accountName,
             displayName: displayName,
-            server: payload['server'] as String? ?? '',
-            username: payload['username'] as String? ?? '',
+            server: newServer.isNotEmpty ? newServer : existing.server,
+            username: newUsername.isNotEmpty ? newUsername : existing.username,
             registrationState: state,
             failureReason: reason,
           );
