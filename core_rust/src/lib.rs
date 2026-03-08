@@ -1013,20 +1013,10 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
                 a.username.clone(),
             )
         } else {
-            (
-                "".to_owned(),
-                "".to_owned(),
-                "".to_owned(),
-                "".to_owned(),
-            )
+            ("".to_owned(), "".to_owned(), "".to_owned(), "".to_owned())
         }
     } else {
-        (
-            "".to_owned(),
-            "".to_owned(),
-            "".to_owned(),
-            "".to_owned(),
-        )
+        ("".to_owned(), "".to_owned(), "".to_owned(), "".to_owned())
     };
 
     let reason = match state {
@@ -1038,7 +1028,6 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
         state.variant_name()
     ));
 }
-
 
 fn push_call_state(call: &Call) {
     let last_resumed_at_val = call
@@ -1384,7 +1373,7 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
-    
+
     let pjsip_id = {
         let mut accts = ACCOUNTS.lock().unwrap();
         if let Some(acct) = accts.iter_mut().find(|a| a.uuid == id) {
@@ -1409,6 +1398,30 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
+fn normalize_call_target_uri(raw: &str, fallback_domain: Option<&str>) -> String {
+    let trimmed = raw.trim();
+    let domain = fallback_domain.map(str::trim).filter(|d| !d.is_empty());
+
+    if trimmed.starts_with("sip:") || trimmed.starts_with("sips:") {
+        if trimmed.contains('@') {
+            return trimmed.to_owned();
+        }
+        return match domain {
+            Some(d) => format!("{trimmed}@{d}"),
+            None => trimmed.to_owned(),
+        };
+    }
+
+    if trimmed.contains(':') {
+        return format!("sip:{trimmed}");
+    }
+
+    match domain {
+        Some(d) => format!("sip:{trimmed}@{d}"),
+        None => format!("sip:{trimmed}"),
+    }
+}
+
 fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -1427,10 +1440,54 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             }
         }
     };
-    let uri = match p["uri"].as_str() {
-        Some(s) => s.to_owned(),
+    let raw_uri = match p["uri"].as_str() {
+        Some(s) => s.trim().to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
+    if raw_uri.is_empty() {
+        log_engine(LogLevel::Warn, "CallStart: empty URI payload");
+        return EngineErrorCode::InvalidJson;
+    }
+
+    let (pj_acc_id, domain_hint) = {
+        let accts = ACCOUNTS.lock().unwrap();
+        match accts.iter().find(|a| a.uuid == account_id) {
+            Some(a) => {
+                let domain = if !a.domain.trim().is_empty() {
+                    Some(a.domain.trim().to_owned())
+                } else if !a.server.trim().is_empty() {
+                    Some(a.server.trim().to_owned())
+                } else {
+                    None
+                };
+                (a.pjsip_acc_id, domain)
+            }
+            None => (None, None),
+        }
+    };
+
+    let pj_acc_id = match pj_acc_id {
+        Some(id) => id,
+        None => {
+            log_engine(
+                LogLevel::Error,
+                &format!("CallStart: account '{account_id}' not registered with PJSIP"),
+            );
+            return EngineErrorCode::NotFound;
+        }
+    };
+
+    let uri = normalize_call_target_uri(&raw_uri, domain_hint.as_deref());
+    if uri != raw_uri {
+        log_engine(
+            LogLevel::Debug,
+            &format!(
+                "CallStart: normalized target from '{}' to '{}'",
+                raw_uri, uri
+            ),
+        );
+    }
+
     let call_id = NEXT_CALL_ID.fetch_add(1, Ordering::SeqCst);
     log_engine(
         LogLevel::Debug,
@@ -1473,23 +1530,6 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
 
     // --- PJSIP call ---
     {
-        let pj_acc_id = {
-            let accts = ACCOUNTS.lock().unwrap();
-            accts
-                .iter()
-                .find(|a| a.uuid == account_id)
-                .and_then(|a| a.pjsip_acc_id)
-        };
-        let pj_acc_id = match pj_acc_id {
-            Some(id) => id,
-            None => {
-                log_engine(
-                    LogLevel::Error,
-                    &format!("CallStart: account '{account_id}' not registered with PJSIP"),
-                );
-                return EngineErrorCode::NotFound;
-            }
-        };
         let dst = match CString::new(uri.clone()) {
             Ok(s) => s,
             Err(_) => {
@@ -1568,7 +1608,10 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
                 _ => {
                     log_engine(
                         LogLevel::Error,
-                        &format!("CallStart: pd_call_make failed for uri={uri} (status={}).", status),
+                        &format!(
+                            "CallStart: pd_call_make failed for uri={uri} (status={}).",
+                            status
+                        ),
                     );
                     EngineErrorCode::MediaNotReady
                 }
@@ -1957,7 +2000,10 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
         } else {
             log_engine(
                 LogLevel::Info,
-                &format!("AudioSetDevices: applied input={} output={}", input_id, output_id),
+                &format!(
+                    "AudioSetDevices: applied input={} output={}",
+                    input_id, output_id
+                ),
             );
         }
     }
@@ -2049,7 +2095,10 @@ fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2137,7 +2186,10 @@ fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2184,7 +2236,10 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2224,7 +2279,10 @@ fn cmd_blf_unsubscribe(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2260,7 +2318,10 @@ fn cmd_account_set_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2340,7 +2401,10 @@ fn cmd_account_set_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2424,7 +2488,10 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2432,9 +2499,8 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
             Ok(s) => s,
             Err(_) => return EngineErrorCode::InvalidUtf8,
         };
-        let rc = unsafe {
-            pd_acc_set_codec(pj_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 })
-        };
+        let rc =
+            unsafe { pd_acc_set_codec(pj_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 }) };
         if rc != 0 {
             return EngineErrorCode::NotFound;
         }
@@ -2466,13 +2532,14 @@ fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
-        let rc = unsafe {
-            pd_acc_set_auto_answer(pj_id, if enabled { 1 } else { 0 }, delay_ms)
-        };
+        let rc = unsafe { pd_acc_set_auto_answer(pj_id, if enabled { 1 } else { 0 }, delay_ms) };
         if rc != 0 {
             return EngineErrorCode::InternalError;
         }
@@ -2537,7 +2604,10 @@ fn cmd_account_set_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2596,7 +2666,10 @@ fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+        accounts
+            .iter()
+            .find(|a| a.uuid == account_id)
+            .and_then(|a| a.pjsip_acc_id)
     };
 
     let config_json = if let Some(pj_id) = pj_acc_id {
@@ -2693,8 +2766,11 @@ fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
         unsafe { pd_acc_delete_profile(uuid_cstr.as_ptr()) };
     }
 
-    log_engine(LogLevel::Info, &format!("Account '{uuid}' profile deleted from engine"));
-    
+    log_engine(
+        LogLevel::Info,
+        &format!("Account '{uuid}' profile deleted from engine"),
+    );
+
     push_reg_state(&uuid, &RegistrationState::Unregistered);
     push_event(
         r#"{"type":"AccountProfileDeleted","payload":{"success":true,"error":null}}"#.to_string(),
@@ -3401,27 +3477,12 @@ pub extern "C" fn engine_make_call(account_id: *const c_char, number: *const c_c
             return EngineErrorCode::NotInitialized as i32;
         }
 
-        // Format as SIP URI if not already
-        let uri = if number_s.starts_with("sip:") || number_s.starts_with("sips:") {
-            number_s
-        } else {
-            // Extract domain from account_id (user@domain)
-            let domain = match account_id_s.split('@').nth(1) {
-                Some(d) => d,
-                None => {
-                    log_engine(
-                        LogLevel::Error,
-                        "Account has no domain for URI construction",
-                    );
-                    return EngineErrorCode::InternalError as i32;
-                }
-            };
-            format!("sip:{number_s}@{domain}")
-        };
-
         let call_json = serde_json::json!({
             "account_id": account_id_s,
-            "uri": uri,
+            // `cmd_call_start` performs canonical URI normalization
+            // using account context so all clients (Flutter + pd CLI)
+            // share identical dialing behavior.
+            "uri": number_s,
         });
         dispatch_command("CallStart", &call_json) as i32
     }));
@@ -3885,7 +3946,7 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
 
         // --- Create and track the new Rust Call ---
         let consultation_call_id = NEXT_CALL_ID.fetch_add(1, Ordering::SeqCst);
-        
+
         let call = Call {
             id: consultation_call_id,
             account_id: acc_id,
@@ -3900,11 +3961,11 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
             pjsip_call_id: Some(new_pj_id),
             recording_path: None,
         };
-        
+
         push_call_state(&call);
         CALLS.lock().unwrap().push(call);
         PJSIP_CALL_MAP.lock().unwrap().insert(new_pj_id, consultation_call_id);
-        
+
         log_engine(
             LogLevel::Info,
             &format!("Consultation call start: id={consultation_call_id} pj_call={new_pj_id} uri={dest_uri_s}"),

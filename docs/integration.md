@@ -38,7 +38,9 @@ The `pd.exe` tool (found in the `bin/` folder) is your primary tool for automati
 | **Events** | `pd events` | Watch live call states (ringing/answered). |
 
 > [!TIP]
-> **Smart Account Selection**: If you have multiple accounts, `pd dial` will automatically use the one that is currently registered. You don't need to specify which account to use!
+> **Smart Account Selection**: `pd dial` uses the first currently registered account when `--account` is not provided. Use `pd dial --account <uuid> <number>` to force a specific line.
+>
+> **Smart URI Normalization**: `pd dial 127`, `pd dial sip:127`, and `pd dial tel:127` are normalized by the engine to a dialable SIP target using the selected account context.
 
 ---
 

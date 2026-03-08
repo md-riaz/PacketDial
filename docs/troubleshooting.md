@@ -582,6 +582,85 @@ If the Rust DLL is using excessive memory:
 
 ---
 
+## SIP Registration & Call Diagnostics
+
+### Multi-account registration behaves like single-account
+
+**Symptom:**
+- Enabling one account appears to disable another account.
+
+**Quick terminal probe:**
+```powershell
+cd app_flutter
+dart run bin/sip_probe.dart --server <host:port> --username <user> --password <pass> --transport udp --multi-two
+```
+
+**Checks:**
+1. Open Accounts and verify each account's register toggle independently.
+2. Watch `RegistrationStateChanged` events in Diagnostics.
+3. Confirm each registered account appears in the dialer account picker.
+
+**Expected behavior:**
+- Account registration toggles are independent.
+- Preferred/default account selection is separate from registration state.
+
+---
+
+### `pd dial` fails for raw extension/number
+
+**Symptom:**
+- `pd dial 127` fails, while full SIP URI works.
+
+**Quick terminal probe:**
+```powershell
+cd app_flutter
+dart run bin/sip_probe.dart --server <host:port> --username <user> --password <pass> --transport udp --dial 127
+```
+
+**Checks:**
+1. Verify at least one account is currently registered.
+2. Retry with explicit account: `pd dial --account <uuid> 127`.
+3. Inspect engine logs for URI normalization and account selection.
+
+**Expected behavior:**
+- Engine normalizes raw targets (`127`, `sip:127`, `tel:127`) to a SIP dial target using account domain/server context.
+
+---
+
+### Call fails at start with media errors
+
+**Symptom:**
+- Outgoing call returns `rc=7` (MediaNotReady) or similar.
+
+**Checks:**
+1. Open Diagnostics and inspect logs around call start.
+2. Confirm these log lines are present:
+   - `CallStart: audio preflight ...`
+   - `pd_call_make preflight`
+   - `AudioSetDevices: ...` (when device change occurs)
+3. Ensure selected input/output IDs exist in the enumerated device list.
+
+**Expected behavior:**
+- Call start logs include selected device IDs, device names, and validity flags before PJSIP dial attempt.
+
+---
+
+### UDP/TCP transport mismatch
+
+**Symptom:**
+- Registration/call works for one transport but fails for another.
+
+**Checks:**
+1. Verify account `transport` is set correctly (`udp` or `tcp`).
+2. Confirm SIP server/port accepts that transport (for example, some providers use UDP on custom ports).
+3. Re-register the account after transport change.
+
+**Notes:**
+- UDP is the default when transport is not `tcp`.
+- TLS transport is rejected in builds where TLS is disabled.
+
+---
+
 ## Getting Help
 
 If issues persist:

@@ -109,6 +109,32 @@ Logs are masked (credentials redacted) before export.
 
 ---
 
+### SIP Runtime Triage (Registration + Calling)
+
+Use this when debugging account registration, transport issues, and call setup failures:
+
+1. Set engine log level to `Debug` from Diagnostics.
+2. Register one or more accounts and confirm `RegistrationStateChanged` events.
+3. Place a call from Flutter dialer and from CLI (`pd dial ...`) to compare behavior.
+4. Inspect logs for:
+   - `CallStart: normalized target ...`
+   - `CallStart: audio preflight ...`
+   - `pd_call_make preflight`
+5. Verify `selected_input`/`selected_output` IDs in logs exist in `AudioDeviceList`.
+
+This confirms the full chain: Flutter input -> Rust command normalization -> PJSIP media/device preflight.
+
+Terminal-only probes:
+
+```powershell
+cd app_flutter
+# Single account register + call target probe
+dart run bin/sip_probe.dart --server <host:port> --username <user> --password <pass> --transport udp --dial 127
+
+# Two-account registration in one engine session
+dart run bin/sip_probe.dart --server <host:port> --username <user> --password <pass> --transport udp --multi-two
+```
+
 ## Common Workflows
 
 ### Adding a New Command

@@ -151,7 +151,9 @@ class AccountService extends ChangeNotifier {
     timer.cancel();
     await sub.cancel();
     debugPrint('[AccountService] Purging trial account $tempUuid');
-    engine.deleteAccount(tempUuid);
+    final deleteRc = engine.deleteAccount(tempUuid);
+    debugPrint(
+        '[AccountService] Trial account purge AccountDeleteProfile rc=$deleteRc');
 
     return result;
   }
@@ -188,16 +190,6 @@ class AccountService extends ChangeNotifier {
         await isar!.accountSchemas.put(selected);
       }
     });
-
-    // Handle registration change immediately
-    final accounts = await getAllAccounts();
-    for (final a in accounts) {
-      if (a.uuid == uuid) {
-        register(a);
-      } else {
-        unregister(a.uuid);
-      }
-    }
     notifyListeners();
   }
 
@@ -219,14 +211,30 @@ class AccountService extends ChangeNotifier {
   }
 
   Future<void> deleteAccount(String uuid) async {
+    final unregRc = unregister(uuid);
+    final deleteRc = _ref.read(engineProvider).deleteAccount(uuid);
+    debugPrint(
+        '[AccountService] AccountDeleteProfile uuid=$uuid rc=$deleteRc (unregister_rc=$unregRc)');
+
     await isar!.writeTxn(() async {
+      final deleting =
+          await isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
+      final wasSelected = deleting?.isSelected ?? false;
       await isar!.accountSchemas.filter().uuidEqualTo(uuid).deleteAll();
+
+      if (wasSelected) {
+        final fallback = await isar!.accountSchemas.where().findFirst();
+        if (fallback != null) {
+          fallback.isSelected = true;
+          await isar!.accountSchemas.put(fallback);
+        }
+      }
     });
     notifyListeners();
   }
 
   // Registration bridge
-  void register(AccountSchema schema) {
+  int register(AccountSchema schema) {
     final engine = _ref.read(engineProvider);
 
     debugPrint(
@@ -249,13 +257,32 @@ class AccountService extends ChangeNotifier {
       'srtp_enabled': schema.srtpEnabled,
     };
 
-    engine.sendCommand('AccountUpsert', jsonEncode(payload));
-    engine.sendCommand('AccountRegister', jsonEncode({'uuid': schema.uuid}));
+    final safePayload = Map<String, dynamic>.from(payload);
+    safePayload['password'] =
+        (schema.password.isNotEmpty) ? '***' : schema.password;
+    debugPrint(
+        '[AccountService] AccountUpsert payload: ${jsonEncode(safePayload)}');
+
+    final upsertRc = engine.sendCommand('AccountUpsert', jsonEncode(payload));
+    debugPrint(
+        '[AccountService] AccountUpsert uuid=${schema.uuid} rc=$upsertRc');
+    if (upsertRc != 0) {
+      return upsertRc;
+    }
+
+    final regRc = engine.sendCommand(
+        'AccountRegister', jsonEncode({'uuid': schema.uuid}));
+    debugPrint(
+        '[AccountService] AccountRegister uuid=${schema.uuid} rc=$regRc');
+    return regRc;
   }
 
-  void unregister(String uuid) {
+  int unregister(String uuid) {
     final engine = _ref.read(engineProvider);
-    engine.unregister(uuid);
+    final rc =
+        engine.sendCommand('AccountUnregister', jsonEncode({'uuid': uuid}));
+    debugPrint('[AccountService] AccountUnregister uuid=$uuid rc=$rc');
+    return rc;
   }
 
   Future<void> autoRegisterAll() async {
@@ -267,8 +294,13 @@ class AccountService extends ChangeNotifier {
     // Register all accounts that have autoRegister enabled
     for (final acct in all) {
       if (acct.autoRegister) {
-        register(acct);
-        didRegister = true;
+        final rc = register(acct);
+        if (rc == 0) {
+          didRegister = true;
+        } else {
+          debugPrint(
+              '[AccountService] autoRegister failed for ${acct.uuid} rc=$rc');
+        }
       }
     }
 
@@ -276,7 +308,11 @@ class AccountService extends ChangeNotifier {
     // or the first account
     if (!didRegister) {
       final selected = all.where((a) => a.isSelected).firstOrNull ?? all.first;
-      register(selected);
+      final rc = register(selected);
+      if (rc != 0) {
+        debugPrint(
+            '[AccountService] fallback autoRegister failed for ${selected.uuid} rc=$rc');
+      }
     }
   }
 

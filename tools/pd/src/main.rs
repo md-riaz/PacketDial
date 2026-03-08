@@ -58,8 +58,7 @@ fn main() {
             let payload = if let Some(acc) = account {
                 json!({ "account_id": acc, "uri": uri })
             } else {
-                // If account is missing, we pick the first one from global ACCOUNTS in DLL
-                // But for now, we'll just send uri and let DLL handle account if it can
+                // Engine selects the first currently registered account.
                 json!({ "uri": uri })
             };
             send_command(&mut stream, "CallStart", payload);

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
 import '../core/account_service.dart';
+import '../core/engine_channel.dart';
+import '../models/account.dart';
 import '../models/account_schema.dart';
 import '../providers/engine_provider.dart';
 import 'account_setup_page.dart';
@@ -186,6 +188,8 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
       final service = ref.read(accountServiceProvider);
       if (value == true) {
         // Try to register this account
+        debugPrint(
+            '[AccountsScreen] Starting registration preflight for ${widget.account.uuid}');
         final result = await service.tryRegister(
           username: widget.account.username,
           password: widget.account.password,
@@ -225,11 +229,66 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
           return;
         }
 
-        // Registration succeeded, set as active
-        await service.setSelectedAccount(widget.account.uuid);
+        final rc = service.register(widget.account);
+        debugPrint('[AccountsScreen] register(${widget.account.uuid}) rc=$rc');
+        if (rc != 0) {
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Registration Command Failed'),
+              content: Text(
+                'Account "${widget.account.accountName}" could not be registered.\n\n'
+                'Engine returned rc=$rc.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
+
+        // Keep a default account selected for UI fallback if none exists yet.
+        final selected = await service.getSelectedAccount();
+        if (selected == null) {
+          await service.setSelectedAccount(widget.account.uuid);
+        }
       } else {
-        // Unregister - set no active account
-        await service.setSelectedAccount('');
+        final rc = service.unregister(widget.account.uuid);
+        debugPrint(
+            '[AccountsScreen] unregister(${widget.account.uuid}) rc=$rc');
+        if (rc != 0 && rc != 6) {
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Unregister Failed'),
+              content: Text(
+                'Account "${widget.account.accountName}" could not be unregistered.\n\n'
+                'Engine returned rc=$rc.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
       }
       if (mounted) {
         ref.invalidate(accountsListProvider);
@@ -306,6 +365,11 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
   @override
   Widget build(BuildContext context) {
     final isSelected = widget.account.isSelected;
+    final registrationState = EngineChannel
+            .instance.accounts[widget.account.uuid]?.registrationState ??
+        RegistrationState.unregistered;
+    final isRegistered = registrationState == RegistrationState.registered ||
+        registrationState == RegistrationState.registering;
 
     return GestureDetector(
       onTap: () => widget.parent._showAccountSetup(widget.account),
@@ -394,8 +458,11 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                 Transform.scale(
                   scale: 0.8,
                   child: Switch(
-                    value: isSelected,
-                    onChanged: _isRegistering ? null : _toggleRegistration,
+                    value: isRegistered,
+                    onChanged: (_isRegistering ||
+                            registrationState == RegistrationState.registering)
+                        ? null
+                        : _toggleRegistration,
                     activeThumbColor: AppTheme.callGreen,
                   ),
                 ),

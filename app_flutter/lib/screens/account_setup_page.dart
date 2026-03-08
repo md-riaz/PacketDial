@@ -478,7 +478,16 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
         ..isSelected = widget.existing?.isSelected ?? false;
 
       await service.saveAccount(schema);
-      service.register(schema);
+      final rc = service.register(schema);
+      if (rc != 0) {
+        if (!mounted) return;
+        setState(() {
+          isRegistering = false;
+          registrationError =
+              'Account saved but registration command failed (rc=$rc).';
+        });
+        return;
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop(true);

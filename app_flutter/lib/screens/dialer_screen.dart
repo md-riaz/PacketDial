@@ -140,6 +140,34 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
     final hasInput = audioDevices.any((d) => d.isInput);
     final hasOutput = audioDevices.any((d) => d.isOutput);
+    final selectedInputId = EngineChannel.instance.selectedInputId;
+    final selectedOutputId = EngineChannel.instance.selectedOutputId;
+    AudioDevice? selectedInput;
+    AudioDevice? selectedOutput;
+    for (final device in audioDevices) {
+      if (selectedInput == null &&
+          device.id == selectedInputId &&
+          device.isInput) {
+        selectedInput = device;
+      }
+      if (selectedOutput == null &&
+          device.id == selectedOutputId &&
+          device.isOutput) {
+        selectedOutput = device;
+      }
+    }
+
+    final registeredCount = EngineChannel.instance.accounts.values
+        .where((a) => a.registrationState == RegistrationState.registered)
+        .length;
+    debugPrint(
+      '[Dialer] Call preflight raw="$raw" selectedAccount=${activeAccount?.uuid ?? "<none>"} '
+      'activeAccountState=${activeAccountState?.registrationState.name ?? "<none>"} '
+      'registered_accounts=$registeredCount audio_entries=${audioDevices.length} '
+      'has_input=$hasInput has_output=$hasOutput '
+      'selected_input=$selectedInputId(${selectedInput?.name ?? "<missing>"}) '
+      'selected_output=$selectedOutputId(${selectedOutput?.name ?? "<missing>"})',
+    );
 
     // Warn about missing audio devices first
     if (!hasInput || !hasOutput) {
@@ -177,8 +205,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     final accountId = activeAccount.uuid;
     final server = activeAccount.server;
 
-    String uri = raw.trim();
-    if (uri.isEmpty) return;
+    final originalTarget = raw.trim();
+    String uri = originalTarget;
+    if (uri.isEmpty) {
+      debugPrint('[Dialer] _executeCall aborted: empty dial target');
+      return;
+    }
 
     if (!uri.contains(':')) {
       // No scheme, add sip: and domain if available
@@ -193,7 +225,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       uri = 'sip:$uri';
     }
 
+    debugPrint(
+        '[Dialer] makeCall account=$accountId normalized_target="$uri" (raw="$originalTarget")');
     final rc = EngineChannel.instance.engine.makeCall(accountId, uri);
+    debugPrint('[Dialer] makeCall rc=$rc');
     if (rc != 0) {
       if (rc == 7) {
         // MediaNotReady - offer bypass
