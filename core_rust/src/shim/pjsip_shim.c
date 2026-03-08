@@ -133,6 +133,114 @@ static void safe_copy(char *dst, int dst_len, const char *src)
     dst[dst_len - 1] = '\0';
 }
 
+static void pd_log_audio_state(const char *prefix)
+{
+    if (!g_on_log) return;
+
+    pjmedia_aud_dev_info infos[64];
+    unsigned count = 64;
+    pj_status_t enum_st = pjsua_enum_aud_devs(infos, &count);
+    int cap = -1, play = -1;
+    pj_status_t snd_st = pjsua_get_snd_dev(&cap, &play);
+    char err_msg[256];
+    char buf[512];
+
+    if (enum_st != PJ_SUCCESS) {
+        pj_strerror(enum_st, err_msg, sizeof(err_msg));
+        snprintf(buf, sizeof(buf),
+                 "%s: audio enum failed status=%d (%s)",
+                 prefix, (int)enum_st, err_msg);
+        g_on_log(2, buf);
+        return;
+    }
+
+    if (snd_st != PJ_SUCCESS) {
+        pj_strerror(snd_st, err_msg, sizeof(err_msg));
+        snprintf(buf, sizeof(buf),
+                 "%s: get_snd_dev failed status=%d (%s), enumerated=%u",
+                 prefix, (int)snd_st, err_msg, count);
+        g_on_log(2, buf);
+    } else {
+        snprintf(buf, sizeof(buf),
+                 "%s: enumerated=%u selected capture=%d playback=%d",
+                 prefix, count, cap, play);
+        g_on_log(3, buf);
+    }
+
+    for (unsigned i = 0; i < count; ++i) {
+        snprintf(buf, sizeof(buf),
+                 "%s: device[%u] name='%s' in=%u out=%u caps=0x%x%s%s",
+                 prefix, i, infos[i].name, infos[i].input_count,
+                 infos[i].output_count, infos[i].caps,
+                 ((int)i == cap) ? " [selected-capture]" : "",
+                 ((int)i == play) ? " [selected-playback]" : "");
+        g_on_log(4, buf);
+    }
+}
+
+static pj_bool_t pd_audio_device_exists(unsigned target_id, pj_bool_t require_input,
+                                        pj_bool_t require_output, const char *prefix)
+{
+    pjmedia_aud_dev_info infos[64];
+    unsigned count = 64;
+    pj_status_t st = pjsua_enum_aud_devs(infos, &count);
+
+    if (st != PJ_SUCCESS) {
+        if (g_on_log) {
+            char err_msg[256];
+            char buf[512];
+            pj_strerror(st, err_msg, sizeof(err_msg));
+            snprintf(buf, sizeof(buf),
+                     "%s: unable to validate device id=%u status=%d (%s)",
+                     prefix, target_id, (int)st, err_msg);
+            g_on_log(2, buf);
+        }
+        return PJ_FALSE;
+    }
+
+    if (target_id >= count) {
+        if (g_on_log) {
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "%s: device id=%u is out of range (count=%u)",
+                     prefix, target_id, count);
+            g_on_log(2, buf);
+        }
+        return PJ_FALSE;
+    }
+
+    if (require_input && infos[target_id].input_count == 0) {
+        if (g_on_log) {
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "%s: device id=%u ('%s') has no input channels",
+                     prefix, target_id, infos[target_id].name);
+            g_on_log(2, buf);
+        }
+        return PJ_FALSE;
+    }
+
+    if (require_output && infos[target_id].output_count == 0) {
+        if (g_on_log) {
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "%s: device id=%u ('%s') has no output channels",
+                     prefix, target_id, infos[target_id].name);
+            g_on_log(2, buf);
+        }
+        return PJ_FALSE;
+    }
+
+    if (g_on_log) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "%s: device id=%u ('%s') is valid",
+                 prefix, target_id, infos[target_id].name);
+        g_on_log(4, buf);
+    }
+    return PJ_TRUE;
+}
+
 /* Helper to enumerate accounts - replaces non-existent pjsua_acc_get_id() */
 static int pd_enum_account_ids(pjsua_acc_id *ids, int max_count)
 {
@@ -723,6 +831,7 @@ static pj_status_t pd_check_media_ready(void)
                  "pd_check_media_ready: found %u audio device(s)", dev_count);
         g_on_log(1, buf); /* Level 1 so it's always in diagnostics */
     }
+    pd_log_audio_state("pd_check_media_ready");
 
     /* Need at least one capture and one playback device */
     if (dev_count == 0) {
@@ -765,7 +874,7 @@ static pj_status_t pd_check_media_ready(void)
     }
 
     if (g_on_log) {
-        g_on_log(4, "pd_check_media_ready: media ready (has input and output)");
+        g_on_log(4, "pd_check_media_ready: media readiness checks completed");
     }
     return PJ_SUCCESS;
 }
@@ -818,6 +927,15 @@ int pd_call_make(int acc_id, const char *dst_uri)
 {
     pd_ensure_thread();
 
+    if (g_on_log) {
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+                 "pd_call_make: starting acc_id=%d dst_uri=%s",
+                 acc_id, dst_uri ? dst_uri : "<null>");
+        g_on_log(3, buf);
+    }
+    pd_log_audio_state("pd_call_make preflight");
+
     /* Check media readiness before attempting call */
     pj_status_t media_status = pd_check_media_ready();
     if (media_status != PJ_SUCCESS) {
@@ -844,6 +962,7 @@ int pd_call_make(int acc_id, const char *dst_uri)
             }
             /* Fallback to system default devices (-1, -1) */
             pjsua_set_snd_dev(-1, -1);
+            pd_log_audio_state("pd_call_make after fallback");
             
             /* Retry the call */
             status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
@@ -1154,7 +1273,42 @@ int pd_aud_dev_info(unsigned idx, int *id_out,
 
 int pd_aud_set_devs(int capture_id, int playback_id)
 {
-    return (int)pjsua_set_snd_dev(capture_id, playback_id);
+    pd_ensure_thread();
+
+    if (g_on_log) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "pd_aud_set_devs: requested capture=%d playback=%d",
+                 capture_id, playback_id);
+        g_on_log(3, buf);
+    }
+
+    if (capture_id >= 0 &&
+        !pd_audio_device_exists((unsigned)capture_id, PJ_TRUE, PJ_FALSE, "pd_aud_set_devs")) {
+        return -1;
+    }
+    if (playback_id >= 0 &&
+        !pd_audio_device_exists((unsigned)playback_id, PJ_FALSE, PJ_TRUE, "pd_aud_set_devs")) {
+        return -1;
+    }
+
+    pd_log_audio_state("pd_aud_set_devs before apply");
+    pj_status_t st = pjsua_set_snd_dev(capture_id, playback_id);
+    if (g_on_log) {
+        if (st == PJ_SUCCESS) {
+            g_on_log(3, "pd_aud_set_devs: pjsua_set_snd_dev succeeded");
+        } else {
+            char err_msg[256];
+            char buf[512];
+            pj_strerror(st, err_msg, sizeof(err_msg));
+            snprintf(buf, sizeof(buf),
+                     "pd_aud_set_devs: pjsua_set_snd_dev(%d,%d) failed status=%d (%s)",
+                     capture_id, playback_id, (int)st, err_msg);
+            g_on_log(2, buf);
+        }
+    }
+    pd_log_audio_state("pd_aud_set_devs after apply");
+    return (int)st;
 }
 
 int pd_aud_get_devs(int *capture_id_out, int *playback_id_out)

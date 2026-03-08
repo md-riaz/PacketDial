@@ -1436,6 +1436,40 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         LogLevel::Debug,
         &format!("CallStart: call_id={call_id} uri={uri} account={account_id}"),
     );
+    {
+        let devices = AUDIO_DEVICES.lock().unwrap();
+        let selected_in = SELECTED_INPUT.load(Ordering::Relaxed);
+        let selected_out = SELECTED_OUTPUT.load(Ordering::Relaxed);
+        let input_name = devices
+            .iter()
+            .find(|d| d.id == selected_in && d.kind == AudioDeviceKind::Input)
+            .map(|d| d.name.as_str())
+            .unwrap_or("<missing>");
+        let output_name = devices
+            .iter()
+            .find(|d| d.id == selected_out && d.kind == AudioDeviceKind::Output)
+            .map(|d| d.name.as_str())
+            .unwrap_or("<missing>");
+        let input_valid = devices
+            .iter()
+            .any(|d| d.id == selected_in && d.kind == AudioDeviceKind::Input);
+        let output_valid = devices
+            .iter()
+            .any(|d| d.id == selected_out && d.kind == AudioDeviceKind::Output);
+        log_engine(
+            LogLevel::Info,
+            &format!(
+                "CallStart: audio preflight selected_input={} ('{}', valid={}) selected_output={} ('{}', valid={}) enumerated_entries={}",
+                selected_in,
+                input_name,
+                input_valid,
+                selected_out,
+                output_name,
+                output_valid,
+                devices.len()
+            ),
+        );
+    }
 
     // --- PJSIP call ---
     {
@@ -1884,8 +1918,32 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
     let has_output = devices
         .iter()
         .any(|d| d.id == output_id && d.kind == AudioDeviceKind::Output);
+    let input_name = devices
+        .iter()
+        .find(|d| d.id == input_id && d.kind == AudioDeviceKind::Input)
+        .map(|d| d.name.clone())
+        .unwrap_or_else(|| "<missing>".to_owned());
+    let output_name = devices
+        .iter()
+        .find(|d| d.id == output_id && d.kind == AudioDeviceKind::Output)
+        .map(|d| d.name.clone())
+        .unwrap_or_else(|| "<missing>".to_owned());
     drop(devices);
+    log_engine(
+        LogLevel::Info,
+        &format!(
+            "AudioSetDevices: requested input={} ('{}') output={} ('{}')",
+            input_id, input_name, output_id, output_name
+        ),
+    );
     if !has_input || !has_output {
+        log_engine(
+            LogLevel::Warn,
+            &format!(
+                "AudioSetDevices: validation failed has_input={} has_output={}",
+                has_input, has_output
+            ),
+        );
         return EngineErrorCode::NotFound;
     }
     // Apply to the sound subsystem
@@ -1895,6 +1953,11 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
             log_engine(
                 LogLevel::Warn,
                 &format!("AudioSetDevices: pd_aud_set_devs({input_id}, {output_id}) rc={rc}"),
+            );
+        } else {
+            log_engine(
+                LogLevel::Info,
+                &format!("AudioSetDevices: applied input={} output={}", input_id, output_id),
             );
         }
     }
