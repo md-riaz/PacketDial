@@ -5,7 +5,6 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
   bitsdojo_window_windows
-  desktop_multi_window
   hotkey_manager_windows
   isar_flutter_libs
   local_notifier

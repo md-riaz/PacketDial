@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/app_settings_service.dart';
-import '../core/dialing_rules_service.dart';
 import '../models/dialing_rule.dart';
 import '../models/caller_id_transformation.dart';
 import '../core/app_theme.dart';
@@ -312,7 +311,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: DropdownButtonFormField<String>(
-            value: _settings.screenPopEvent,
+            initialValue: _settings.screenPopEvent,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
             ),

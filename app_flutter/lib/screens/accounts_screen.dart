@@ -4,7 +4,7 @@ import '../core/app_theme.dart';
 import '../core/account_service.dart';
 import '../models/account_schema.dart';
 import '../providers/engine_provider.dart';
-import '../core/multi_window/controllers/account_setup_window_controller.dart';
+import 'account_setup_page.dart';
 
 final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
   return ref.watch(accountServiceProvider).getAllAccounts();
@@ -18,13 +18,17 @@ class AccountsScreen extends ConsumerStatefulWidget {
 }
 
 class _AccountsScreenState extends ConsumerState<AccountsScreen> {
-  void _showAccountDialog([AccountSchema? existing]) {
-    // Use Riverpod provider if available, otherwise use singleton instance
-    if (mounted) {
-      ref.read(accountSetupWindowControllerProvider).showWindow(existing);
-    } else if (AccountSetupWindowController.instance != null) {
-      AccountSetupWindowController.instance!.showWindow(existing);
-    }
+  void _showAccountSetup([AccountSchema? existing]) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AccountSetupPage(existing: existing),
+      ),
+    ).then((saved) {
+      if (saved == true && mounted) {
+        // Refresh account list
+        ref.invalidate(accountsListProvider);
+      }
+    });
   }
 
   @override
@@ -45,7 +49,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
           IconButton(
             icon: const Icon(Icons.add_circle_outline, size: 22),
             tooltip: 'Add Account',
-            onPressed: () => _showAccountDialog(),
+            onPressed: () => _showAccountSetup(),
           ),
         ],
       ),
@@ -100,7 +104,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                   color: AppTheme.textTertiary.withValues(alpha: 0.7))),
           const SizedBox(height: 20),
           FilledButton.icon(
-            onPressed: () => _showAccountDialog(),
+            onPressed: () => _showAccountSetup(),
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Add Account'),
             style: FilledButton.styleFrom(
@@ -117,51 +121,199 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
 }
 
 // ── Account Card ─────────────────────────────────────────────────────────
-class _AccountCard extends ConsumerWidget {
+class _AccountCard extends ConsumerStatefulWidget {
   final AccountSchema account;
   final _AccountsScreenState parent;
   const _AccountCard({required this.account, required this.parent});
 
-  Color _statusColor(AccountSchema a) {
-    if (a.isSelected) return AppTheme.callGreen;
-    return AppTheme.textTertiary;
+  @override
+  ConsumerState<_AccountCard> createState() => _AccountCardState();
+}
+
+class _AccountCardState extends ConsumerState<_AccountCard> {
+  bool _isRegistering = false;
+
+  void _showActionsMenu() {
+    final renderBox = context.findRenderObject() as RenderBox;
+    final offset = renderBox.localToGlobal(Offset.zero);
+    
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx + renderBox.size.width - 40,
+        offset.dy + 10,
+        offset.dx + renderBox.size.width,
+        offset.dy + renderBox.size.height,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, size: 20),
+              SizedBox(width: 8),
+              Text('Edit'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete, size: 20, color: AppTheme.errorRed),
+              SizedBox(width: 8),
+              Text('Delete', style: TextStyle(color: AppTheme.errorRed)),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'edit') {
+        widget.parent._showAccountSetup(widget.account);
+      } else if (value == 'delete') {
+        _deleteAccount();
+      }
+    });
   }
 
-  String _statusLabel(AccountSchema a) {
-    if (a.isSelected) return 'Active';
-    return 'Inactive';
+  Future<void> _toggleRegistration(bool? value) async {
+    if (_isRegistering || value == null) return;
+    setState(() => _isRegistering = true);
+    
+    try {
+      final service = ref.read(accountServiceProvider);
+      if (value == true) {
+        // Try to register this account
+        final result = await service.tryRegister(
+          username: widget.account.username,
+          password: widget.account.password,
+          server: widget.account.server,
+          transport: widget.account.transport,
+          domain: widget.account.domain,
+          proxy: widget.account.sipProxy,
+        );
+        
+        if (!result.success) {
+          // Show error dialog
+          if (!mounted) return;
+          await showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Registration Failed'),
+              content: Text(
+                'Failed to register "${widget.account.accountName}".\n\n'
+                '${result.errorReason}',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          // Reset switch to off state
+          if (mounted) {
+            setState(() {});
+          }
+          return;
+        }
+        
+        // Registration succeeded, set as active
+        await service.setSelectedAccount(widget.account.uuid);
+      } else {
+        // Unregister - set no active account
+        await service.setSelectedAccount('');
+      }
+      if (mounted) {
+        ref.invalidate(accountsListProvider);
+      }
+    } catch (e) {
+      // Show error dialog
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Registration Error'),
+          content: Text(
+            'An error occurred while registering "${widget.account.accountName}".\n\n'
+            '$e',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      if (mounted) {
+        setState(() {});
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRegistering = false);
+      }
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: Text(
+          'Are you sure you want to delete "${widget.account.accountName}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.errorRed),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && mounted) {
+      await ref.read(accountServiceProvider).deleteAccount(widget.account.uuid);
+      ref.invalidate(accountsListProvider);
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isSelected = account.isSelected;
-    final statusColor = _statusColor(account);
+  Widget build(BuildContext context) {
+    final isSelected = widget.account.isSelected;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected
-              ? AppTheme.callGreen.withValues(alpha: 0.3)
-              : AppTheme.border.withValues(alpha: 0.4),
-        ),
-        boxShadow: isSelected
-            ? [
-                BoxShadow(
-                  color: AppTheme.callGreen.withValues(alpha: 0.08),
-                  blurRadius: 12,
-                  spreadRadius: 0,
-                )
-              ]
-            : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return GestureDetector(
+      onTap: () => widget.parent._showAccountSetup(widget.account),
+      onLongPress: _showActionsMenu,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceCard,
           borderRadius: BorderRadius.circular(12),
-          onTap: () => parent._showAccountDialog(account),
+          border: Border.all(
+            color: isSelected
+                ? AppTheme.callGreen.withValues(alpha: 0.3)
+                : AppTheme.border.withValues(alpha: 0.4),
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.callGreen.withValues(alpha: 0.08),
+                    blurRadius: 12,
+                    spreadRadius: 0,
+                  )
+                ]
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Row(
@@ -178,29 +330,14 @@ class _AccountCard extends ConsumerWidget {
                       ),
                       child: Center(
                         child: Text(
-                          account.accountName.isNotEmpty
-                              ? account.accountName[0].toUpperCase()
+                          widget.account.accountName.isNotEmpty
+                              ? widget.account.accountName[0].toUpperCase()
                               : '?',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             color: AppTheme.primary,
                           ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                          border:
-                              Border.all(color: AppTheme.surfaceCard, width: 2),
-                          boxShadow: AppTheme.glowShadow(statusColor, blur: 4),
                         ),
                       ),
                     ),
@@ -213,20 +350,17 @@ class _AccountCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        account.accountName,
+                        widget.account.accountName,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                           color: AppTheme.textPrimary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        account.displayName.isNotEmpty
-                            ? '${account.displayName} (${account.username}@${account.server})'
-                            : '${account.username}@${account.server}',
+                        '${widget.account.username}@${widget.account.server}',
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppTheme.textTertiary,
@@ -236,79 +370,20 @@ class _AccountCard extends ConsumerWidget {
                     ],
                   ),
                 ),
-                // Status badge & actions
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        _statusLabel(account),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!isSelected)
-                          _TinyAction(
-                            icon: Icons.check_circle_outline,
-                            color: AppTheme.accent,
-                            onTap: () async {
-                              await ref
-                                  .read(accountServiceProvider)
-                                  .setSelectedAccount(account.uuid);
-                              ref.invalidate(accountsListProvider);
-                            },
-                          ),
-                        _TinyAction(
-                          icon: Icons.delete_outline,
-                          color: AppTheme.errorRed.withValues(alpha: 0.7),
-                          onTap: () async {
-                            await ref
-                                .read(accountServiceProvider)
-                                .deleteAccount(account.uuid);
-                            ref.invalidate(accountsListProvider);
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
+                // Switch toggle
+                const SizedBox(width: 8),
+                Transform.scale(
+                  scale: 0.8,
+                  child: Switch(
+                    value: isSelected,
+                    onChanged: _isRegistering ? null : _toggleRegistration,
+                    activeThumbColor: AppTheme.callGreen,
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TinyAction extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-  const _TinyAction(
-      {required this.icon, required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Icon(icon, size: 16, color: color),
       ),
     );
   }

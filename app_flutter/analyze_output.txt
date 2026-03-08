@@ -1,0 +1,104 @@
+Package file_picker:linux references file_picker:linux as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: linux: default_package: file_picker` or add an inline implementation to file_picker via `platforms: linux:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:macos references file_picker:macos as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: macos: default_package: file_picker` or add an inline implementation to file_picker via `platforms: macos:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:linux references file_picker:linux as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: linux: default_package: file_picker` or add an inline implementation to file_picker via `platforms: linux:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:macos references file_picker:macos as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: macos: default_package: file_picker` or add an inline implementation to file_picker via `platforms: macos:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
+
+Analyzing app_flutter...                                        
+
+warning - Unused import: 'dart:async' - lib\core\dialing_rules_service.dart:1:8 - unused_import
+warning - Unused import: 'dart:convert' - lib\core\dialing_rules_service.dart:2:8 - unused_import
+warning - Unused import: 'package:flutter/foundation.dart' - lib\core\dialing_rules_service.dart:3:8 - unused_import
+warning - Unused import: 'package:phone_numbers_parser/phone_numbers_parser.dart' - lib\core\dialing_rules_service.dart:4:8 - unused_import
+warning - Unused import: '../models/dialing_rule.dart' - lib\core\dialing_rules_service.dart:5:8 - unused_import
+warning - Unused import: 'package:url_launcher/url_launcher.dart' - lib\core\integration_service.dart:3:8 - unused_import
+warning - Unused import: 'dart:convert' - lib\models\caller_id_transformation.dart:1:8 - unused_import
+warning - Unused import: 'dart:convert' - lib\models\dialing_rule.dart:1:8 - unused_import
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:102:18 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:158:35 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:159:34 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:162:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:179:35 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:180:34 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:183:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:201:35 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:202:34 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:205:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:222:35 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:223:34 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:226:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:243:35 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:244:34 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:247:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:270:41 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:273:43 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:288:39 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:291:41 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:307:39 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:308:40 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:311:41 - prefer_const_constructors
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\account_setup_page.dart:321:25 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:322:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:324:39 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:345:39 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:346:40 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\account_setup_page.dart:349:41 - prefer_const_constructors
+warning - Unused import: 'dart:ui' - lib\screens\accounts_screen.dart:1:8 - unused_import
+warning - The value of the local variable 'statusColor' isn't used - lib\screens\accounts_screen.dart:292:11 - unused_local_variable
+   info - 'activeColor' is deprecated and shouldn't be used. Use activeThumbColor instead. This feature was deprecated after v3.31.0-2.0.pre - lib\screens\accounts_screen.dart:382:21 - deprecated_member_use
+warning - The value of the field '_ringWebhookUrl' isn't used - lib\screens\app_settings_page.dart:33:10 - unused_field
+warning - The value of the field '_endWebhookUrl' isn't used - lib\screens\app_settings_page.dart:34:10 - unused_field
+warning - The value of the field '_clipboardMonitoringEnabled' isn't used - lib\screens\app_settings_page.dart:35:8 - unused_field
+warning - The value of the field '_recordingUploadUrl' isn't used - lib\screens\app_settings_page.dart:36:10 - unused_field
+warning - The value of the field '_recordingFileFieldName' isn't used - lib\screens\app_settings_page.dart:37:10 - unused_field
+warning - The declaration '_buildTextFieldSetting' isn't referenced - lib\screens\app_settings_page.dart:883:10 - unused_element
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\dialer_screen.dart:439:25 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\dialer_screen.dart:440:25 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\dialer_screen.dart:454:25 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre - lib\screens\dialer_screen.dart:455:25 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\screens\history_screen.dart:210:11 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\screens\history_screen.dart:211:23 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\screens\history_screen.dart:212:15 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\history_screen.dart:339:18 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\incoming_call_banner.dart:138:23 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\screens\incoming_call_banner.dart:139:23 - prefer_const_literals_to_create_immutables
+warning - The '!' will have no effect because the receiver can't be null - lib\screens\incoming_call_banner.dart:189:38 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null - lib\screens\incoming_call_banner.dart:190:44 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null - lib\screens\incoming_call_banner.dart:226:40 - unnecessary_non_null_assertion
+warning - Unused import: '../core/dialing_rules_service.dart' - lib\screens\integration_settings_page.dart:4:8 - unused_import
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:217:9 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:235:9 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:290:9 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:308:9 - prefer_const_constructors
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\integration_settings_page.dart:315:13 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:389:9 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:407:9 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\screens\integration_settings_page.dart:464:9 - prefer_const_constructors
+   info - Don't use 'BuildContext's across async gaps - lib\screens\integration_settings_page.dart:651:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\integration_settings_page.dart:713:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\integration_settings_page.dart:737:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\integration_settings_page.dart:799:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\integration_settings_page.dart:861:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\integration_settings_page.dart:885:29 - use_build_context_synchronously
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:155:27 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:156:36 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\widgets\clipboard_popup.dart:158:41 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:168:33 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:170:42 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:229:37 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:232:46 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\widgets\clipboard_popup.dart:234:53 - prefer_const_constructors
+
+82 issues found. (ran in 3.2s)

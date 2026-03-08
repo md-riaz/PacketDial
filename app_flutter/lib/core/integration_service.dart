@@ -1,6 +1,5 @@
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'app_settings_service.dart';
 import 'customer_lookup_service.dart';
 import 'screen_pop_service.dart';

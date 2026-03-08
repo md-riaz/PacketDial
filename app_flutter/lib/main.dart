@@ -8,7 +8,6 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'dart:io';
 import 'dart:async';
 import 'core/app_theme.dart';
@@ -17,7 +16,6 @@ import 'core/engine_channel.dart';
 import 'core/account_service.dart';
 import 'core/contacts_service.dart';
 import 'core/app_settings_service.dart';
-import 'core/multi_window/controllers/incoming_call_controller.dart';
 import 'core/window_prefs.dart';
 import 'models/account_schema.dart';
 import 'models/call_history_schema.dart';
@@ -28,8 +26,7 @@ import 'screens/contacts_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/app_settings_page.dart';
-import 'core/multi_window/window_router.dart';
-import 'core/multi_window/window_type.dart';
+import 'screens/incoming_call_banner.dart';
 import 'core/cli_service.dart';
 import 'core/clipboard_service.dart';
 import 'widgets/clipboard_popup.dart';
@@ -53,29 +50,6 @@ void main(List<String> args) async {
   };
   // ────────────────────────────────────────────────────────────────────────
 
-  // ── Multi-window routing ────────────────────────────────────────────────
-  // If launched as a sub-window, route to the appropriate popup.
-  final windowController = await WindowController.fromCurrentEngine();
-  final windowArgs = windowController.arguments;
-
-  final subWindowApp = WindowRouter.getAppForArgs(windowArgs, windowController);
-  if (subWindowApp != null) {
-    if (windowArgs.startsWith('${WindowType.incomingCall.key}|')) {
-      doWhenWindowReady(() {
-        appWindow.minSize = const Size(320, 240);
-        appWindow.size = const Size(320, 240);
-        appWindow.alignment = Alignment.center;
-        // bitsdojo_window doesn't have a direct "always on top" yet in some versions,
-        // but it handles showing/positioning fine.
-        // If always-on-top is critical, we use native FFI later.
-        appWindow.show();
-      });
-    }
-    runApp(subWindowApp);
-    return;
-  }
-  // ── Main window continues below ────────────────────────────────────────
-
   // Initialize Window Manager
   await windowManager.ensureInitialized();
 
@@ -90,7 +64,7 @@ void main(List<String> args) async {
   await ContactsService.instance.loadContacts();
 
   WindowOptions windowOptions = const WindowOptions(
-    size: Size(360, 760),
+    size: Size(450, 850),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -166,8 +140,8 @@ void main(List<String> args) async {
 
   // Initialize Bitsdojo Window
   doWhenWindowReady(() {
-    const initialSize = Size(360, 760);
-    appWindow.minSize = const Size(320, 700);
+    const initialSize = Size(450, 850);
+    appWindow.minSize = const Size(400, 750);
     appWindow.size = initialSize;
     appWindow.alignment = Alignment.center;
     appWindow.title = "PacketDial";
@@ -211,6 +185,10 @@ class _AppState extends State<App>
   late final Animation<double> _splashFade;
   late final Animation<double> _splashScale;
 
+  // Incoming call banner state
+  Map<String, dynamic>? _incomingCallInfo;
+  StreamSubscription? _callStateSub;
+
   @override
   void initState() {
     super.initState();
@@ -227,7 +205,43 @@ class _AppState extends State<App>
     windowManager.addListener(this);
     // Prevent default close — we handle it in onWindowClose
     windowManager.setPreventClose(true);
+    _initIncomingCallListener();
     _boot();
+  }
+
+  void _initIncomingCallListener() {
+    _callStateSub?.cancel();
+    _callStateSub = EngineChannel.instance.eventStream.listen((event) {
+      final type = event['type'] as String?;
+      final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
+
+      if (type == 'CallStateChanged') {
+        final direction = payload['direction'] as String? ?? '';
+        final state = payload['state'] as String? ?? '';
+
+        // Check DND mode
+        final dndEnabled = AppSettingsService.instance.dndEnabled;
+
+        if (direction == 'Incoming' && state == 'Ringing' && !dndEnabled) {
+          // Show incoming call banner
+          setState(() {
+            _incomingCallInfo = {
+              'uri': payload['uri'] as String? ?? '',
+              'direction': 'Incoming',
+              'account_name': payload['account_name'] as String? ?? 'SIP Account',
+              'account_user': payload['account_user'] as String? ?? '',
+              'extid': payload['extid'] as String? ?? '',
+              'customer_data': payload['customer_data'] as Map<String, dynamic>? ?? {},
+            };
+          });
+        } else if (state == 'InCall' || state == 'Ended') {
+          // Hide banner
+          setState(() {
+            _incomingCallInfo = null;
+          });
+        }
+      }
+    });
   }
 
   Future<void> _boot() async {
@@ -260,10 +274,7 @@ class _AppState extends State<App>
       if (engineOk) {
         await widget.accountService.autoRegisterAll();
 
-        // Initialize incoming call popup controller
-        IncomingCallController.instance.init();
-
-        // Listen for registration failures → auto-show edit dialog
+        // Listen for registration failures → auto-show edit page
         _regFailureSub = EngineChannel.instance.eventStream.listen((event) {
           if (event['type'] == 'RegistrationStateChanged') {
             final payload = event['payload'] as Map<String, dynamic>? ?? {};
@@ -394,6 +405,7 @@ class _AppState extends State<App>
     windowManager.removeListener(this);
     _regFailureSub?.cancel();
     _clipboardSub?.cancel();
+    _callStateSub?.cancel();
     _splashCtrl.dispose();
     ClipboardService.instance.dispose();
     EngineChannel.instance.dispose();
@@ -482,21 +494,39 @@ class _AppState extends State<App>
 
   // ── Main App Shell ──────────────────────────────────────────────────────
   Widget _buildMainShell() {
-    return Scaffold(
-      body: Column(
-        children: [
-          // Custom Title Bar
-          _buildTitleBar(),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: _screens[_selectedIndex],
-            ),
+    return Stack(
+      children: [
+        Scaffold(
+          body: Column(
+            children: [
+              // Custom Title Bar
+              _buildTitleBar(),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: _screens[_selectedIndex],
+                ),
+              ),
+              const CockpitFooter(),
+            ],
           ),
-          const CockpitFooter(),
-        ],
-      ),
-      bottomNavigationBar: _buildNavBar(),
+          bottomNavigationBar: _buildNavBar(),
+        ),
+        // Incoming call banner overlay
+        if (_incomingCallInfo != null)
+          IncomingCallBanner(
+            callInfo: _incomingCallInfo!,
+            onAnswer: () {
+              EngineChannel.instance.engine.answerCall();
+            },
+            onReject: () {
+              EngineChannel.instance.engine.hangup();
+              setState(() {
+                _incomingCallInfo = null;
+              });
+            },
+          ),
+      ],
     );
   }
 

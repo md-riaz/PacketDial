@@ -1,8 +1,3 @@
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:phone_numbers_parser/phone_numbers_parser.dart';
-import '../models/dialing_rule.dart';
 import 'app_settings_service.dart';
 
 /// Service for transforming phone numbers before dialing

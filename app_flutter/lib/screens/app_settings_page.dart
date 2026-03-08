@@ -29,12 +29,12 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   bool _dndEnabled = false;
   bool _blfEnabled = true;
 
-  // Integration state
-  String _ringWebhookUrl = '';
-  String _endWebhookUrl = '';
-  bool _clipboardMonitoringEnabled = false;
-  String _recordingUploadUrl = '';
-  String _recordingFileFieldName = 'recording';
+  // Integration state (loaded but UI not yet implemented)
+  // String _ringWebhookUrl = '';
+  // String _endWebhookUrl = '';
+  // bool _clipboardMonitoringEnabled = false;
+  // String _recordingUploadUrl = '';
+  // String _recordingFileFieldName = 'recording';
 
   @override
   void initState() {
@@ -61,13 +61,14 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       _autoAnswerEnabled = AppSettingsService.instance.autoAnswerEnabled;
       _dndEnabled = AppSettingsService.instance.dndEnabled;
       _blfEnabled = AppSettingsService.instance.blfEnabled;
-      _ringWebhookUrl = AppSettingsService.instance.ringWebhookUrl;
-      _endWebhookUrl = AppSettingsService.instance.endWebhookUrl;
-      _clipboardMonitoringEnabled =
-          AppSettingsService.instance.clipboardMonitoringEnabled;
-      _recordingUploadUrl = AppSettingsService.instance.recordingUploadUrl;
-      _recordingFileFieldName =
-          AppSettingsService.instance.recordingFileFieldName;
+      // Integration settings (UI not yet implemented)
+      // _ringWebhookUrl = AppSettingsService.instance.ringWebhookUrl;
+      // _endWebhookUrl = AppSettingsService.instance.endWebhookUrl;
+      // _clipboardMonitoringEnabled =
+      //     AppSettingsService.instance.clipboardMonitoringEnabled;
+      // _recordingUploadUrl = AppSettingsService.instance.recordingUploadUrl;
+      // _recordingFileFieldName =
+      //     AppSettingsService.instance.recordingFileFieldName;
       _isLoading = false;
     });
   }
@@ -876,63 +877,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextFieldSetting({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String value,
-    required Function(String) onChanged,
-  }) {
-    return Card(
-      color: AppTheme.surfaceCard,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(icon, color: AppTheme.primary, size: 28),
-              title: Text(
-                title,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              subtitle: Text(
-                subtitle,
-                style: const TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 11,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: TextEditingController(text: value)
-                ..selection = TextSelection.fromPosition(
-                  TextPosition(offset: value.length),
-                ),
-              onSubmitted: onChanged,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-              decoration: InputDecoration(
-                isDense: true,
-                filled: true,
-                fillColor: Colors.black26,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                hintText: 'http://example.com/...',
-                hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

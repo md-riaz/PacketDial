@@ -431,39 +431,31 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                       color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                Column(
-                  children: [
-                    ListTile(
-                      leading: Radio<bool>(
-                        value: false,
-                        groupValue: isConsultTransfer,
-                        onChanged: (value) {
-                          setDialogState(() => isConsultTransfer = value!);
-                        },
-                        activeColor: AppTheme.primary,
-                      ),
-                      title: const Text('Blind Transfer',
-                          style: TextStyle(color: AppTheme.textPrimary)),
-                      subtitle: const Text('Transfer immediately without consulting',
-                          style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    ListTile(
-                      leading: Radio<bool>(
-                        value: true,
-                        groupValue: isConsultTransfer,
-                        onChanged: (value) {
-                          setDialogState(() => isConsultTransfer = value!);
-                        },
-                        activeColor: AppTheme.primary,
-                      ),
-                      title: const Text('Consult Transfer',
-                          style: TextStyle(color: AppTheme.textPrimary)),
-                      subtitle: const Text('Speak to target first, then transfer',
-                          style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
+                RadioListTile<bool>(
+                  value: false,
+                  groupValue: isConsultTransfer,
+                  onChanged: (value) {
+                    setDialogState(() => isConsultTransfer = value!);
+                  },
+                  title: const Text('Blind Transfer',
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                  subtitle: const Text('Transfer immediately without consulting',
+                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: AppTheme.primary,
+                ),
+                RadioListTile<bool>(
+                  value: true,
+                  groupValue: isConsultTransfer,
+                  onChanged: (value) {
+                    setDialogState(() => isConsultTransfer = value!);
+                  },
+                  title: const Text('Consult Transfer',
+                      style: TextStyle(color: AppTheme.textPrimary)),
+                  subtitle: const Text('Speak to target first, then transfer',
+                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: AppTheme.primary,
                 ),
               ],
             ),
