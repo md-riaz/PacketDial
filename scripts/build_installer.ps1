@@ -51,6 +51,21 @@ New-Item -ItemType Directory -Path $StagingDir | Out-Null
 # Copy Flutter build output
 Copy-Item -Path "$BuildDir\*" -Destination $StagingDir -Recurse
 
+# Copy app.so (AOT compiled Dart code) to data folder
+$AppSoSrc = "app_flutter\build\windows\app.so"
+$AppSoDest = "$StagingDir\data\app.so"
+if (Test-Path $AppSoSrc) {
+    if (!(Test-Path "$StagingDir\data")) {
+        New-Item -ItemType Directory -Path "$StagingDir\data" | Out-Null
+    }
+    Copy-Item -Path $AppSoSrc -Destination $AppSoDest -Force
+    Write-Host "  ✓ app.so copied successfully" -ForegroundColor Green
+} else {
+    Write-Host "  ✗ ERROR: app.so not found at $AppSoSrc" -ForegroundColor Red
+    Write-Host "  Flutter AOT build may have failed. Re-run: flutter build windows --release" -ForegroundColor Red
+    exit 1
+}
+
 # Copy installer icon (if exists)
 $IconSource = "assets\installer\icon.ico"
 if (Test-Path $IconSource) {

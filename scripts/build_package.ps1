@@ -43,6 +43,22 @@ New-Item -ItemType Directory -Path $PackageDir | Out-Null
 Write-Host "  Copying build files..." -ForegroundColor Gray
 Copy-Item -Path "$BuildDir\*" -Destination $PackageDir -Recurse
 
+# Copy app.so (AOT compiled Dart code) to data folder
+Write-Host "  Copying app.so (AOT compiled code)..." -ForegroundColor Gray
+$AppSoSrc = "app_flutter\build\windows\app.so"
+$AppSoDest = "$PackageDir\data\app.so"
+if (Test-Path $AppSoSrc) {
+    if (!(Test-Path "$PackageDir\data")) {
+        New-Item -ItemType Directory -Path "$PackageDir\data" | Out-Null
+    }
+    Copy-Item -Path $AppSoSrc -Destination $AppSoDest -Force
+    Write-Host "  ✓ app.so copied successfully" -ForegroundColor Green
+} else {
+    Write-Host "  ✗ ERROR: app.so not found at $AppSoSrc" -ForegroundColor Red
+    Write-Host "  Flutter AOT build may have failed. Re-run: flutter build windows --release" -ForegroundColor Red
+    exit 1
+}
+
 # Create README
 Write-Host "  Creating README..." -ForegroundColor Gray
 $ReadmeContent = @"

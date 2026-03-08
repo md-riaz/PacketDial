@@ -30,6 +30,7 @@ import 'screens/incoming_call_banner.dart';
 import 'core/cli_service.dart';
 import 'core/clipboard_service.dart';
 import 'widgets/clipboard_popup.dart';
+import 'core/tray_controller.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -86,6 +87,9 @@ void main(List<String> args) async {
     await windowManager.show();
     await windowManager.focus();
     await windowManager.setIcon('assets/app_icon.png');
+
+    // Initialize System Tray
+    await TrayController.instance.init();
   });
 
   // Initialize Isar
@@ -384,9 +388,8 @@ class _AppState extends State<App>
     }
     // Save window geometry before closing
     await widget.windowPrefs.saveGeometry();
-    // Hide immediately so the app feels instant while cleanup happens
+    // Hide to tray instead of destroying
     await windowManager.hide();
-    await windowManager.destroy();
   }
 
   @override
