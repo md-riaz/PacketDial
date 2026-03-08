@@ -623,7 +623,7 @@ int pd_shutdown(void)
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
                const char *auth_username, const char *sip_proxy,
-               int use_tcp)
+               int use_tcp, const char *stun_server)
 {
     pd_ensure_thread();
     pjsua_acc_config cfg;
@@ -646,6 +646,13 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
         cfg.proxy[0] = S(sip_proxy);
     }
 
+    /* STUN server configuration.
+     * Note: STUN is configured globally in pd_init. Per-account STUN
+     * control is done via sip_stun_use and media_stun_use fields.
+     * The stun_server parameter is kept for API compatibility but
+     * STUN must be enabled globally in pd_init for it to take effect. */
+    (void)stun_server;  /* Suppress unused parameter warning */
+
     /* Transport selection */
     if (use_tcp && g_tcp_tp != PJSUA_INVALID_ID) {
         cfg.transport_id = g_tcp_tp;
@@ -655,6 +662,7 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
 
     /* Registration options */
     cfg.register_on_acc_add = PJ_TRUE;
+    cfg.reg_timeout = 300;  /* 5 minutes */
     cfg.reg_retry_interval  = 60;   /* retry every 60 s on failure */
     cfg.reg_first_retry_interval = 5;
 

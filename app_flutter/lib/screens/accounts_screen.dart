@@ -19,11 +19,13 @@ class AccountsScreen extends ConsumerStatefulWidget {
 
 class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   void _showAccountSetup([AccountSchema? existing]) {
-    Navigator.of(context).push(
+    Navigator.of(context)
+        .push(
       MaterialPageRoute(
         builder: (_) => AccountSetupPage(existing: existing),
       ),
-    ).then((saved) {
+    )
+        .then((saved) {
       if (saved == true && mounted) {
         // Refresh account list
         ref.invalidate(accountsListProvider);
@@ -136,7 +138,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
   void _showActionsMenu() {
     final renderBox = context.findRenderObject() as RenderBox;
     final offset = renderBox.localToGlobal(Offset.zero);
-    
+
     showMenu(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -179,7 +181,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
   Future<void> _toggleRegistration(bool? value) async {
     if (_isRegistering || value == null) return;
     setState(() => _isRegistering = true);
-    
+
     try {
       final service = ref.read(accountServiceProvider);
       if (value == true) {
@@ -192,7 +194,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
           domain: widget.account.domain,
           proxy: widget.account.sipProxy,
         );
-        
+
         if (!result.success) {
           // Show error dialog
           if (!mounted) return;
@@ -206,7 +208,11 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    }
+                  },
                   child: const Text('OK'),
                 ),
               ],
@@ -218,7 +224,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
           }
           return;
         }
-        
+
         // Registration succeeded, set as active
         await service.setSelectedAccount(widget.account.uuid);
       } else {
@@ -241,7 +247,11 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+              },
               child: const Text('OK'),
             ),
           ],
@@ -267,18 +277,26 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop(false);
+              }
+            },
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop(true);
+              }
+            },
             style: FilledButton.styleFrom(backgroundColor: AppTheme.errorRed),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-    
+
     if (confirmed == true && mounted) {
       await ref.read(accountServiceProvider).deleteAccount(widget.account.uuid);
       ref.invalidate(accountsListProvider);
@@ -353,7 +371,8 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                         widget.account.accountName,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
                           color: AppTheme.textPrimary,
                         ),
                         overflow: TextOverflow.ellipsis,

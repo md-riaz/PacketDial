@@ -250,6 +250,11 @@ class EngineChannel {
     _engine?.playDtmf(digits);
   }
 
+  /// Delete an account profile and remove it from the engine.
+  void deleteAccount(String uuid) {
+    _engine?.deleteAccount(uuid);
+  }
+
   /// Toggle mute on the active call.
   void setMute(bool muted) {
     _engine?.setMute(muted);
@@ -290,8 +295,18 @@ class EngineChannel {
     final payload =
         (event['payload'] as Map<String, dynamic>?) ?? <String, dynamic>{};
 
-    // Always print all events for debugging
-    debugPrint('[EngineChannel] Event: $type, Payload: $payload');
+    // Always print all events for debugging (truncated for performance)
+    if (type == 'SipMessageCaptured') {
+      debugPrint(
+          '[EngineChannel] Event: SipMessageCaptured, Payload: $payload');
+    } else if (type == 'EngineLog') {
+      final msg = payload['message'] as String? ?? '';
+      final preview = msg.length > 100 ? '${msg.substring(0, 100)}...' : msg;
+      debugPrint(
+          '[EngineChannel] Event: $type, Payload: {level: ${payload['level']}, message: $preview}');
+    } else {
+      debugPrint('[EngineChannel] Event: $type, Payload: $payload');
+    }
 
     switch (type) {
       case 'EngineReady':
@@ -346,7 +361,7 @@ class EngineChannel {
           }
         } else if (state == CallState.inCall || state == CallState.ended) {
           AudioService.instance.stopAll();
-          
+
           // Auto-start recording on call answer (if enabled in future)
           if (state == CallState.inCall && activeCall == null) {
             // Recording can be started manually via UI
@@ -358,7 +373,7 @@ class EngineChannel {
           if (RecordingService.instance.isRecording) {
             RecordingService.instance.stopRecording();
           }
-          
+
           if (activeCall?.callId == callId) {
             // Save to Isar
             if (_isar != null) {

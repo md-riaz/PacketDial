@@ -318,6 +318,7 @@ extern "C" {
         auth_username: *const c_char,
         sip_proxy: *const c_char,
         use_tcp: i32,
+        stun_server: *const c_char,
     ) -> i32;
     fn pd_acc_remove(acc_id: i32) -> i32;
     fn pd_call_make(acc_id: i32, dst_uri: *const c_char) -> i32;
@@ -1185,17 +1186,21 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         }
     };
 
-    // Transition to Registering state
-    {
+    // Transition to Registering state and remove any existing PJSIP account
+    let old_pj_id = {
         let mut accts = ACCOUNTS.lock().unwrap();
         if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
-            // Remove any existing PJSIP account so we start fresh
-            if let Some(old_pj_id) = a.pjsip_acc_id.take() {
-                unsafe { pd_acc_remove(old_pj_id) };
-                PJSIP_ACC_MAP.lock().unwrap().remove(&old_pj_id);
-            }
+            let old_id = a.pjsip_acc_id.take();
             a.reg_state = RegistrationState::Registering;
+            old_id
+        } else {
+            None
         }
+    };
+
+    if let Some(old_id) = old_pj_id {
+        unsafe { pd_acc_remove(old_id) };
+        PJSIP_ACC_MAP.lock().unwrap().remove(&old_id);
     }
     push_event(format!(
         r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{id}","account_name":"{}","display_name":"{}","state":"Registering","reason":""}}}}"#,
@@ -1286,6 +1291,16 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 return EngineErrorCode::InternalError;
             }
         };
+        let stun_server = match CString::new(acct_snapshot.stun_server.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                log_engine(
+                    LogLevel::Error,
+                    &format!("Account '{id}': stun_server contains NUL byte"),
+                );
+                return EngineErrorCode::InternalError;
+            }
+        };
 
         let pj_acc_id = unsafe {
             pd_acc_add(
@@ -1296,6 +1311,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 auth_username.as_ptr(),
                 sip_proxy.as_ptr(),
                 use_tcp,
+                stun_server.as_ptr(),
             )
         };
 
@@ -1335,25 +1351,29 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
-    let mut accts = ACCOUNTS.lock().unwrap();
-    match accts.iter_mut().find(|a| a.uuid == id) {
-        None => EngineErrorCode::NotFound,
-        Some(acct) => {
-            // Remove from PJSIP (triggers SIP unregistration)
-            if let Some(pj_id) = acct.pjsip_acc_id.take() {
-                unsafe { pd_acc_remove(pj_id) };
-                PJSIP_ACC_MAP.lock().unwrap().remove(&pj_id);
-                log_engine(
-                    LogLevel::Info,
-                    &format!("Account '{id}' unregistered via PJSIP (pj_acc_id={pj_id})"),
-                );
-            }
+    
+    let pjsip_id = {
+        let mut accts = ACCOUNTS.lock().unwrap();
+        if let Some(acct) = accts.iter_mut().find(|a| a.uuid == id) {
+            let pj_id = acct.pjsip_acc_id.take();
             acct.reg_state = RegistrationState::Unregistered;
-            drop(accts);
-            push_reg_state(&id, &RegistrationState::Unregistered);
-            EngineErrorCode::Ok
+            pj_id
+        } else {
+            return EngineErrorCode::NotFound;
         }
+    };
+
+    if let Some(pj_id) = pjsip_id {
+        unsafe { pd_acc_remove(pj_id) };
+        PJSIP_ACC_MAP.lock().unwrap().remove(&pj_id);
+        log_engine(
+            LogLevel::Info,
+            &format!("Account '{id}' unregistered via PJSIP (pj_acc_id={pj_id})"),
+        );
     }
+
+    push_reg_state(&id, &RegistrationState::Unregistered);
+    EngineErrorCode::Ok
 }
 
 fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
@@ -1931,20 +1951,20 @@ fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
         ),
     );
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let fwd_cstr = match CString::new(fwd_uri.clone()) {
-                    Ok(s) => s,
-                    Err(_) => return EngineErrorCode::InvalidUtf8,
-                };
-                let rc = unsafe { pd_acc_set_forward(pj_acc_id, fwd_cstr.as_ptr(), fwd_flags) };
-                if rc != 0 {
-                    log_engine(LogLevel::Error, &format!("Set forwarding failed: {}", rc));
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let fwd_cstr = match CString::new(fwd_uri.clone()) {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8,
+        };
+        let rc = unsafe { pd_acc_set_forward(pj_id, fwd_cstr.as_ptr(), fwd_flags) };
+        if rc != 0 {
+            log_engine(LogLevel::Error, &format!("Set forwarding failed: {}", rc));
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2019,16 +2039,16 @@ fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
         ),
     );
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let rc = unsafe { pd_acc_set_dnd(pj_acc_id, if enabled { 1 } else { 0 }) };
-                if rc != 0 {
-                    log_engine(LogLevel::Error, &format!("Set DND failed: {}", rc));
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let rc = unsafe { pd_acc_set_dnd(pj_id, if enabled { 1 } else { 0 }) };
+        if rc != 0 {
+            log_engine(LogLevel::Error, &format!("Set DND failed: {}", rc));
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2066,24 +2086,23 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
         ),
     );
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                // Create C string array
-                let c_strings: Vec<CString> = uris
-                    .iter()
-                    .filter_map(|uri| CString::new(uri.as_str()).ok())
-                    .collect();
-                let c_ptrs: Vec<*const c_char> = c_strings.iter().map(|s| s.as_ptr()).collect();
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
 
-                let rc =
-                    unsafe { pd_blf_subscribe(pj_acc_id, c_ptrs.as_ptr(), c_ptrs.len() as i32) };
-                if rc != 0 {
-                    log_engine(LogLevel::Error, &format!("BLF subscribe failed: {}", rc));
-                    return EngineErrorCode::InternalError;
-                }
-            }
+    if let Some(pj_id) = pj_acc_id {
+        // Create C string array
+        let c_strings: Vec<CString> = uris
+            .iter()
+            .filter_map(|uri| CString::new(uri.as_str()).ok())
+            .collect();
+        let c_ptrs: Vec<*const c_char> = c_strings.iter().map(|s| s.as_ptr()).collect();
+
+        let rc = unsafe { pd_blf_subscribe(pj_id, c_ptrs.as_ptr(), c_ptrs.len() as i32) };
+        if rc != 0 {
+            log_engine(LogLevel::Error, &format!("BLF subscribe failed: {}", rc));
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2107,16 +2126,16 @@ fn cmd_blf_unsubscribe(p: &serde_json::Value) -> EngineErrorCode {
         &format!("Unsubscribing from BLF for account {}", account_id),
     );
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let rc = unsafe { pd_blf_unsubscribe(pj_acc_id) };
-                if rc != 0 {
-                    log_engine(LogLevel::Error, &format!("BLF unsubscribe failed: {}", rc));
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let rc = unsafe { pd_blf_unsubscribe(pj_id) };
+        if rc != 0 {
+            log_engine(LogLevel::Error, &format!("BLF unsubscribe failed: {}", rc));
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2143,20 +2162,20 @@ fn cmd_account_set_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
         &format!("Setting lookup URL for {}: {}", account_id, lookup_url),
     );
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let url_cstr = match CString::new(lookup_url.clone()) {
-                    Ok(s) => s,
-                    Err(_) => return EngineErrorCode::InvalidUtf8,
-                };
-                let rc = unsafe { pd_acc_set_lookup_url(pj_acc_id, url_cstr.as_ptr()) };
-                if rc != 0 {
-                    log_engine(LogLevel::Error, &format!("Set lookup URL failed: {}", rc));
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let url_cstr = match CString::new(lookup_url.clone()) {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8,
+        };
+        let rc = unsafe { pd_acc_set_lookup_url(pj_id, url_cstr.as_ptr()) };
+        if rc != 0 {
+            log_engine(LogLevel::Error, &format!("Set lookup URL failed: {}", rc));
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2223,19 +2242,19 @@ fn cmd_account_set_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let priorities_cstr = match CString::new(codec_priorities.clone()) {
-                    Ok(s) => s,
-                    Err(_) => return EngineErrorCode::InvalidUtf8,
-                };
-                let rc = unsafe { pd_acc_set_codec_priority(pj_acc_id, priorities_cstr.as_ptr()) };
-                if rc != 0 {
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let priorities_cstr = match CString::new(codec_priorities.clone()) {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8,
+        };
+        let rc = unsafe { pd_acc_set_codec_priority(pj_id, priorities_cstr.as_ptr()) };
+        if rc != 0 {
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2307,21 +2326,21 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let codec_cstr = match CString::new(codec_id.clone()) {
-                    Ok(s) => s,
-                    Err(_) => return EngineErrorCode::InvalidUtf8,
-                };
-                let rc = unsafe {
-                    pd_acc_set_codec(pj_acc_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 })
-                };
-                if rc != 0 {
-                    return EngineErrorCode::NotFound;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let codec_cstr = match CString::new(codec_id.clone()) {
+            Ok(s) => s,
+            Err(_) => return EngineErrorCode::InvalidUtf8,
+        };
+        let rc = unsafe {
+            pd_acc_set_codec(pj_id, codec_cstr.as_ptr(), if enabled { 1 } else { 0 })
+        };
+        if rc != 0 {
+            return EngineErrorCode::NotFound;
         }
     }
 
@@ -2349,17 +2368,17 @@ fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
         None => 0,
     };
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let rc = unsafe {
-                    pd_acc_set_auto_answer(pj_acc_id, if enabled { 1 } else { 0 }, delay_ms)
-                };
-                if rc != 0 {
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let rc = unsafe {
+            pd_acc_set_auto_answer(pj_id, if enabled { 1 } else { 0 }, delay_ms)
+        };
+        if rc != 0 {
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2420,15 +2439,15 @@ fn cmd_account_set_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
 
-    {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let rc = unsafe { pd_acc_set_dtmf_method(pj_acc_id, dtmf_method) };
-                if rc != 0 {
-                    return EngineErrorCode::InternalError;
-                }
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    if let Some(pj_id) = pj_acc_id {
+        let rc = unsafe { pd_acc_set_dtmf_method(pj_id, dtmf_method) };
+        if rc != 0 {
+            return EngineErrorCode::InternalError;
         }
     }
 
@@ -2479,31 +2498,29 @@ fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let config_json = {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let mut json_buf = vec![0u8; 2048];
-                let rc = unsafe {
-                    pd_acc_export_config(
-                        pj_acc_id,
-                        json_buf.as_mut_ptr() as *mut c_char,
-                        json_buf.len() as i32,
-                    )
-                };
-                if rc == 0 {
-                    String::from_utf8_lossy(&json_buf)
-                        .trim_end_matches('\0')
-                        .to_string()
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            }
+        accounts.iter().find(|a| a.uuid == account_id).and_then(|a| a.pjsip_acc_id)
+    };
+
+    let config_json = if let Some(pj_id) = pj_acc_id {
+        let mut json_buf = vec![0u8; 2048];
+        let rc = unsafe {
+            pd_acc_export_config(
+                pj_id,
+                json_buf.as_mut_ptr() as *mut c_char,
+                json_buf.len() as i32,
+            )
+        };
+        if rc == 0 {
+            String::from_utf8_lossy(&json_buf)
+                .trim_end_matches('\0')
+                .to_string()
         } else {
             String::new()
         }
+    } else {
+        String::new()
     };
 
     push_event(format!(
@@ -2550,25 +2567,39 @@ fn cmd_account_import_config(p: &serde_json::Value) -> EngineErrorCode {
 /// Delete account profile.
 fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
     let uuid = match p["uuid"].as_str() {
-        Some(s) => s,
+        Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let uuid_cstr = match CString::new(uuid) {
-        Ok(s) => s,
-        Err(_) => return EngineErrorCode::InvalidUtf8,
+    let pjsip_id = {
+        let mut accts = ACCOUNTS.lock().unwrap();
+        let pos = accts.iter().position(|a| a.uuid == uuid);
+        if let Some(idx) = pos {
+            let mut acct = accts.remove(idx);
+            acct.pjsip_acc_id.take()
+        } else {
+            return EngineErrorCode::NotFound;
+        }
     };
 
-    let rc = unsafe { pd_acc_delete_profile(uuid_cstr.as_ptr()) };
-
-    if rc != 0 {
-        push_event(format!(
-            r#"{{"type":"AccountProfileDeleted","payload":{{"success":false,"error":"Deletion failed with code {}"}}}}"#,
-            rc
-        ));
-        return EngineErrorCode::InternalError;
+    // Lock is now released. Call PJSIP.
+    if let Some(pj_id) = pjsip_id {
+        unsafe { pd_acc_remove(pj_id) };
+        PJSIP_ACC_MAP.lock().unwrap().remove(&pj_id);
+        log_engine(
+            LogLevel::Info,
+            &format!("Account '{uuid}' removed from PJSIP (pj_acc_id={pj_id})"),
+        );
     }
 
+    // Also call the shim's delete profile
+    if let Ok(uuid_cstr) = CString::new(uuid.clone()) {
+        unsafe { pd_acc_delete_profile(uuid_cstr.as_ptr()) };
+    }
+
+    log_engine(LogLevel::Info, &format!("Account '{uuid}' profile deleted from engine"));
+    
+    push_reg_state(&uuid, &RegistrationState::Unregistered);
     push_event(
         r#"{"type":"AccountProfileDeleted","payload":{"success":true,"error":null}}"#.to_string(),
     );

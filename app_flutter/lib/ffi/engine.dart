@@ -24,8 +24,10 @@ typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineGetLogBufferC = ffi.Int32 Function();
 typedef _EngineSendDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EnginePlayDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
-typedef _EngineTransferCallC = ffi.Int32 Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
-typedef _EngineStartAttendedXferC = ffi.Int32 Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
+typedef _EngineTransferCallC = ffi.Int32 Function(
+    ffi.Int32, ffi.Pointer<ffi.Int8>);
+typedef _EngineStartAttendedXferC = ffi.Int32 Function(
+    ffi.Int32, ffi.Pointer<ffi.Int8>);
 typedef _EngineCompleteXferC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineMergeConferenceC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
 typedef _EngineStartRecordingC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
@@ -95,12 +97,12 @@ class VoipEngine {
       .lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
   late final int Function() _hangup =
       _lib.lookupFunction<_EngineHangupC, int Function()>('engine_hangup');
-  late final int Function(ffi.Pointer<ffi.Int8>) _exportProfile = _lib
-      .lookupFunction<_EngineExportProfileC, int Function(ffi.Pointer<ffi.Int8>)>(
-          'engine_export_profile');
-  late final int Function(ffi.Pointer<ffi.Int8>) _importProfile = _lib
-      .lookupFunction<_EngineImportProfileC, int Function(ffi.Pointer<ffi.Int8>)>(
-          'engine_import_profile');
+  late final int Function(ffi.Pointer<ffi.Int8>) _exportProfile =
+      _lib.lookupFunction<_EngineExportProfileC,
+          int Function(ffi.Pointer<ffi.Int8>)>('engine_export_profile');
+  late final int Function(ffi.Pointer<ffi.Int8>) _importProfile =
+      _lib.lookupFunction<_EngineImportProfileC,
+          int Function(ffi.Pointer<ffi.Int8>)>('engine_import_profile');
   late final int Function(int) _setMute = _lib
       .lookupFunction<_EngineSetMuteC, int Function(int)>('engine_set_mute');
   late final int Function(int) _setHold = _lib
@@ -126,26 +128,28 @@ class VoipEngine {
   late final int Function(ffi.Pointer<ffi.Int8>) _playDtmf = _lib
       .lookupFunction<_EnginePlayDtmfC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_play_dtmf');
-  late final int Function(int, ffi.Pointer<ffi.Int8>) _transferCall = _lib
-      .lookupFunction<_EngineTransferCallC, int Function(int, ffi.Pointer<ffi.Int8>)>(
-          'engine_transfer_call');
-  late final int Function(int, ffi.Pointer<ffi.Int8>) _startAttendedXfer = _lib
-      .lookupFunction<_EngineStartAttendedXferC, int Function(int, ffi.Pointer<ffi.Int8>)>(
-          'engine_start_attended_xfer');
-  late final int Function(int, int) _completeXfer = _lib
-      .lookupFunction<_EngineCompleteXferC, int Function(int, int)>(
+  late final int Function(int, ffi.Pointer<ffi.Int8>) _transferCall =
+      _lib.lookupFunction<_EngineTransferCallC,
+          int Function(int, ffi.Pointer<ffi.Int8>)>('engine_transfer_call');
+  late final int Function(int, ffi.Pointer<ffi.Int8>) _startAttendedXfer =
+      _lib.lookupFunction<
+          _EngineStartAttendedXferC,
+          int Function(
+              int, ffi.Pointer<ffi.Int8>)>('engine_start_attended_xfer');
+  late final int Function(int, int) _completeXfer =
+      _lib.lookupFunction<_EngineCompleteXferC, int Function(int, int)>(
           'engine_complete_xfer');
-  late final int Function(int, int) _mergeConference = _lib
-      .lookupFunction<_EngineMergeConferenceC, int Function(int, int)>(
+  late final int Function(int, int) _mergeConference =
+      _lib.lookupFunction<_EngineMergeConferenceC, int Function(int, int)>(
           'engine_merge_conference');
-  late final int Function(ffi.Pointer<ffi.Int8>) _startRecording = _lib
-      .lookupFunction<_EngineStartRecordingC, int Function(ffi.Pointer<ffi.Int8>)>(
-          'engine_start_recording');
-  late final int Function() _stopRecording = _lib
-      .lookupFunction<_EngineStopRecordingC, int Function()>(
+  late final int Function(ffi.Pointer<ffi.Int8>) _startRecording =
+      _lib.lookupFunction<_EngineStartRecordingC,
+          int Function(ffi.Pointer<ffi.Int8>)>('engine_start_recording');
+  late final int Function() _stopRecording =
+      _lib.lookupFunction<_EngineStopRecordingC, int Function()>(
           'engine_stop_recording');
-  late final int Function() _isRecording = _lib
-      .lookupFunction<_EngineIsRecordingC, int Function()>(
+  late final int Function() _isRecording =
+      _lib.lookupFunction<_EngineIsRecordingC, int Function()>(
           'engine_is_recording');
   late final int Function(ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>)
       _sendCommand = _lib.lookupFunction<
@@ -219,6 +223,12 @@ class VoipEngine {
     } finally {
       _freeNative(ptr);
     }
+  }
+
+  /// Delete an account profile and remove it from the engine.
+  /// Returns 0 on success, non-zero on error.
+  int deleteAccount(String accountId) {
+    return sendCommand('AccountDeleteProfile', '{"uuid": "$accountId"}');
   }
 
   /// Make an outgoing call using a specific account.

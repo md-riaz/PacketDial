@@ -38,10 +38,19 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
   void initState() {
     super.initState();
     _loadAccountData(widget.existing);
+    serverCtrl.addListener(_onServerChanged);
+  }
+
+  void _onServerChanged() {
+    // If domain is empty, keep it in sync with server
+    if (domainCtrl.text.isEmpty) {
+      domainCtrl.text = serverCtrl.text.trim();
+    }
   }
 
   void _loadAccountData(AccountSchema? existing) {
-    debugPrint('[AccountSetupPage] _loadAccountData called with ${existing == null ? "null" : "existing account: ${existing.accountName}"}');
+    debugPrint(
+        '[AccountSetupPage] _loadAccountData called with ${existing == null ? "null" : "existing account: ${existing.accountName}"}');
     if (existing != null) {
       final e = existing;
       nameCtrl.text = e.accountName;
@@ -50,13 +59,16 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       userCtrl.text = e.username;
       passCtrl.text = e.password;
       authUserCtrl.text = e.authUsername;
-      domainCtrl.text = e.domain;
+      domainCtrl.text = e.domain.isEmpty ? e.server : e.domain;
       proxyCtrl.text = e.sipProxy;
+      if (domainCtrl.text.isNotEmpty) debugPrint('Domain: ${domainCtrl.text}');
+      if (proxyCtrl.text.isNotEmpty) debugPrint('Proxy: ${proxyCtrl.text}');
       transport = e.transport;
       stunCtrl.text = e.stunServer;
       turnCtrl.text = e.turnServer;
       srtpEnabled = e.srtpEnabled;
-      debugPrint('[AccountSetupPage] Loaded account: ${e.accountName}, server: ${e.server}, user: ${e.username}');
+      debugPrint(
+          '[AccountSetupPage] Loaded account: ${e.accountName}, server: ${e.server}, user: ${e.username}');
     } else {
       // Clear all fields for new account
       nameCtrl.clear();
@@ -115,7 +127,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -147,181 +159,93 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                       ),
                     ),
                   _sectionLabel('Identity'),
-                  TextField(
+                  _buildField(
                     controller: nameCtrl,
+                    label: 'Account Label (e.g. Work)',
+                    hint: 'My Office Number',
+                    icon: Icons.label_outline,
                     enabled: !isRegistering,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: 'Account Label (e.g. Work)',
-                      hintText: 'My Office Number',
-                      prefixIcon: const Icon(Icons.label_outline, size: 18),
-                      labelStyle: TextStyle(color: AppTheme.textSecondary),
-                      hintStyle: TextStyle(color: AppTheme.textTertiary),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.primary),
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 10),
-                  TextField(
+                  const SizedBox(height: 18),
+                  _buildField(
                     controller: displayCtrl,
+                    label: 'Display Name (Optional)',
+                    hint: 'John Doe',
+                    icon: Icons.person_outline,
                     enabled: !isRegistering,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: 'Display Name (Optional)',
-                      hintText: 'John Doe',
-                      prefixIcon: const Icon(Icons.person_outline, size: 18),
-                      labelStyle: TextStyle(color: AppTheme.textSecondary),
-                      hintStyle: TextStyle(color: AppTheme.textTertiary),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.primary),
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   _sectionLabel('Server'),
-                  TextField(
+                  _buildField(
                     controller: serverCtrl,
+                    label: 'SIP Server / Registrar',
+                    hint: 'sip.provider.com',
+                    icon: Icons.dns_outlined,
                     enabled: !isRegistering,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: 'SIP Server / Registrar',
-                      hintText: 'sip.provider.com',
-                      prefixIcon: const Icon(Icons.dns_outlined, size: 18),
-                      labelStyle: TextStyle(color: AppTheme.textSecondary),
-                      hintStyle: TextStyle(color: AppTheme.textTertiary),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.primary),
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 10),
-                  TextField(
+                  const SizedBox(height: 18),
+                  _buildField(
                     controller: userCtrl,
+                    label: 'Username',
+                    hint: '1000',
+                    icon: Icons.account_circle_outlined,
                     enabled: !isRegistering,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: 'Username',
-                      hintText: '1000',
-                      prefixIcon: const Icon(Icons.account_circle_outlined, size: 18),
-                      labelStyle: TextStyle(color: AppTheme.textSecondary),
-                      hintStyle: TextStyle(color: AppTheme.textTertiary),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.primary),
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 10),
-                  TextField(
+                  const SizedBox(height: 18),
+                  _buildField(
+                    controller: domainCtrl,
+                    label: 'Domain',
+                    hint: 'sip.provider.com:8090',
+                    icon: Icons.domain_outlined,
+                    enabled: !isRegistering,
+                  ),
+                  const SizedBox(height: 18),
+                  _buildField(
                     controller: passCtrl,
+                    label: 'Password',
+                    icon: Icons.lock_outline,
                     enabled: !isRegistering,
-                    obscureText: true,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline, size: 18),
-                      labelStyle: TextStyle(color: AppTheme.textSecondary),
-                      hintStyle: TextStyle(color: AppTheme.textTertiary),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.primary),
-                      ),
-                    ),
+                    obscure: true,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   ExpansionTile(
                     title: const Text('Advanced Settings',
-                        style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                        style: TextStyle(
+                            fontSize: 13, color: AppTheme.textSecondary)),
                     tilePadding: EdgeInsets.zero,
                     iconColor: AppTheme.textTertiary,
                     collapsedIconColor: AppTheme.textTertiary,
                     textColor: AppTheme.textSecondary,
                     children: [
-                      TextField(
+                      _buildField(
                         controller: authUserCtrl,
+                        label: 'Auth Username (Optional)',
                         enabled: !isRegistering,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        decoration: InputDecoration(
-                            labelText: 'Auth Username (Optional)',
-                            labelStyle: TextStyle(color: AppTheme.textSecondary),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: AppTheme.border),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(color: AppTheme.primary),
-                            ),
-                        ),
                       ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: domainCtrl,
-                        enabled: !isRegistering,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'Domain (Optional)',
-                          labelStyle: TextStyle(color: AppTheme.textSecondary),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppTheme.primary),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
+                      const SizedBox(height: 18),
+                      _buildField(
                         controller: proxyCtrl,
+                        label: 'SIP Proxy (Optional)',
+                        hint: 'Outbound proxy address if required.',
                         enabled: !isRegistering,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'SIP Proxy (Optional)',
-                          helperText: 'Outbound proxy address if required.',
-                          labelStyle: TextStyle(color: AppTheme.textSecondary),
-                          helperStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppTheme.primary),
-                          ),
-                        ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 18),
                       DropdownButtonFormField<String>(
-                        initialValue: transport,
+                        value: transport,
                         decoration: InputDecoration(
                           labelText: 'Transport',
+                          contentPadding: const EdgeInsets.symmetric(
+                              vertical: 16, horizontal: 16),
                           labelStyle: TextStyle(color: AppTheme.textSecondary),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppTheme.border),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: AppTheme.primary, width: 2),
+                          ),
                         ),
                         dropdownColor: AppTheme.surfaceVariant,
                         style: const TextStyle(color: AppTheme.textPrimary),
@@ -334,25 +258,12 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                             ? null
                             : (v) => setState(() => transport = v ?? 'udp'),
                       ),
-                      const SizedBox(height: 8),
-                      TextField(
+                      const SizedBox(height: 18),
+                      _buildField(
                         controller: stunCtrl,
+                        label: 'STUN Server (Optional)',
+                        hint: 'For NAT traversal (e.g. stun.l.google.com)',
                         enabled: !isRegistering,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'STUN Server (Optional)',
-                          helperText: 'For NAT traversal (e.g. stun.l.google.com)',
-                          labelStyle: TextStyle(color: AppTheme.textSecondary),
-                          helperStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppTheme.primary),
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -388,7 +299,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                               SizedBox(height: 2),
                               Text('This may take several seconds',
                                   style: TextStyle(
-                                      fontSize: 10, color: AppTheme.textTertiary)),
+                                      fontSize: 10,
+                                      color: AppTheme.textTertiary)),
                             ],
                           ),
                         ],
@@ -405,7 +317,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
             decoration: BoxDecoration(
               color: AppTheme.surfaceVariant,
               border: Border(
-                  top: BorderSide(color: AppTheme.border.withValues(alpha: 0.3))),
+                  top: BorderSide(
+                      color: AppTheme.border.withValues(alpha: 0.3))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -420,8 +333,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                   onPressed: isRegistering ? null : _saveAccount,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppTheme.primary,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8)),
                   ),
@@ -437,7 +350,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
 
   Widget _sectionLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 16),
+      padding: const EdgeInsets.only(bottom: 12, top: 4),
       child: Row(
         children: [
           Container(
@@ -457,6 +370,42 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                 letterSpacing: 1,
               )),
         ],
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    String? hint,
+    IconData? icon,
+    bool obscure = false,
+    bool enabled = true,
+  }) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      obscureText: obscure,
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: icon != null ? Icon(icon, size: 18) : null,
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        labelStyle:
+            const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+        helperStyle:
+            const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+        ),
       ),
     );
   }
@@ -494,6 +443,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
         transport: transport,
         domain: domainCtrl.text.trim(),
         proxy: proxyCtrl.text.trim(),
+        stunServer: stunCtrl.text.trim(),
+        authUsername: authUserCtrl.text.trim(),
       );
 
       if (!result.success) {

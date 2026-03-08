@@ -48,7 +48,6 @@ void main(List<String> args) async {
     debugPrint('[ISOLATE ERROR STACK] $stack');
     return true; // Continue execution (don't crash)
   };
-  // ────────────────────────────────────────────────────────────────────────
 
   // Initialize Window Manager
   await windowManager.ensureInitialized();
@@ -66,7 +65,6 @@ void main(List<String> args) async {
   WindowOptions windowOptions = const WindowOptions(
     size: Size(450, 850),
     center: true,
-    backgroundColor: Colors.transparent,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden, // We use bitsdojo_window for title bar
   );
@@ -140,6 +138,7 @@ void main(List<String> args) async {
 
   // Initialize Bitsdojo Window
   doWhenWindowReady(() {
+    debugPrint('[APP] Bitsdojo Window Ready');
     const initialSize = Size(450, 850);
     appWindow.minSize = const Size(400, 750);
     appWindow.size = initialSize;
@@ -172,6 +171,8 @@ class _AppState extends State<App>
   String _status = 'Initializing…';
   bool _ready = false;
   bool _alwaysOnTop = false;
+
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   static final _screens = [
     const DialerScreen(),
@@ -228,10 +229,12 @@ class _AppState extends State<App>
             _incomingCallInfo = {
               'uri': payload['uri'] as String? ?? '',
               'direction': 'Incoming',
-              'account_name': payload['account_name'] as String? ?? 'SIP Account',
+              'account_name':
+                  payload['account_name'] as String? ?? 'SIP Account',
               'account_user': payload['account_user'] as String? ?? '',
               'extid': payload['extid'] as String? ?? '',
-              'customer_data': payload['customer_data'] as Map<String, dynamic>? ?? {},
+              'customer_data':
+                  payload['customer_data'] as Map<String, dynamic>? ?? {},
             };
           });
         } else if (state == 'InCall' || state == 'Ended') {
@@ -287,9 +290,10 @@ class _AppState extends State<App>
 
         // Initialize clipboard monitoring
         ClipboardService.instance.init();
-        
+
         // Listen for clipboard phone number detections
-        _clipboardSub = ClipboardService.instance.onPhoneDetected.listen((number) {
+        _clipboardSub =
+            ClipboardService.instance.onPhoneDetected.listen((number) {
           if (mounted) {
             ClipboardPopupOverlay.show(context, number);
           }
@@ -318,9 +322,11 @@ class _AppState extends State<App>
     // Switch to Accounts tab
     setState(() => _selectedIndex = 0);
 
-    // Show edit dialog after frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+    // Show edit dialog after frame with a slight delay
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 500));
+      final context = _navigatorKey.currentContext;
+      if (context == null || !mounted) return;
       showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -415,6 +421,7 @@ class _AppState extends State<App>
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PacketDial',
       theme: AppTheme.dark,

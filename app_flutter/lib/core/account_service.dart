@@ -35,9 +35,11 @@ class AccountService extends ChangeNotifier {
     required String username,
     required String password,
     required String server,
-    String transport = 'udp',
-    String domain = '',
-    String proxy = '',
+    String? transport,
+    String? domain,
+    String? proxy,
+    String? stunServer,
+    String? authUsername,
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final engine = _ref.read(engineProvider);
@@ -49,8 +51,8 @@ class AccountService extends ChangeNotifier {
     debugPrint('User: $username');
     debugPrint('Server: $server');
     debugPrint('Transport: $transport');
-    if (domain.isNotEmpty) debugPrint('Domain: $domain');
-    if (proxy.isNotEmpty) debugPrint('Proxy: $proxy');
+    if (domain?.isNotEmpty == true) debugPrint('Domain: $domain');
+    if (proxy?.isNotEmpty == true) debugPrint('Proxy: $proxy');
 
     StreamSubscription<Map<String, dynamic>>? sub;
     Timer? timer;
@@ -105,11 +107,15 @@ class AccountService extends ChangeNotifier {
         'transport': transport,
         'domain': domain,
         'sip_proxy': proxy,
+        'stun_server': stunServer ?? '',
+        'auth_username': authUsername,
         // Default other fields for the trial
         'account_name': 'Trial Account',
         'display_name': username,
       };
 
+      debugPrint(
+          '[AccountService] tryRegister payload: ${jsonEncode(payload)}');
       final rc = engine.sendCommand('AccountUpsert', jsonEncode(payload));
       debugPrint('[AccountService] AccountUpsert returned rc=$rc');
 
@@ -141,11 +147,11 @@ class AccountService extends ChangeNotifier {
 
     final result = await completer.future;
 
-    // Cleanup: cancel the listener and unregister the trial account
+    // Cleanup: cancel the listener and remove the trial account entirely
     timer.cancel();
     await sub.cancel();
-    debugPrint('[AccountService] Cleaning up trial account $tempUuid');
-    engine.unregister(tempUuid);
+    debugPrint('[AccountService] Purging trial account $tempUuid');
+    engine.deleteAccount(tempUuid);
 
     return result;
   }
