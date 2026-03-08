@@ -88,14 +88,13 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-            onPressed: () => Navigator.pop(context),
-          ),
           title: const Text(
             'Settings',
             style: TextStyle(
-                color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+            ),
           ),
           actions: [
             PopupMenuButton<String>(
@@ -804,7 +803,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
           const SizedBox(height: 24),
-          
+
           // Main integration settings card
           Card(
             color: AppTheme.surfaceCard,
@@ -838,7 +837,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const IntegrationSettingsPage(),
+                            builder: (context) =>
+                                const IntegrationSettingsPage(),
                           ),
                         );
                       },
@@ -854,13 +854,13 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Quick toggles
           _buildSectionTitle('Quick Toggles'),
           const SizedBox(height: 16),
-          
+
           // Clipboard monitoring quick toggle
           _buildSettingCard(
             icon: Icons.content_paste_search,
