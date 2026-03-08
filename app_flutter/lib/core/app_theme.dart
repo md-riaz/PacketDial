@@ -30,6 +30,10 @@ class AppTheme {
   static const Color textTertiary = Color(0xFF6B6B88);
   static const Color inputFill = Color(0xFF14142B); // Same as surfaceVariant
 
+  // ── Window Geometry ────────────────────────────────────────────────────────
+  static const Size defaultWindowSize = Size(450, 850);
+  static const Size minWindowSize = Size(400, 750);
+
   // ── Gradients ──────────────────────────────────────────────────────────────
   static const LinearGradient titleBarGradient = LinearGradient(
     colors: [Color(0xFF1A1040), Color(0xFF0D0D1A)],

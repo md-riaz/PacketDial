@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'app_theme.dart';
 
 /// Persists window position, size, and always-on-top preference.
 class WindowPrefs {
@@ -45,8 +46,8 @@ class WindowPrefs {
 
   Future<void> restoreGeometry() async {
     if (!hasSavedGeometry) return;
-    final w = _prefs.getDouble(_kW) ?? 360;
-    final h = _prefs.getDouble(_kH) ?? 760;
+    final w = _prefs.getDouble(_kW) ?? AppTheme.defaultWindowSize.width;
+    final h = _prefs.getDouble(_kH) ?? AppTheme.defaultWindowSize.height;
     final x = _prefs.getDouble(_kX);
     final y = _prefs.getDouble(_kY);
 

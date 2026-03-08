@@ -63,7 +63,7 @@ void main(List<String> args) async {
   await ContactsService.instance.loadContacts();
 
   WindowOptions windowOptions = const WindowOptions(
-    size: Size(450, 850),
+    size: AppTheme.defaultWindowSize,
     center: true,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden, // We use bitsdojo_window for title bar
@@ -73,6 +73,16 @@ void main(List<String> args) async {
     // Restore saved position/size before showing
     await windowPrefs.restoreGeometry();
     await windowPrefs.applyAlwaysOnTop();
+
+    // Configure Bitsdojo window (synchronous setup)
+    debugPrint('[APP] Bitsdojo Window Ready');
+    appWindow.minSize = AppTheme.minWindowSize;
+    // Note: windowManager handles size via restoreGeometry,
+    // but we set appWindow to be safe for Bitsdojo components.
+    appWindow.size = AppTheme.defaultWindowSize;
+    appWindow.alignment = Alignment.center;
+    appWindow.title = "PacketDial";
+
     await windowManager.show();
     await windowManager.focus();
     await windowManager.setIcon('assets/app_icon.png');
@@ -135,17 +145,6 @@ void main(List<String> args) async {
       ),
     ),
   );
-
-  // Initialize Bitsdojo Window
-  doWhenWindowReady(() {
-    debugPrint('[APP] Bitsdojo Window Ready');
-    const initialSize = Size(450, 850);
-    appWindow.minSize = const Size(400, 750);
-    appWindow.size = initialSize;
-    appWindow.alignment = Alignment.center;
-    appWindow.title = "PacketDial";
-    appWindow.show();
-  });
 }
 
 class App extends StatefulWidget {
