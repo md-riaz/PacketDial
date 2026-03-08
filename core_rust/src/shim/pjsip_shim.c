@@ -721,7 +721,7 @@ static pj_status_t pd_check_media_ready(void)
         char buf[256];
         snprintf(buf, sizeof(buf),
                  "pd_check_media_ready: found %u audio device(s)", dev_count);
-        g_on_log(4, buf);
+        g_on_log(1, buf); /* Level 1 so it's always in diagnostics */
     }
 
     /* Need at least one capture and one playback device */
@@ -753,15 +753,15 @@ static pj_status_t pd_check_media_ready(void)
 
     if (!has_input) {
         if (g_on_log) {
-            g_on_log(2, "pd_check_media_ready: no input device found");
+            g_on_log(1, "Warning: pd_check_media_ready: no input device found. Proceeding with fallback.");
         }
-        return PJMEDIA_EAUD_NOINPUT;  /* No capture device */
+        /* return PJMEDIA_EAUD_NOINPUT;  -- Don't block, let PJSIP try its own defaults */
     }
     if (!has_output) {
         if (g_on_log) {
-            g_on_log(2, "pd_check_media_ready: no output device found");
+            g_on_log(1, "Warning: pd_check_media_ready: no output device found. Proceeding with fallback.");
         }
-        return PJMEDIA_EAUD_NOOUTPUT;  /* No playback device */
+        /* return PJMEDIA_EAUD_NOOUTPUT; -- Don't block */
     }
 
     if (g_on_log) {
@@ -837,18 +837,19 @@ int pd_call_make(int acc_id, const char *dst_uri)
     pj_status_t status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
                                                NULL, NULL, NULL, &call_id);
     if (status != PJ_SUCCESS) {
-        /* If device ID out of range error, try to reinitialize audio */
-        if (status == 450002 || status == -450002) {
+        /* If device ID out of range or no device error, try to reinitialize audio */
+        if (status == 450002 || status == -450002 || status == 420006 || status == -420006) {
             if (g_on_log) {
-                g_on_log(2, "pd_call_make: device ID error, attempting re-init");
+                g_on_log(1, "pd_call_make: audio device error, attempting re-init with system defaults");
             }
-            if (pd_reinit_audio_devices() == 0) {
-                /* Retry the call with refreshed device IDs */
-                status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
-                                               NULL, NULL, NULL, &call_id);
-                if (status == PJ_SUCCESS && g_on_log) {
-                    g_on_log(2, "pd_call_make: retry succeeded after re-init");
-                }
+            /* Fallback to system default devices (-1, -1) */
+            pjsua_set_snd_dev(-1, -1);
+            
+            /* Retry the call */
+            status = pjsua_call_make_call((pjsua_acc_id)acc_id, &dst,
+                                           NULL, NULL, NULL, &call_id);
+            if (status == PJ_SUCCESS && g_on_log) {
+                g_on_log(1, "pd_call_make: retry succeeded with system defaults");
             }
         }
 

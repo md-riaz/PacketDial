@@ -41,13 +41,13 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   void _handleCallEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
-    
+
     if (type == 'CallStateChanged') {
       final callId = (payload['call_id'] as num?)?.toInt();
       final state = payload['state'] as String?;
       final direction = payload['direction'] as String?;
       final uri = payload['uri'] as String?;
-      
+
       // Track consultation call: new outgoing call while another is on hold
       if (callId != null && state == 'Ringing' && direction == 'Outgoing') {
         final activeCall = EngineChannel.instance.activeCall;
@@ -58,12 +58,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           });
         }
       }
-      
+
       // Update when consultation call is answered (InCall state)
-      if (callId != null && state == 'InCall' && callId == _consultationCallId) {
+      if (callId != null &&
+          state == 'InCall' &&
+          callId == _consultationCallId) {
         setState(() => _consultationUri = uri);
       }
-      
+
       // Clear when consultation call ends
       if (state == 'Ended' && callId == _consultationCallId) {
         setState(() {
@@ -71,7 +73,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           _consultationUri = null;
         });
       }
-      
+
       // Clear if original call ends (no longer in consult state)
       if (activeCallEnded(payload) && _consultationCallId != null) {
         setState(() {
@@ -86,7 +88,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     final state = payload['state'] as String?;
     final callId = (payload['call_id'] as num?)?.toInt();
     final activeCall = EngineChannel.instance.activeCall;
-    return state == 'Ended' && activeCall != null && callId == activeCall.callId;
+    return state == 'Ended' &&
+        activeCall != null &&
+        callId == activeCall.callId;
   }
 
   @override
@@ -100,8 +104,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   bool _hasConsultationCall() => _consultationCallId != null;
 
   /// Get consultation call display info.
-  String? get _consultationDisplay => _consultationUri != null 
-      ? SipUriUtils.friendlyName(_consultationUri!) 
+  String? get _consultationDisplay => _consultationUri != null
+      ? SipUriUtils.friendlyName(_consultationUri!)
       : null;
 
   void _dialKey(String digit, bool isCallActive) {
@@ -129,7 +133,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       List<AudioDevice> audioDevices) async {
     final raw = _uriCtrl.text.trim();
     if (raw.isEmpty) {
-      _showErrorDialog('No Number Entered', 'Please enter a number or URI to dial.');
+      _showErrorDialog(
+          'No Number Entered', 'Please enter a number or URI to dial.');
       return;
     }
 
@@ -160,7 +165,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       _showErrorDialog(
         'Account Not Registered',
         'The selected account "${selectedAccount.accountName}" is not registered.\n\n'
-        'Please check your account settings and server connection.',
+            'Please check your account settings and server connection.',
       );
       return;
     }
@@ -181,29 +186,50 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
     final rc = EngineChannel.instance.engine.makeCall(accountId, uri);
     if (rc != 0) {
-      // Handle error codes from Rust EngineErrorCode enum
+      if (rc == 7) {
+        // MediaNotReady - offer bypass
+        _showAudioDeviceWarning(
+          context,
+          hasInput: false,
+          hasOutput: false,
+          onProceed: () {
+            // This is complex - engine already failed.
+            // We'd need a "force" flag in makeCall or just tell user to try again
+            // and maybe the engine will use the system defaults now that we've added that fallback.
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text(
+                      'Please check audio settings and try dialing again.')),
+            );
+          },
+        );
+        return;
+      }
+
       String errorMessage;
       String title = 'Call Failed';
+      bool showSettingsButton = true;
+
       switch (rc) {
-        case 7: // MediaNotReady - audio device unavailable
-          title = 'Audio Device Unavailable';
-          errorMessage = 'Cannot start call - no audio devices detected.\n\n'
-              'Please check:\n'
-              '• Microphone is connected and enabled\n'
-              '• Speakers or headphones are connected\n'
-              '• Audio devices are selected in Windows Sound settings';
-          break;
         case 6: // NotFound
-          errorMessage = 'Account not found or not registered. Please verify your account settings.';
+          errorMessage =
+              'Account not found or not registered. Please verify your account settings.';
           break;
-        case 1: // AlreadyInitialized
-        case 2: // NotInitialized
-        case 100: // InternalError
+        case 100: // InternalError (now includes network errors)
+          title = 'Network or System Error';
+          errorMessage =
+              'The call could not be started due to a network or internal error (code $rc).\n\n'
+              'Common causes:\n'
+              '• Network is unreachable (check WiFi/Ethernet)\n'
+              '• Server is not responding\n'
+              '• Account registration lost';
+          break;
         default:
           errorMessage = 'Call failed (error code $rc). '
-              'Please check your audio devices and try again.';
+              'Please check your network and audio devices.';
       }
-      _showErrorDialog(title, errorMessage);
+
+      _showErrorDialog(title, errorMessage, showSettings: showSettingsButton);
     }
   }
 
@@ -259,7 +285,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
+                        backgroundColor:
+                            AppTheme.primary.withValues(alpha: 0.2),
                         child: Text(
                           account.accountName.substring(0, 1).toUpperCase(),
                           style: const TextStyle(
@@ -301,15 +328,35 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     );
   }
 
-  void _showErrorDialog(String title, String message) {
+  void _showErrorDialog(String title, String message,
+      {bool showSettings = false}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
         icon: const Icon(Icons.error, color: AppTheme.errorRed, size: 48),
         title: Text(title, style: const TextStyle(color: AppTheme.textPrimary)),
-        content: Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
+        content: Text(message,
+            style: const TextStyle(color: AppTheme.textSecondary)),
         actions: [
+          if (showSettings)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Switch to Settings tab (index 2 usually)
+                // Note: The parent scaffold is controlled by NavigationBar
+                // This might not work perfectly without a callback to main,
+                // but we can try to push the settings page or just close.
+                // For now, let's just show a snackbar or close.
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content:
+                          Text('Go to Settings > Audio to configure devices')),
+                );
+              },
+              child: const Text('Check Settings',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('OK', style: TextStyle(color: AppTheme.primary)),
@@ -346,8 +393,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            ...missingDevices.map((d) =>
-                Text('• $d', style: const TextStyle(color: AppTheme.textSecondary))),
+            ...missingDevices.map((d) => Text('• $d',
+                style: const TextStyle(color: AppTheme.textSecondary))),
             const SizedBox(height: 16),
             const Text(
               'The call will use null audio devices (no sound). '
@@ -428,7 +475,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 const Text(
                   'Transfer Type:',
                   style: TextStyle(
-                      color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
                 RadioListTile<bool>(
@@ -439,8 +487,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   },
                   title: const Text('Blind Transfer',
                       style: TextStyle(color: AppTheme.textPrimary)),
-                  subtitle: const Text('Transfer immediately without consulting',
-                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                  subtitle: const Text(
+                      'Transfer immediately without consulting',
+                      style: TextStyle(
+                          color: AppTheme.textTertiary, fontSize: 11)),
                   contentPadding: EdgeInsets.zero,
                   activeColor: AppTheme.primary,
                 ),
@@ -453,7 +503,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   title: const Text('Consult Transfer',
                       style: TextStyle(color: AppTheme.textPrimary)),
                   subtitle: const Text('Speak to target first, then transfer',
-                      style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                      style: TextStyle(
+                          color: AppTheme.textTertiary, fontSize: 11)),
                   contentPadding: EdgeInsets.zero,
                   activeColor: AppTheme.primary,
                 ),
@@ -473,7 +524,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             TextButton(
               onPressed: () {
                 if (transferCtrl.text.trim().isNotEmpty) {
-                  _executeTransfer(call, transferCtrl.text.trim(), isConsultTransfer);
+                  _executeTransfer(
+                      call, transferCtrl.text.trim(), isConsultTransfer);
                   Navigator.pop(context);
                 }
               },
@@ -499,8 +551,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
-        icon: const Icon(Icons.check_circle,
-            color: AppTheme.callGreen, size: 48),
+        icon:
+            const Icon(Icons.check_circle, color: AppTheme.callGreen, size: 48),
         title: const Text('Complete Transfer',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: Column(
@@ -509,7 +561,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           children: [
             const Text(
               'Complete the attended transfer?',
-              style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             if (consultationTarget != null) ...[
@@ -557,8 +610,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             ],
             Text(
               'This will connect the held call to ${consultationTarget ?? 'the consultation target'} and end your consultation call.',
-              style: const TextStyle(
-                  color: AppTheme.textTertiary, fontSize: 12),
+              style:
+                  const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
             ),
           ],
         ),
@@ -600,8 +653,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
-        icon: const Icon(Icons.groups,
-            color: AppTheme.primary, size: 48),
+        icon: const Icon(Icons.groups, color: AppTheme.primary, size: 48),
         title: const Text('Add to Conference',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: Column(
@@ -627,8 +679,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
                 ),
-                prefixIcon: const Icon(Icons.groups,
-                    color: AppTheme.primary),
+                prefixIcon: const Icon(Icons.groups, color: AppTheme.primary),
               ),
               onSubmitted: (_) {
                 if (conferenceCtrl.text.trim().isNotEmpty) {
@@ -640,8 +691,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             const SizedBox(height: 16),
             const Text(
               'This will put the current call on hold and dial the participant. Once they answer, you can create a 3-way conference.',
-              style: TextStyle(
-                  color: AppTheme.textTertiary, fontSize: 12),
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
             ),
           ],
         ),
@@ -684,8 +734,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       } else {
         uri = 'sip:$destUri';
       }
-    } else if (!destUri.startsWith('sip:') &&
-        !destUri.startsWith('sips:')) {
+    } else if (!destUri.startsWith('sip:') && !destUri.startsWith('sips:')) {
       uri = 'sip:$destUri';
     }
 
@@ -726,11 +775,16 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   String _getTransferErrorMessage(int errorCode) {
     switch (errorCode) {
-      case -1: return 'Engine not initialized. Please try again.';
-      case 6: return 'Call not found. The call may have ended.';
-      case 7: return 'Media not ready. Check audio device settings.';
-      case 100: return 'Internal error. Please try again.';
-      default: return 'Transfer failed (error code: $errorCode).';
+      case -1:
+        return 'Engine not initialized. Please try again.';
+      case 6:
+        return 'Call not found. The call may have ended.';
+      case 7:
+        return 'Media not ready. Check audio device settings.';
+      case 100:
+        return 'Internal error. Please try again.';
+      default:
+        return 'Transfer failed (error code: $errorCode).';
     }
   }
 
@@ -744,8 +798,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       } else {
         uri = 'sip:$destUri';
       }
-    } else if (!destUri.startsWith('sip:') &&
-        !destUri.startsWith('sips:')) {
+    } else if (!destUri.startsWith('sip:') && !destUri.startsWith('sips:')) {
       uri = 'sip:$destUri';
     }
 
@@ -766,14 +819,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     }
   }
 
-
   /// Complete a consult transfer - transfer the held call to the consultation target.
   void _completeTransfer(ActiveCall heldCall) {
     final consultationId = _consultationCallId;
     if (consultationId == null) return;
 
-    final result = EngineChannel.instance.completeXfer(heldCall.callId, consultationId);
-    
+    final result =
+        EngineChannel.instance.completeXfer(heldCall.callId, consultationId);
+
     if (result == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -809,8 +862,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
-        icon: const Icon(Icons.groups,
-            color: AppTheme.primary, size: 48),
+        icon: const Icon(Icons.groups, color: AppTheme.primary, size: 48),
         title: const Text('Join Conference',
             style: TextStyle(color: AppTheme.textPrimary)),
         content: Column(
@@ -819,7 +871,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           children: [
             const Text(
               'Create a 3-way conference?',
-              style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             if (consultationTarget != null) ...[
@@ -834,7 +887,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.person_add, color: AppTheme.primary, size: 20),
+                    const Icon(Icons.person_add,
+                        color: AppTheme.primary, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -867,8 +921,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             ],
             const Text(
               'This will merge all parties into a single conference call.',
-              style: TextStyle(
-                  color: AppTheme.textTertiary, fontSize: 12),
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
             ),
           ],
         ),
@@ -1338,7 +1391,7 @@ class _ActiveCallCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: AppTheme.glassCard(
-        color: hasConsultationCall 
+        color: hasConsultationCall
             ? AppTheme.primary.withValues(alpha: 0.05)
             : AppTheme.accent.withValues(alpha: 0.08),
         borderColor: hasConsultationCall
@@ -1405,7 +1458,8 @@ class _ActiveCallCard extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppTheme.callGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
@@ -1438,7 +1492,7 @@ class _ActiveCallCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
           ],
-          
+
           // Main call info
           Row(
             children: [
@@ -1465,12 +1519,15 @@ class _ActiveCallCard extends StatelessWidget {
                         if (call.onHold) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.warningAmber.withValues(alpha: 0.15),
+                              color:
+                                  AppTheme.warningAmber.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: AppTheme.warningAmber.withValues(alpha: 0.4),
+                                color: AppTheme.warningAmber
+                                    .withValues(alpha: 0.4),
                               ),
                             ),
                             child: const Text(
@@ -1522,7 +1579,9 @@ class _ActiveCallCard extends StatelessWidget {
                 onTap: () {},
               ),
               _CallControlButton(
-                icon: hasConsultationCall ? Icons.check_circle : Icons.phone_forwarded,
+                icon: hasConsultationCall
+                    ? Icons.check_circle
+                    : Icons.phone_forwarded,
                 label: hasConsultationCall ? 'COMPLETE' : 'TRANSFER',
                 active: false,
                 enabled: call.state != CallState.ringing,

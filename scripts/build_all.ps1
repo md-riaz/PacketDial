@@ -76,7 +76,8 @@ Write-Host ""
 Write-Host "--------------------------------------" -ForegroundColor Gray
 Write-Host "[4/5] Building Flutter App..." -ForegroundColor Cyan
 cd app_flutter
-flutter build windows --$Configuration
+$FlutterConfig = $Configuration.ToLower()
+flutter build windows --$FlutterConfig
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Flutter build failed!" -ForegroundColor Red
     exit 1

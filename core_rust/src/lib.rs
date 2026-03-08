@@ -1480,7 +1480,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
                     EngineErrorCode::MediaNotReady
                 }
                 // PJSIP transport/network errors (171000-171999)
-                171000..=171999 => {
+                171000..=171999 | 100000..=159999 => {
                     log_engine(
                         LogLevel::Error,
                         &format!(
@@ -1501,7 +1501,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
                 _ => {
                     log_engine(
                         LogLevel::Error,
-                        &format!("CallStart: pd_call_make failed for uri={uri} (status={}). Unknown error - check audio devices and account registration.", status),
+                        &format!("CallStart: pd_call_make failed for uri={uri} (status={}).", status),
                     );
                     EngineErrorCode::MediaNotReady
                 }

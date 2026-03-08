@@ -8,6 +8,7 @@ import '../core/app_settings_service.dart';
 import '../core/contacts_service.dart';
 import 'diagnostics_screen.dart';
 import 'integration_settings_page.dart';
+import '../core/engine_channel.dart';
 
 /// Unified app-wide settings page.
 class AppSettingsPage extends ConsumerStatefulWidget {
@@ -39,7 +40,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadSettings();
   }
 
@@ -134,6 +135,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             indicatorColor: AppTheme.primary,
             tabs: const [
               Tab(icon: Icon(Icons.tune), text: 'General'),
+              Tab(icon: Icon(Icons.volume_up), text: 'Audio'),
               Tab(icon: Icon(Icons.audio_file), text: 'Codecs'),
               Tab(icon: Icon(Icons.phone_in_talk), text: 'Calls'),
               Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
@@ -153,10 +155,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 controller: _tabController,
                 children: [
                   _buildGeneralTab(),
+                  _buildAudioTab(),
                   _buildCodecsTab(),
                   _buildCallsTab(),
                   _buildContactsTab(),
-                  _buildIntegrationsTab(), // Added new tab view
+                  _buildIntegrationsTab(),
                 ],
               ),
       ),
@@ -784,6 +787,151 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             style:
                 FilledButton.styleFrom(backgroundColor: AppTheme.warningAmber),
             child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAudioTab() {
+    final channel = EngineChannel.instance;
+    final inputDevices = channel.audioDevices.where((d) => d.isInput).toList();
+    final outputDevices =
+        channel.audioDevices.where((d) => d.isOutput).toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionTitle('Audio Devices'),
+          const SizedBox(height: 8),
+          const Text(
+            'Select your preferred microphone and speaker. If your device isn\'t listed, try refreshing.',
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+          ),
+          const SizedBox(height: 24),
+
+          // Input Device
+          _buildSettingCard(
+            icon: Icons.mic,
+            title: 'Microphone (Input)',
+            subtitle: inputDevices.isEmpty
+                ? 'No input devices found'
+                : 'Current: ${inputDevices.firstWhere((d) => d.id == channel.selectedInputId, orElse: () => inputDevices.first).name}',
+            trailing: inputDevices.isEmpty
+                ? const SizedBox.shrink()
+                : DropdownButton<int>(
+                    value:
+                        inputDevices.any((d) => d.id == channel.selectedInputId)
+                            ? channel.selectedInputId
+                            : inputDevices.first.id,
+                    dropdownColor: AppTheme.surfaceCard,
+                    underline: const SizedBox(),
+                    items: inputDevices.map((d) {
+                      return DropdownMenuItem<int>(
+                        value: d.id,
+                        child: Text(d.name,
+                            style: const TextStyle(
+                                color: AppTheme.textPrimary, fontSize: 13)),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        channel.engine
+                            .setAudioDevices(value, channel.selectedOutputId);
+                        setState(() {});
+                      }
+                    },
+                  ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Output Device
+          _buildSettingCard(
+            icon: Icons.speaker,
+            title: 'Speaker (Output)',
+            subtitle: outputDevices.isEmpty
+                ? 'No output devices found'
+                : 'Current: ${outputDevices.firstWhere((d) => d.id == channel.selectedOutputId, orElse: () => outputDevices.first).name}',
+            trailing: outputDevices.isEmpty
+                ? const SizedBox.shrink()
+                : DropdownButton<int>(
+                    value: outputDevices
+                            .any((d) => d.id == channel.selectedOutputId)
+                        ? channel.selectedOutputId
+                        : outputDevices.first.id,
+                    dropdownColor: AppTheme.surfaceCard,
+                    underline: const SizedBox(),
+                    items: outputDevices.map((d) {
+                      return DropdownMenuItem<int>(
+                        value: d.id,
+                        child: Text(d.name,
+                            style: const TextStyle(
+                                color: AppTheme.textPrimary, fontSize: 13)),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        channel.engine
+                            .setAudioDevices(channel.selectedInputId, value);
+                        setState(() {});
+                      }
+                    },
+                  ),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Refresh Button
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () {
+                channel.engine.listAudioDevices();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Refreshing audio devices...'),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh Device List'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Tip card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.primary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.lightbulb_outline,
+                    color: AppTheme.primary, size: 24),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'If you experience no sound, ensure your earphones are connected and selected as the default communication device in Windows Sound Settings.',
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
