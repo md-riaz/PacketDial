@@ -85,7 +85,7 @@ Rust/Flutter downloads).
 |---|---|
 | `-SkipInstall` | Skip installing tools (use when tools are already installed) |
 | `-SkipBuild` | Install tools only; do not build the app |
-| `-FlutterVersion <ver>` | Override the Flutter version (default: `3.41.2`) |
+| `-FlutterVersion <ver>` | Override the Flutter version (default: `3.41.4`) |
 
 Example — re-build after a code change without reinstalling tools:
 
@@ -116,7 +116,7 @@ All tools are installed using **winget** (Windows Package Manager):
 | Flutter SDK | `Google.FlutterSDK` | Builds the desktop UI |
 
 > If the **Google.FlutterSDK** winget package is unavailable the script falls back to
-> downloading Flutter `3.41.2` directly from storage.googleapis.com — matching the CI
+> downloading Flutter `3.41.4` directly from storage.googleapis.com — matching the CI
 > version exactly.
 
 ### Step 3 — Map repository to a short drive letter (X:)
@@ -210,7 +210,7 @@ Download from <https://git-scm.com/download/win> and install with default settin
 
 ### 5.4 Flutter
 
-1. Download Flutter 3.41.2 (stable) from:  
+1. Download Flutter 3.41.4 (stable) from:  
    <https://docs.flutter.dev/get-started/install/windows/desktop>
 2. Extract the ZIP to `C:\flutter`.
 3. Add `C:\flutter\bin` to your **PATH**:

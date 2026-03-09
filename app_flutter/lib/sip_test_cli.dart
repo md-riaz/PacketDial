@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:ffi' as ffi;
-import 'package:ffi/ffi.dart';
+import 'dart:io';
 import 'ffi/engine.dart';
 
 typedef NativeCallback = ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>);
@@ -14,68 +13,71 @@ void main() async {
   const pass = '102';
   const domain = 'pbx.dev.ipbx.link';
   const uuid = 'test-cli-102';
-  const auth_user = '102';
-  const realm = 'pbx.dev.ipbx.link'; // Explicit realm
+  const authUser = '102';
 
-  print('================================================');
-  print('    SIP TEST CLI - NO STUN DIAGNOSTIC (v6)      ');
-  print('================================================');
+  stdout.writeln('================================================');
+  stdout.writeln('    SIP TEST CLI - NO STUN DIAGNOSTIC (v6)      ');
+  stdout.writeln('================================================');
 
   try {
     final engine = VoipEngine.load();
 
-    void _onEvent(int id, ffi.Pointer<ffi.Int8> data) {
+    void onEvent(int id, ffi.Pointer<ffi.Int8> data) {
       if (data == ffi.nullptr) {
-        print('[EVENT] nullptr data');
+        stdout.writeln('[EVENT] nullptr data');
         return;
       }
       try {
         final List<int> bytes = [];
         int i = 0;
-        while (i < 1000) { // Safety limit
-          final byte = data.elementAt(i).value;
+        while (i < 1000) {
+          // Safety limit
+          final byte = (data + i).value;
           if (byte == 0) break;
           bytes.add(byte);
           i++;
         }
         if (bytes.isEmpty) {
-          print('[EVENT] empty data');
+          stdout.writeln('[EVENT] empty data');
           return;
         }
         final raw = utf8.decode(bytes, allowMalformed: true);
-        print('[EVENT RAW] $raw');
+        stdout.writeln('[EVENT RAW] $raw');
         final map = jsonDecode(raw);
         final type = map['type'] ?? 'Unknown';
 
-        print('[EVENT] $type: ${map['payload']}');
-        
+        stdout.writeln('[EVENT] $type: ${map['payload']}');
+
         if (type == 'SipMessageCaptured') {
-          print('\n[SIP ${map['payload']['direction'].toUpperCase()}]');
-          print(map['payload']['raw']);
+          stdout
+              .writeln('\n[SIP ${map['payload']['direction'].toUpperCase()}]');
+          stdout.writeln(map['payload']['raw']);
         } else if (type == 'RegistrationStateChanged') {
-          print(
-              '\n[STATUS] ${map['payload']['state']}: ${map['payload']['reason']}');
+          stdout.writeln(
+            '\n[STATUS] ${map['payload']['state']}: ${map['payload']['reason']}',
+          );
         }
       } catch (e) {
-        print('[EVENT ERROR] $e');
+        stdout.writeln('[EVENT ERROR] $e');
       }
     }
 
-    final nativeCallable =
-        ffi.NativeCallable<NativeCallback>.listener(_onEvent);
+    final nativeCallable = ffi.NativeCallable<NativeCallback>.listener(onEvent);
     engine.setEventCallback(nativeCallable.nativeFunction);
 
-    print('>>> Initializing Engine (Log: Debug)...');
+    stdout.writeln('>>> Initializing Engine (Log: Debug)...');
     engine.init('PacketDial-CLI-v6');
-    await Future.delayed(const Duration(milliseconds: 500)); // Wait for PJSIP to fully init
+    await Future.delayed(
+        const Duration(milliseconds: 500)); // Wait for PJSIP to fully init
     engine.sendCommand('SetLogLevel', jsonEncode({'level': 'debug'}));
 
-    print('>>> AccountUpsert (pbx.dev.ipbx.link:5060, TCP, no TLS)...');
+    stdout
+        .writeln('>>> AccountUpsert (pbx.dev.ipbx.link:5060, TCP, no TLS)...');
     final payload = {
       'uuid': uuid,
       'username': user,
       'password': pass,
-      'auth_username': auth_user,
+      'auth_username': authUser,
       'server': server,
       'domain': domain,
       'transport': 'tcp',
@@ -83,19 +85,19 @@ void main() async {
       'stun_server': '',
     };
 
-    print('Payload: ${jsonEncode(payload)}');
+    stdout.writeln('Payload: ${jsonEncode(payload)}');
     engine.sendCommand('AccountUpsert', jsonEncode(payload));
 
-    print('>>> Registering...');
+    stdout.writeln('>>> Registering...');
     engine.sendCommand('AccountRegister', jsonEncode({'uuid': uuid}));
 
-    print('>>> Waiting for registration (30 seconds)...');
+    stdout.writeln('>>> Waiting for registration (30 seconds)...');
     await Future.delayed(const Duration(seconds: 30));
 
-    print('\n>>> Shutting down.');
+    stdout.writeln('\n>>> Shutting down.');
     engine.shutdown();
     nativeCallable.close();
   } catch (e) {
-    print('!!! ERROR: $e');
+    stdout.writeln('!!! ERROR: $e');
   }
 }

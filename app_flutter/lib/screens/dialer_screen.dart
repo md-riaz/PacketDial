@@ -523,34 +523,38 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                       fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                RadioListTile<bool>(
-                  value: false,
+                RadioGroup<bool>(
                   groupValue: isConsultTransfer,
                   onChanged: (value) {
-                    setDialogState(() => isConsultTransfer = value!);
+                    if (value == null) return;
+                    setDialogState(() => isConsultTransfer = value);
                   },
-                  title: const Text('Blind Transfer',
-                      style: TextStyle(color: AppTheme.textPrimary)),
-                  subtitle: const Text(
-                      'Transfer immediately without consulting',
-                      style: TextStyle(
-                          color: AppTheme.textTertiary, fontSize: 11)),
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppTheme.primary,
-                ),
-                RadioListTile<bool>(
-                  value: true,
-                  groupValue: isConsultTransfer,
-                  onChanged: (value) {
-                    setDialogState(() => isConsultTransfer = value!);
-                  },
-                  title: const Text('Consult Transfer',
-                      style: TextStyle(color: AppTheme.textPrimary)),
-                  subtitle: const Text('Speak to target first, then transfer',
-                      style: TextStyle(
-                          color: AppTheme.textTertiary, fontSize: 11)),
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: AppTheme.primary,
+                  child: const Column(
+                    children: [
+                      RadioListTile<bool>(
+                        value: false,
+                        title: Text('Blind Transfer',
+                            style: TextStyle(color: AppTheme.textPrimary)),
+                        subtitle: Text(
+                            'Transfer immediately without consulting',
+                            style: TextStyle(
+                                color: AppTheme.textTertiary, fontSize: 11)),
+                        contentPadding: EdgeInsets.zero,
+                        activeColor: AppTheme.primary,
+                      ),
+                      RadioListTile<bool>(
+                        value: true,
+                        title: Text('Consult Transfer',
+                            style: TextStyle(color: AppTheme.textPrimary)),
+                        subtitle: Text(
+                            'Speak to target first, then transfer',
+                            style: TextStyle(
+                                color: AppTheme.textTertiary, fontSize: 11)),
+                        contentPadding: EdgeInsets.zero,
+                        activeColor: AppTheme.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

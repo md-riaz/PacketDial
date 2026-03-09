@@ -24,7 +24,7 @@
     Optional flags:
         -SkipInstall   Skip prerequisite installation (tools already present)
         -SkipBuild     Only install prerequisites, do not build
-        -FlutterVersion  Flutter SDK version to install (default: 3.41.2)
+        -FlutterVersion  Flutter SDK version to install (default: 3.41.4)
 
 .PARAMETER SkipInstall
     If set, prerequisite installation steps are skipped.
@@ -34,14 +34,14 @@
 
 .PARAMETER FlutterVersion
     Flutter SDK version to install when Flutter is not already present.
-    Must match the version used by CI. Default: 3.41.2
+    Must match the version used by CI. Default: 3.41.4
 #>
 
 [CmdletBinding()]
 param(
     [switch]$SkipInstall,
     [switch]$SkipBuild,
-    [string]$FlutterVersion = '3.41.2'
+    [string]$FlutterVersion = '3.41.4'
 )
 
 $ErrorActionPreference = 'Stop'

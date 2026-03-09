@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   ffi: ^2.2.0
-  package_info_plus: ^8.0.0
+  package_info_plus: ^9.0.0
   http: ^1.2.1
   window_manager: ^0.5.1
   bitsdojo_window: ^0.1.6
@@ -23,18 +23,18 @@ dependencies:
   path_provider: ^2.1.5
   uuid: ^4.5.3
   intl: ^0.20.2
-  google_fonts: ^6.2.1
+  google_fonts: ^8.0.2
   shared_preferences: ^2.2.3
-  phone_numbers_parser: ^8.3.0
-  audioplayers: ^5.2.1
-  file_picker: ^6.1.1
+  phone_numbers_parser: ^9.0.20
+  audioplayers: ^6.6.0
+  file_picker: ^10.3.10
   path: ^1.9.0
   url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
   build_runner: ^2.4.9
   isar_generator: ^3.1.0+1
   flutter_launcher_icons: ^0.14.4

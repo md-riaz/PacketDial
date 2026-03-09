@@ -20,29 +20,33 @@ final callStatsProvider = FutureProvider<CallStats>((ref) {
   if (isar == null) {
     return CallStats.empty();
   }
-  
+
   // Get all history entries from the last 30 days
   final now = DateTime.now();
   final thirtyDaysAgo = now.subtract(const Duration(days: 30));
-  
-  return isar.callHistorySchemas.filter().timestampGreaterThan(thirtyDaysAgo).findAll().then((history) {
+
+  return isar.callHistorySchemas
+      .filter()
+      .timestampGreaterThan(thirtyDaysAgo)
+      .findAll()
+      .then((history) {
     int totalCalls = history.length;
     int incomingCalls = 0;
     int outgoingCalls = 0;
     int answeredCalls = 0;
     int missedCalls = 0;
     int totalDurationSecs = 0;
-    
+
     for (final entry in history) {
       final isOutgoing = entry.direction.toLowerCase() == 'outgoing';
       final isAnswered = entry.result == 'Answered';
-      
+
       if (isOutgoing) {
         outgoingCalls++;
       } else {
         incomingCalls++;
       }
-      
+
       if (isAnswered) {
         answeredCalls++;
         totalDurationSecs += entry.durationSeconds;
@@ -50,7 +54,7 @@ final callStatsProvider = FutureProvider<CallStats>((ref) {
         missedCalls++;
       }
     }
-    
+
     return CallStats(
       totalCalls: totalCalls,
       incomingCalls: incomingCalls,
@@ -70,7 +74,7 @@ class CallStats {
   final int answeredCalls;
   final int missedCalls;
   final int totalDurationSecs;
-  
+
   const CallStats({
     required this.totalCalls,
     required this.incomingCalls,
@@ -79,7 +83,7 @@ class CallStats {
     required this.missedCalls,
     required this.totalDurationSecs,
   });
-  
+
   factory CallStats.empty() {
     return const CallStats(
       totalCalls: 0,
@@ -90,7 +94,7 @@ class CallStats {
       totalDurationSecs: 0,
     );
   }
-  
+
   String get formattedTotalDuration {
     final hours = totalDurationSecs ~/ 3600;
     final minutes = (totalDurationSecs % 3600) ~/ 60;
@@ -167,8 +171,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               loading: () => Center(
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor:
-                      AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.6)),
+                  valueColor: AlwaysStoppedAnimation(
+                      AppTheme.primary.withValues(alpha: 0.6)),
                 ),
               ),
               error: (e, _) => Center(
@@ -207,11 +211,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
               Icon(Icons.insights, size: 18, color: AppTheme.primary),
-              const SizedBox(width: 8),
-              const Text(
+              SizedBox(width: 8),
+              Text(
                 'Last 30 Days',
                 style: TextStyle(
                   fontSize: 12,
@@ -336,7 +340,7 @@ class _StatItem extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 9,
             color: AppTheme.textTertiary,
             fontWeight: FontWeight.w500,

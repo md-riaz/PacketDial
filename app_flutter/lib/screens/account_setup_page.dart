@@ -111,7 +111,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceVariant,
         elevation: 0,
-        leading: BackButton(
+        leading: const BackButton(
           color: AppTheme.textPrimary,
         ),
         title: Text(
@@ -231,15 +231,17 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                       ),
                       const SizedBox(height: 18),
                       DropdownButtonFormField<String>(
-                        value: transport,
+                        initialValue: transport,
                         decoration: InputDecoration(
                           labelText: 'Transport',
                           contentPadding: const EdgeInsets.symmetric(
                               vertical: 16, horizontal: 16),
-                          labelStyle: TextStyle(color: AppTheme.textSecondary),
+                          labelStyle:
+                              const TextStyle(color: AppTheme.textSecondary),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: AppTheme.border),
+                            borderSide:
+                                const BorderSide(color: AppTheme.border),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
@@ -400,7 +402,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
             const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppTheme.border),
+          borderSide: const BorderSide(color: AppTheme.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

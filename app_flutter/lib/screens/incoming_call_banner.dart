@@ -36,12 +36,10 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
       SipUriUtils.extractDomain(widget.callInfo['uri'] as String?);
   String get accountName =>
       widget.callInfo['account_name'] as String? ?? 'SIP Account';
-  String get accountUser =>
-      widget.callInfo['account_user'] as String? ?? '';
+  String get accountUser => widget.callInfo['account_user'] as String? ?? '';
   String? get callerNumber =>
       SipUriUtils.extractNumber(widget.callInfo['uri'] as String?);
-  String? get extId =>
-      widget.callInfo['extid'] as String?;
+  String? get extId => widget.callInfo['extid'] as String?;
 
   @override
   void initState() {
@@ -57,7 +55,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
     );
 
     _loadCustomerData();
-    
+
     // Start slide-in animation
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _slideCtrl.forward();
@@ -65,7 +63,8 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
   }
 
   Future<void> _loadCustomerData() async {
-    final customerJson = widget.callInfo['customer_data'] as Map<String, dynamic>?;
+    final customerJson =
+        widget.callInfo['customer_data'] as Map<String, dynamic>?;
     if (customerJson != null) {
       setState(() {
         _customerData = CustomerData.fromJson(customerJson);
@@ -85,7 +84,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
     if (_answered) return;
     setState(() => _answered = true);
     widget.onAnswer();
-    
+
     // Start slide-out animation after brief delay
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
@@ -98,7 +97,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
 
   void _reject() {
     widget.onReject();
-    
+
     // Start slide-out animation
     _slideCtrl.reverse().then((_) {
       // Banner will be removed by parent when animation completes
@@ -135,10 +134,10 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
         child: Container(
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
+            gradient: const LinearGradient(
               colors: [
-                const Color(0xFF0D0D1A),
-                const Color(0xFF1A1040),
+                Color(0xFF0D0D1A),
+                Color(0xFF1A1040),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -215,7 +214,8 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: AppTheme.callGreen.withValues(alpha: 0.9),
+                                  color:
+                                      AppTheme.callGreen.withValues(alpha: 0.9),
                                   letterSpacing: 1,
                                 ),
                               ),
@@ -236,9 +236,9 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Caller details
                 if (callerNumber != null && callerNumber != displayName) ...[
                   Text(
@@ -251,7 +251,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                   ),
                   const SizedBox(height: 4),
                 ],
-                
+
                 if (callerDomain != null && callerDomain!.isNotEmpty) ...[
                   Text(
                     callerDomain!,
@@ -262,7 +262,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                   ),
                   const SizedBox(height: 12),
                 ],
-                
+
                 // Company badge
                 if (displayCompany != null && displayCompany.isNotEmpty) ...[
                   Container(
@@ -285,7 +285,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                   ),
                   const SizedBox(height: 12),
                 ],
-                
+
                 // Account info
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -319,9 +319,9 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // CRM link button
                 if (_customerData?.hasContactLink == true) ...[
                   SizedBox(
@@ -341,7 +341,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                   ),
                   const SizedBox(height: 12),
                 ],
-                
+
                 // Action buttons
                 if (!_answered)
                   Row(

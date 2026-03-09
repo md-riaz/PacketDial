@@ -7,7 +7,7 @@
 
 - Visual Studio Build Tools 2022 (Desktop development with C++ workload)
 - Rust stable toolchain (`rustup target add x86_64-pc-windows-msvc`)
-- Flutter SDK 3.41.2 stable (`flutter config --enable-windows-desktop`)
+- Flutter SDK 3.41.4 stable (`flutter config --enable-windows-desktop`)
 - Git
 
 ---

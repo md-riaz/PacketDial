@@ -329,7 +329,7 @@ class _AppState extends State<App>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.delayed(const Duration(milliseconds: 500));
       final context = _navigatorKey.currentContext;
-      if (context == null || !mounted) return;
+      if (context == null || !context.mounted) return;
       showDialog<void>(
         context: context,
         barrierDismissible: false,

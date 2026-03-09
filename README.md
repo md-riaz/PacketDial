@@ -182,7 +182,7 @@ Subscribe to real-time events via `\\.\pipe\PacketDial.API`.
 | **OS** | Windows 10 (build 1809+) or Windows 11, 64-bit |
 | **Visual Studio Build Tools 2022** | Desktop development with C++ workload |
 | **Rust** | Stable toolchain (auto-installed by `setup_windows.ps1`) |
-| **Flutter SDK** | 3.41.2+ (auto-installed by `setup_windows.ps1`) |
+| **Flutter SDK** | 3.41.4+ (auto-installed by `setup_windows.ps1`) |
 | **Disk Space** | 10+ GB free |
 
 > **Tip:** Running `.\scripts\setup_windows.ps1` installs all prerequisites automatically.
@@ -393,4 +393,3 @@ Located in [`scripts/`](file:///c:/Users/vm_user/Downloads/PacketDial/scripts/):
 
 > **Note:** PJSIP is required for all SIP functionality. Build it with `scripts/build_pjsip.ps1`
 > before compiling the Rust core. The thin C shim (`pjsip_shim.c`) bridges PJSIP and the Rust FFI layer.
-

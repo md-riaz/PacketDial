@@ -10,7 +10,8 @@ class IntegrationSettingsPage extends StatefulWidget {
   const IntegrationSettingsPage({super.key});
 
   @override
-  State<IntegrationSettingsPage> createState() => _IntegrationSettingsPageState();
+  State<IntegrationSettingsPage> createState() =>
+      _IntegrationSettingsPageState();
 }
 
 class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
@@ -21,18 +22,18 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   // Controllers for webhooks
   final _ringWebhookController = TextEditingController();
   final _endWebhookController = TextEditingController();
-  
+
   // Controllers for customer lookup
   final _customerLookupUrlController = TextEditingController();
   final _customerLookupTimeoutController = TextEditingController();
-  
+
   // Controllers for screen pop
   final _screenPopUrlController = TextEditingController();
-  
+
   // Controllers for recording upload
   final _recordingUploadUrlController = TextEditingController();
   final _recordingFieldNameController = TextEditingController();
-  
+
   // Controllers for clipboard
   final _clipboardIntervalController = TextEditingController();
 
@@ -47,12 +48,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     _ringWebhookController.text = _settings.ringWebhookUrl;
     _endWebhookController.text = _settings.endWebhookUrl;
     _customerLookupUrlController.text = _settings.customerLookupUrl;
-    _customerLookupTimeoutController.text = 
+    _customerLookupTimeoutController.text =
         (_settings.customerLookupTimeoutMs / 1000).toString();
     _screenPopUrlController.text = _settings.screenPopUrl;
     _recordingUploadUrlController.text = _settings.recordingUploadUrl;
     _recordingFieldNameController.text = _settings.recordingFileFieldName;
-    _clipboardIntervalController.text = 
+    _clipboardIntervalController.text =
         (_settings.clipboardPollIntervalMs / 1000).toString();
   }
 
@@ -117,7 +118,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'URLs support placeholders: %NUMBER%, %ID%, %DIRECTION%, %DURATION%',
         ),
         const SizedBox(height: 24),
-        
+
         // Ring Webhook
         SwitchListTile(
           title: const Text('Incoming Call Webhook'),
@@ -146,9 +147,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               },
             ),
           ),
-        
+
         const Divider(height: 32),
-        
+
         // Call End Webhook
         SwitchListTile(
           title: const Text('Call End Webhook'),
@@ -166,7 +167,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               controller: _endWebhookController,
               decoration: const InputDecoration(
                 labelText: 'Webhook URL',
-                hintText: 'https://example.com/webhook/end?number=%NUMBER%&duration=%DURATION%',
+                hintText:
+                    'https://example.com/webhook/end?number=%NUMBER%&duration=%DURATION%',
                 border: OutlineInputBorder(),
               ),
               onSubmitted: (value) async {
@@ -175,7 +177,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               },
             ),
           ),
-        
+
         const SizedBox(height: 32),
         ElevatedButton.icon(
           onPressed: () async {
@@ -200,7 +202,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'Response format: {"crm_info": {"contact_name": "John", "company": "ACME", "contact_link": "https://..."}}',
         ),
         const SizedBox(height: 24),
-        
         SwitchListTile(
           title: const Text('Enable Customer Lookup'),
           subtitle: const Text('Fetch customer data on incoming calls'),
@@ -210,12 +211,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             setState(() {});
           },
         ),
-        
         const Divider(height: 32),
-        
-        ListTile(
-          title: const Text('Lookup URL'),
-          subtitle: const Text('Use %NUMBER% and %EXTID% placeholders'),
+        const ListTile(
+          title: Text('Lookup URL'),
+          subtitle: Text('Use %NUMBER% and %EXTID% placeholders'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -228,12 +227,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             ),
           ),
         ),
-        
         const SizedBox(height: 16),
-        
-        ListTile(
-          title: const Text('Timeout'),
-          subtitle: const Text('Maximum time to wait for response'),
+        const ListTile(
+          title: Text('Timeout'),
+          subtitle: Text('Maximum time to wait for response'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -247,19 +244,19 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
         ),
-        
         const SizedBox(height: 24),
         ElevatedButton.icon(
           onPressed: () async {
-            await _settings.setCustomerLookupUrl(_customerLookupUrlController.text);
-            final timeoutSec = int.tryParse(_customerLookupTimeoutController.text) ?? 5;
+            await _settings
+                .setCustomerLookupUrl(_customerLookupUrlController.text);
+            final timeoutSec =
+                int.tryParse(_customerLookupTimeoutController.text) ?? 5;
             await _settings.setCustomerLookupTimeoutMs(timeoutSec * 1000);
             _showSavedSnackbar();
           },
           icon: const Icon(Icons.save),
           label: const Text('Save Settings'),
         ),
-        
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: () {
@@ -285,10 +282,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'Supports browser launch or background HTTP request.',
         ),
         const SizedBox(height: 24),
-        
-        ListTile(
-          title: const Text('Screen Pop URL'),
-          subtitle: const Text('URL to open on incoming calls'),
+        const ListTile(
+          title: Text('Screen Pop URL'),
+          subtitle: Text('URL to open on incoming calls'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -301,12 +297,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             ),
           ),
         ),
-        
         const SizedBox(height: 16),
-        
-        ListTile(
-          title: const Text('Trigger Event'),
-          subtitle: const Text('When to trigger screen pop'),
+        const ListTile(
+          title: Text('Trigger Event'),
+          subtitle: Text('When to trigger screen pop'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -316,7 +310,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               border: OutlineInputBorder(),
             ),
             items: const [
-              DropdownMenuItem(value: 'ring', child: Text('Incoming Call Ring')),
+              DropdownMenuItem(
+                  value: 'ring', child: Text('Incoming Call Ring')),
               DropdownMenuItem(value: 'answer', child: Text('Call Answered')),
             ],
             onChanged: (value) async {
@@ -326,9 +321,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             },
           ),
         ),
-        
         const SizedBox(height: 8),
-        
         SwitchListTile(
           title: const Text('Open in Browser'),
           subtitle: const Text('If off, send background HTTP request'),
@@ -338,7 +331,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             setState(() {});
           },
         ),
-        
         SwitchListTile(
           title: const Text('Suppress Main Window'),
           subtitle: const Text('Don\'t show PacketDial window on screen pop'),
@@ -348,7 +340,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             setState(() {});
           },
         ),
-        
         const SizedBox(height: 24),
         ElevatedButton.icon(
           onPressed: () async {
@@ -372,7 +363,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'Uses HTTP POST with multipart/form-data.',
         ),
         const SizedBox(height: 24),
-        
         SwitchListTile(
           title: const Text('Enable Recording Upload'),
           subtitle: const Text('Upload recordings after calls end'),
@@ -382,12 +372,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             setState(() {});
           },
         ),
-        
         const Divider(height: 32),
-        
-        ListTile(
-          title: const Text('Upload URL'),
-          subtitle: const Text('Endpoint to receive recording files'),
+        const ListTile(
+          title: Text('Upload URL'),
+          subtitle: Text('Endpoint to receive recording files'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -400,12 +388,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             ),
           ),
         ),
-        
         const SizedBox(height: 16),
-        
-        ListTile(
-          title: const Text('File Field Name'),
-          subtitle: const Text('HTML input field name for the file'),
+        const ListTile(
+          title: Text('File Field Name'),
+          subtitle: Text('HTML input field name for the file'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -418,12 +404,13 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             ),
           ),
         ),
-        
         const SizedBox(height: 24),
         ElevatedButton.icon(
           onPressed: () async {
-            await _settings.setRecordingUploadUrl(_recordingUploadUrlController.text);
-            await _settings.setRecordingFileFieldName(_recordingFieldNameController.text);
+            await _settings
+                .setRecordingUploadUrl(_recordingUploadUrlController.text);
+            await _settings
+                .setRecordingFileFieldName(_recordingFieldNameController.text);
             _showSavedSnackbar();
           },
           icon: const Icon(Icons.save),
@@ -443,7 +430,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'A popup will appear to confirm dialing.',
         ),
         const SizedBox(height: 24),
-        
         SwitchListTile(
           title: const Text('Enable Clipboard Monitoring'),
           subtitle: const Text('Watch clipboard for phone numbers'),
@@ -457,12 +443,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             }
           },
         ),
-        
         const Divider(height: 32),
-        
-        ListTile(
-          title: const Text('Polling Interval'),
-          subtitle: const Text('How often to check clipboard'),
+        const ListTile(
+          title: Text('Polling Interval'),
+          subtitle: Text('How often to check clipboard'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -476,11 +460,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
         ),
-        
         const SizedBox(height: 24),
         ElevatedButton.icon(
           onPressed: () async {
-            final intervalSec = int.tryParse(_clipboardIntervalController.text) ?? 1;
+            final intervalSec =
+                int.tryParse(_clipboardIntervalController.text) ?? 1;
             await _settings.setClipboardPollIntervalMs(intervalSec * 1000);
             _showSavedSnackbar();
           },
@@ -501,18 +485,18 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'Rules are applied in priority order (highest first).',
         ),
         const SizedBox(height: 16),
-        
+
         ElevatedButton.icon(
           onPressed: () => _showAddRuleDialog(),
           icon: const Icon(Icons.add),
           label: const Text('Add Dialing Rule'),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // List existing rules
         ..._settings.dialingRules.map((rule) => _buildRuleTile(rule)),
-        
+
         const SizedBox(height: 32),
         _buildSectionTitle('Caller ID Transformations'),
         _buildInfoCard(
@@ -520,17 +504,18 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           'Useful for normalizing different number formats.',
         ),
         const SizedBox(height: 16),
-        
+
         ElevatedButton.icon(
           onPressed: () => _showAddTransformationDialog(),
           icon: const Icon(Icons.add),
           label: const Text('Add Transformation'),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // List existing transformations
-        ..._settings.callerIdTransformations.map((t) => _buildTransformationTile(t)),
+        ..._settings.callerIdTransformations
+            .map((t) => _buildTransformationTile(t)),
       ],
     );
   }
@@ -546,7 +531,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             Switch(
               value: rule.enabled,
               onChanged: (value) async {
-                await _settings.updateDialingRule(rule.copyWith(enabled: value));
+                await _settings
+                    .updateDialingRule(rule.copyWith(enabled: value));
                 setState(() {});
               },
             ),
@@ -575,7 +561,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             Switch(
               value: t.enabled,
               onChanged: (value) async {
-                await _settings.updateCallerIdTransformation(t.copyWith(enabled: value));
+                await _settings
+                    .updateCallerIdTransformation(t.copyWith(enabled: value));
                 setState(() {});
               },
             ),
@@ -647,6 +634,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 priority: int.tryParse(priorityController.text) ?? 0,
               );
               await _settings.addDialingRule(rule);
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               setState(() {});
             },
@@ -661,7 +649,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     final nameController = TextEditingController(text: rule.name);
     final patternController = TextEditingController(text: rule.pattern);
     final replacementController = TextEditingController(text: rule.replacement);
-    final priorityController = TextEditingController(text: rule.priority.toString());
+    final priorityController =
+        TextEditingController(text: rule.priority.toString());
 
     showDialog(
       context: context,
@@ -709,6 +698,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 priority: int.tryParse(priorityController.text) ?? 0,
               );
               await _settings.updateDialingRule(updated);
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               setState(() {});
             },
@@ -733,6 +723,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           ElevatedButton(
             onPressed: () async {
               await _settings.removeDialingRule(rule.id);
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               setState(() {});
             },
@@ -795,6 +786,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 priority: int.tryParse(priorityController.text) ?? 0,
               );
               await _settings.addCallerIdTransformation(transformation);
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               setState(() {});
             },
@@ -809,7 +801,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     final nameController = TextEditingController(text: t.name);
     final patternController = TextEditingController(text: t.pattern);
     final replacementController = TextEditingController(text: t.replacement);
-    final priorityController = TextEditingController(text: t.priority.toString());
+    final priorityController =
+        TextEditingController(text: t.priority.toString());
 
     showDialog(
       context: context,
@@ -857,6 +850,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 priority: int.tryParse(priorityController.text) ?? 0,
               );
               await _settings.updateCallerIdTransformation(updated);
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               setState(() {});
             },
@@ -881,6 +875,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           ElevatedButton(
             onPressed: () async {
               await _settings.removeCallerIdTransformation(t.id);
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               setState(() {});
             },
@@ -895,9 +890,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     return Text(
       title,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-        fontWeight: FontWeight.bold,
-        color: AppTheme.textPrimary,
-      ),
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
     );
   }
 
@@ -911,15 +906,15 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             Text(
               title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppTheme.textSecondary,
-              ),
+                    color: AppTheme.textSecondary,
+                  ),
             ),
           ],
         ),

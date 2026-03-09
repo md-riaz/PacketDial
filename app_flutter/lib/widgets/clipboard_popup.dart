@@ -51,23 +51,26 @@ class _ClipboardPopupState extends State<ClipboardPopup>
 
   void _dial() async {
     if (_isDialing) return;
-    
+
     final number = _numberController.text.trim();
     if (number.isEmpty) return;
 
     setState(() => _isDialing = true);
 
     // Transform number using dialing rules
-    final transformedNumber = DialingRulesService.instance.parseAndTransform(number);
+    final transformedNumber =
+        DialingRulesService.instance.parseAndTransform(number);
 
     try {
       // Use engine to place the call - get first registered account
       final accounts = EngineChannel.instance.accounts;
-      final accountId = accounts.values.firstWhere(
-        (acc) => acc.registrationState.name == 'Registered',
-        orElse: () => accounts.values.first,
-      ).uuid;
-      
+      final accountId = accounts.values
+          .firstWhere(
+            (acc) => acc.registrationState.name == 'Registered',
+            orElse: () => accounts.values.first,
+          )
+          .uuid;
+
       EngineChannel.instance.engine.makeCall(accountId, transformedNumber);
 
       // Dismiss after short delay
@@ -152,11 +155,11 @@ class _ClipboardPopupState extends State<ClipboardPopup>
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
+                                Text(
                                   'Phone Number Detected',
                                   style: TextStyle(
                                     fontSize: 14,
@@ -164,7 +167,7 @@ class _ClipboardPopupState extends State<ClipboardPopup>
                                     color: AppTheme.textPrimary,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
+                                SizedBox(height: 2),
                                 Text(
                                   'Found in clipboard',
                                   style: TextStyle(
@@ -184,9 +187,9 @@ class _ClipboardPopupState extends State<ClipboardPopup>
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Number input field
                       TextField(
                         controller: _numberController,
@@ -194,14 +197,15 @@ class _ClipboardPopupState extends State<ClipboardPopup>
                           labelText: 'Phone Number',
                           hintText: 'Enter number to dial',
                           border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.phone, color: AppTheme.primary),
+                          prefixIcon:
+                              Icon(Icons.phone, color: AppTheme.primary),
                         ),
                         enabled: !_isDialing,
                         keyboardType: TextInputType.phone,
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Action buttons
                       Row(
                         children: [
@@ -213,20 +217,21 @@ class _ClipboardPopupState extends State<ClipboardPopup>
                               label: const Text('Copy'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppTheme.textSecondary,
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
                               ),
                             ),
                           ),
-                          
+
                           const SizedBox(width: 12),
-                          
+
                           // Dial button
                           Expanded(
                             flex: 2,
                             child: FilledButton.icon(
                               onPressed: _isDialing ? null : _dial,
                               icon: _isDialing
-                                  ? SizedBox(
+                                  ? const SizedBox(
                                       width: 16,
                                       height: 16,
                                       child: CircularProgressIndicator(
@@ -241,7 +246,8 @@ class _ClipboardPopupState extends State<ClipboardPopup>
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppTheme.callGreen,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
                               ),
                             ),
                           ),
