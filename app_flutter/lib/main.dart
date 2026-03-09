@@ -8,7 +8,6 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/rendering.dart';
 import 'dart:io';
 import 'dart:async';
 import 'core/app_theme.dart';
@@ -49,15 +48,6 @@ String _resolveRuntimeIconPath() {
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  assert(() {
-    // Ensure debug paint overlays are disabled (yellow/green baseline lines).
-    debugPaintBaselinesEnabled = false;
-    debugPaintSizeEnabled = false;
-    debugPaintPointersEnabled = false;
-    debugPaintLayerBordersEnabled = false;
-    debugRepaintRainbowEnabled = false;
-    return true;
-  }());
 
   // ── Global Error Handler ────────────────────────────────────────────────
   // Capture and log all uncaught Flutter errors
@@ -203,10 +193,12 @@ class App extends ConsumerStatefulWidget {
 
 class _AppState extends ConsumerState<App>
     with SingleTickerProviderStateMixin, WindowListener {
+  static const double _titleBarHeight = 34;
   int _selectedIndex = 0;
   String _status = 'Initializing…';
   bool _ready = false;
   bool _alwaysOnTop = false;
+  bool _forcedTopMostForIncoming = false;
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -265,6 +257,7 @@ class _AppState extends ConsumerState<App>
 
         // Listen for registration failures → auto-show edit page
         _regFailureSub = EngineChannel.instance.eventStream.listen((event) {
+          unawaited(_handleIncomingWindowBehavior(event));
           if (event['type'] == 'RegistrationStateChanged') {
             final payload = event['payload'] as Map<String, dynamic>? ?? {};
             if (payload['state'] == 'Failed') {
@@ -298,6 +291,44 @@ class _AppState extends ConsumerState<App>
 
   StreamSubscription? _regFailureSub;
   StreamSubscription? _clipboardSub;
+
+  Future<void> _handleIncomingWindowBehavior(Map<String, dynamic> event) async {
+    final type = event['type'] as String? ?? '';
+    if (type != 'CallStateChanged') return;
+
+    final payload = event['payload'] as Map<String, dynamic>? ?? {};
+    final direction = (payload['direction'] as String? ?? '').toLowerCase();
+    final state = (payload['state'] as String? ?? '').toLowerCase();
+
+    if (direction == 'incoming' && state == 'ringing') {
+      try {
+        if (await windowManager.isMinimized()) {
+          await windowManager.restore();
+        }
+        await windowManager.show();
+        await windowManager.setAlwaysOnTop(true);
+        await windowManager.focus();
+        _forcedTopMostForIncoming = true;
+      } catch (e) {
+        debugPrint('[APP] Failed to raise window for incoming call: $e');
+      }
+      return;
+    }
+
+    if (state == 'incall' || state == 'ended') {
+      if (!_forcedTopMostForIncoming) return;
+      _forcedTopMostForIncoming = false;
+      final restoreAlwaysOnTop = widget.windowPrefs.alwaysOnTop;
+      try {
+        await windowManager.setAlwaysOnTop(restoreAlwaysOnTop);
+        if (mounted) {
+          setState(() => _alwaysOnTop = restoreAlwaysOnTop);
+        }
+      } catch (e) {
+        debugPrint('[APP] Failed to restore always-on-top after call: $e');
+      }
+    }
+  }
 
   void _onRegistrationFailed(String accountId) async {
     if (!mounted) return;
@@ -511,7 +542,11 @@ class _AppState extends ConsumerState<App>
         ),
         // Incoming call banner overlay
         if (incomingCallInfo != null)
-          Positioned.fill(
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            top: _titleBarHeight,
             child: IncomingCallBanner(
               callInfo: incomingCallInfo,
               onAnswer: () {
@@ -547,6 +582,7 @@ class _AppState extends ConsumerState<App>
   Widget _buildTitleBar() {
     return WindowTitleBarBox(
       child: Container(
+        height: _titleBarHeight,
         decoration: const BoxDecoration(gradient: AppTheme.titleBarGradient),
         child: Row(
           children: [
