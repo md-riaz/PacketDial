@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'dart:ui' as ui;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
@@ -199,14 +200,6 @@ class _AppState extends State<App>
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
-  static final _screens = [
-    const DialerScreen(),
-    const ContactsScreen(),
-    const HistoryScreen(),
-    const AccountsScreen(),
-    const AppSettingsPage(),
-  ];
-
   late final AnimationController _splashCtrl;
   late final Animation<double> _splashFade;
   late final Animation<double> _splashScale;
@@ -214,6 +207,22 @@ class _AppState extends State<App>
   // Incoming call banner state
   Map<String, dynamic>? _incomingCallInfo;
   StreamSubscription? _callStateSub;
+
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted) return;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    final inBuildPhase = phase == SchedulerPhase.transientCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks ||
+        phase == SchedulerPhase.persistentCallbacks;
+
+    if (inBuildPhase) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(fn);
+      });
+    } else {
+      setState(fn);
+    }
+  }
 
   @override
   void initState() {
@@ -238,6 +247,7 @@ class _AppState extends State<App>
   void _initIncomingCallListener() {
     _callStateSub?.cancel();
     _callStateSub = EngineChannel.instance.eventStream.listen((event) {
+      if (!mounted) return;
       final type = event['type'] as String?;
       final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
 
@@ -250,7 +260,7 @@ class _AppState extends State<App>
 
         if (direction == 'Incoming' && state == 'Ringing' && !dndEnabled) {
           // Show incoming call banner
-          setState(() {
+          _safeSetState(() {
             _incomingCallInfo = {
               'uri': payload['uri'] as String? ?? '',
               'direction': 'Incoming',
@@ -264,7 +274,7 @@ class _AppState extends State<App>
           });
         } else if (state == 'InCall' || state == 'Ended') {
           // Hide banner
-          setState(() {
+          _safeSetState(() {
             _incomingCallInfo = null;
           });
         }
@@ -535,7 +545,10 @@ class _AppState extends State<App>
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
-                  child: _screens[_selectedIndex],
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_selectedIndex),
+                    child: _buildScreen(_selectedIndex),
+                  ),
                 ),
               ),
               const CockpitFooter(),
@@ -559,6 +572,23 @@ class _AppState extends State<App>
           ),
       ],
     );
+  }
+
+  Widget _buildScreen(int index) {
+    switch (index) {
+      case 0:
+        return const DialerScreen();
+      case 1:
+        return const ContactsScreen();
+      case 2:
+        return const HistoryScreen();
+      case 3:
+        return const AccountsScreen();
+      case 4:
+        return const AppSettingsPage();
+      default:
+        return const DialerScreen();
+    }
   }
 
   Widget _buildTitleBar() {

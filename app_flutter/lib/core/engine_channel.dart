@@ -21,6 +21,8 @@ import 'recording_service.dart';
 /// Maximum number of structured log entries retained in memory.
 const _kLogBufferMax = 500;
 const _kSipMessageMax = 200;
+const _kEventLogMax = 500;
+const _kSipRawPreviewMax = 240;
 
 /// Bridges the Dart UI to the Rust core via structured C ABI and callbacks.
 ///
@@ -144,9 +146,26 @@ class EngineChannel {
     try {
       // Read JSON payload from C string
       final jsonData = _ptrToString(jsonDataPtr);
+      final trimmed = jsonData.trim();
+      if (trimmed.isEmpty) {
+        debugPrint(
+            '[EngineChannel] Ignored empty payload for event id=$eventId');
+        return;
+      }
+      if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        debugPrint(
+            '[EngineChannel] Ignored non-JSON payload for event id=$eventId: ${trimmed.length > 80 ? "${trimmed.substring(0, 80)}..." : trimmed}');
+        return;
+      }
 
       // Parse JSON payload
-      final payload = jsonDecode(jsonData) as Map<String, dynamic>;
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map<String, dynamic>) {
+        debugPrint(
+            '[EngineChannel] Ignored non-object payload for event id=$eventId');
+        return;
+      }
+      final payload = decoded;
 
       // Map event ID to event type string
       final eventType = _eventIdToType(eventId);
@@ -158,7 +177,7 @@ class EngineChannel {
       };
 
       // Store in event log
-      eventLog.add(jsonEncode(event));
+      _appendEventLog(eventType, payload);
 
       // Handle the event
       _handleEvent(event);
@@ -170,6 +189,25 @@ class EngineChannel {
     } catch (e) {
       debugPrint(
           '[EngineChannel] Dropped event (id=$eventId) due to parse error: $e');
+    }
+  }
+
+  void _appendEventLog(String eventType, Map<String, dynamic> payload) {
+    Map<String, dynamic> payloadForLog = payload;
+    if (eventType == 'SipMessageCaptured') {
+      final raw = payload['raw'] as String? ?? '';
+      if (raw.isNotEmpty) {
+        final preview = raw.length > _kSipRawPreviewMax
+            ? '${raw.substring(0, _kSipRawPreviewMax)}...'
+            : raw;
+        payloadForLog = Map<String, dynamic>.from(payload)
+          ..['raw'] = preview
+          ..['raw_len'] = raw.length;
+      }
+    }
+    eventLog.add(jsonEncode({'type': eventType, 'payload': payloadForLog}));
+    if (eventLog.length > _kEventLogMax) {
+      eventLog.removeAt(0);
     }
   }
 
@@ -298,8 +336,14 @@ class EngineChannel {
 
     // Always print all events for debugging (truncated for performance)
     if (type == 'SipMessageCaptured') {
+      final direction = payload['direction'] as String? ?? '?';
+      final callId = payload['call_id'];
+      final raw = payload['raw'] as String? ?? '';
+      final preview = raw.isEmpty
+          ? ''
+          : (raw.length > 120 ? '${raw.substring(0, 120)}...' : raw);
       debugPrint(
-          '[EngineChannel] Event: SipMessageCaptured, Payload: $payload');
+          '[EngineChannel] Event: SipMessageCaptured, call_id=$callId, direction=$direction, raw_len=${raw.length}, preview="$preview"');
     } else if (type == 'EngineLog') {
       final msg = payload['message'] as String? ?? '';
       final preview = msg.length > 100 ? '${msg.substring(0, 100)}...' : msg;

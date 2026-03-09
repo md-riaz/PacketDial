@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
@@ -30,15 +31,37 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   final _focusNode = FocusNode();
   int? _consultationCallId;
   String? _consultationUri;
+  StreamSubscription<Map<String, dynamic>>? _callEventSub;
 
   @override
   void initState() {
     super.initState();
-    _focusNode.requestFocus();
-    EngineChannel.instance.events.listen(_handleCallEvent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+      }
+    });
+    _callEventSub = EngineChannel.instance.events.listen(_handleCallEvent);
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (!mounted) return;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    final inBuildPhase = phase == SchedulerPhase.transientCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks ||
+        phase == SchedulerPhase.persistentCallbacks;
+
+    if (inBuildPhase) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(fn);
+      });
+    } else {
+      setState(fn);
+    }
   }
 
   void _handleCallEvent(Map<String, dynamic> event) {
+    if (!mounted) return;
     final type = event['type'] as String?;
     final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
 
@@ -52,7 +75,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       if (callId != null && state == 'Ringing' && direction == 'Outgoing') {
         final activeCall = EngineChannel.instance.activeCall;
         if (activeCall != null && activeCall.onHold) {
-          setState(() {
+          _safeSetState(() {
             _consultationCallId = callId;
             _consultationUri = uri;
           });
@@ -63,12 +86,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       if (callId != null &&
           state == 'InCall' &&
           callId == _consultationCallId) {
-        setState(() => _consultationUri = uri);
+        _safeSetState(() => _consultationUri = uri);
       }
 
       // Clear when consultation call ends
       if (state == 'Ended' && callId == _consultationCallId) {
-        setState(() {
+        _safeSetState(() {
           _consultationCallId = null;
           _consultationUri = null;
         });
@@ -76,7 +99,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
       // Clear if original call ends (no longer in consult state)
       if (activeCallEnded(payload) && _consultationCallId != null) {
-        setState(() {
+        _safeSetState(() {
           _consultationCallId = null;
           _consultationUri = null;
         });
@@ -95,6 +118,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   @override
   void dispose() {
+    _callEventSub?.cancel();
     _uriCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -185,7 +209,18 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Handles account selection and dialing.
   Future<void> _dialWithAccountSelection(String raw) async {
-    final selectedAccount = await _selectAccount(context);
+    Account? selectedAccount;
+    try {
+      selectedAccount = await _selectAccount(context);
+    } catch (e) {
+      debugPrint('[Dialer] Account selection failed: $e');
+      _showErrorDialog(
+        'Account Selection Failed',
+        'Could not select an account for this call. Please try again.',
+      );
+      return;
+    }
+
     if (selectedAccount == null) return;
 
     final accountState = EngineChannel.instance.accounts[selectedAccount.uuid];
@@ -201,7 +236,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     _executeCall(selectedAccount, raw);
   }
 
-  void _executeCall(AccountSchema activeAccount, String raw) {
+  void _executeCall(Account activeAccount, String raw) {
     final accountId = activeAccount.uuid;
     final server = activeAccount.server;
 
@@ -278,7 +313,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   }
 
   /// Shows account selection dialog when multiple accounts are registered.
-  Future<AccountSchema?> _selectAccount(BuildContext context) async {
+  Future<Account?> _selectAccount(BuildContext context) async {
     final registeredAccounts = EngineChannel.instance.accounts.values
         .where((a) => a.registrationState == RegistrationState.registered)
         .toList();
@@ -290,19 +325,11 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     }
 
     if (registeredAccounts.length == 1) {
-      // Convert Account to AccountSchema
-      final acc = registeredAccounts.first;
-      return AccountSchema()
-        ..uuid = acc.uuid
-        ..accountName = acc.accountName
-        ..displayName = acc.displayName
-        ..server = acc.server
-        ..username = acc.username
-        ..password = '';
+      return registeredAccounts.first;
     }
 
     // Multiple accounts - show selection dialog
-    return showDialog<AccountSchema>(
+    return showDialog<Account>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surfaceCard,
@@ -324,6 +351,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 itemCount: registeredAccounts.length,
                 itemBuilder: (context, index) {
                   final account = registeredAccounts[index];
+                  final hasDialIdentity = account.username.trim().isNotEmpty &&
+                      account.server.trim().isNotEmpty;
+                  final subtitleText = hasDialIdentity
+                      ? '${account.username}@${account.server}'
+                      : 'Account details incomplete';
+
                   return Card(
                     color: AppTheme.inputFill,
                     margin: const EdgeInsets.only(bottom: 8),
@@ -347,13 +380,26 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                         ),
                       ),
                       subtitle: Text(
-                        '${account.username}@${account.server}',
-                        style: const TextStyle(
-                          color: AppTheme.textTertiary,
+                        subtitleText,
+                        style: TextStyle(
+                          color: hasDialIdentity
+                              ? AppTheme.textTertiary
+                              : AppTheme.warningAmber,
                           fontSize: 11,
                         ),
                       ),
-                      onTap: () => Navigator.pop(context, account),
+                      onTap: hasDialIdentity
+                          ? () {
+                              debugPrint(
+                                  '[Dialer] Account selected for call: ${account.uuid}');
+                              Navigator.pop(context, account);
+                            }
+                          : () {
+                              _showErrorDialog(
+                                'Incomplete Account',
+                                'This account is missing username or server, so it cannot place calls.',
+                              );
+                            },
                     ),
                   );
                 },
@@ -1436,8 +1482,9 @@ class _ActiveCallCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final minCardHeight = hasConsultationCall ? 250.0 : 200.0;
     return Container(
-      constraints: const BoxConstraints(minHeight: 200),
+      constraints: BoxConstraints(minHeight: minCardHeight),
       padding: const EdgeInsets.all(14),
       decoration: AppTheme.glassCard(
         color: hasConsultationCall
@@ -1447,206 +1494,216 @@ class _ActiveCallCard extends StatelessWidget {
             ? AppTheme.primary.withValues(alpha: 0.3)
             : AppTheme.accent.withValues(alpha: 0.25),
       ),
-      child: Column(
-        children: [
-          // Consultation status banner
-          if (hasConsultationCall) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primary.withValues(alpha: 0.15),
-                    AppTheme.primary.withValues(alpha: 0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppTheme.primary.withValues(alpha: 0.4),
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.phone_callback,
-                      color: AppTheme.primary,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Consultation Call',
-                          style: TextStyle(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          consultationDisplay ?? 'Calling...',
-                          style: TextStyle(
-                            color: AppTheme.primary.withValues(alpha: 0.8),
-                            fontSize: 11,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.callGreen.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: AppTheme.callGreen.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: AppTheme.callGreen,
-                          size: 12,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Active',
-                          style: TextStyle(
-                            color: AppTheme.callGreen,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // Main call info
-          Row(
+      child: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: minCardHeight - 28),
+          child: Column(
             children: [
-              // Pulsing avatar
-              const _PulsingAvatar(color: AppTheme.accent),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(SipUriUtils.friendlyName(call.uri),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: AppTheme.textPrimary)),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(call.state.label,
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.accent.withValues(alpha: 0.8),
-                                fontWeight: FontWeight.w500)),
-                        if (call.onHold) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color:
-                                  AppTheme.warningAmber.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: AppTheme.warningAmber
-                                    .withValues(alpha: 0.4),
+              // Consultation status banner
+              if (hasConsultationCall) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.primary.withValues(alpha: 0.15),
+                        AppTheme.primary.withValues(alpha: 0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.phone_callback,
+                          color: AppTheme.primary,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Consultation Call',
+                              style: TextStyle(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
                               ),
                             ),
-                            child: const Text(
-                              'On Hold',
+                            const SizedBox(height: 2),
+                            Text(
+                              consultationDisplay ?? 'Calling...',
                               style: TextStyle(
-                                color: AppTheme.warningAmber,
+                                color: AppTheme.primary.withValues(alpha: 0.8),
+                                fontSize: 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.callGreen.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: AppTheme.callGreen.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: AppTheme.callGreen,
+                              size: 12,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Active',
+                              style: TextStyle(
+                                color: AppTheme.callGreen,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Main call info
+              Row(
+                children: [
+                  // Pulsing avatar
+                  const _PulsingAvatar(color: AppTheme.accent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(SipUriUtils.friendlyName(call.uri),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: AppTheme.textPrimary)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Text(call.state.label,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color:
+                                        AppTheme.accent.withValues(alpha: 0.8),
+                                    fontWeight: FontWeight.w500)),
+                            if (call.onHold) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warningAmber
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: AppTheme.warningAmber
+                                        .withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'On Hold',
+                                  style: TextStyle(
+                                    color: AppTheme.warningAmber,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
+                    ),
+                  ),
+                  _TimerWidget(
+                    startTime: call.startedAt,
+                    accumulatedSeconds: call.accumulatedSeconds,
+                    lastResumedAt: call.lastResumedAt,
+                    onHold: call.onHold,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              // Action buttons (keep a strict minimum height to avoid clipping)
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 72),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _CallControlButton(
+                      icon: call.muted ? Icons.mic_off : Icons.mic,
+                      label: 'MUTE',
+                      active: call.muted,
+                      enabled: call.state != CallState.ringing,
+                      onTap: () => EngineChannel.instance.setMute(!call.muted),
+                    ),
+                    _CallControlButton(
+                      icon: Icons.pause_circle_outline,
+                      label: 'HOLD',
+                      active: call.onHold,
+                      enabled: call.state != CallState.ringing,
+                      onTap: () => EngineChannel.instance.setHold(!call.onHold),
+                    ),
+                    _CallControlButton(
+                      icon: Icons.grid_on,
+                      label: 'KEYPAD',
+                      active: false,
+                      enabled: call.state != CallState.ringing,
+                      onTap: () {},
+                    ),
+                    _CallControlButton(
+                      icon: hasConsultationCall
+                          ? Icons.check_circle
+                          : Icons.phone_forwarded,
+                      label: hasConsultationCall ? 'COMPLETE' : 'TRANSFER',
+                      active: false,
+                      enabled: call.state != CallState.ringing,
+                      onTap: onTransfer,
+                    ),
+                    _CallControlButton(
+                      icon: Icons.groups,
+                      label: hasConsultationCall ? 'JOIN' : 'CONFERENCE',
+                      active: false,
+                      enabled: call.state != CallState.ringing,
+                      onTap: onConference,
                     ),
                   ],
                 ),
               ),
-              _TimerWidget(
-                startTime: call.startedAt,
-                accumulatedSeconds: call.accumulatedSeconds,
-                lastResumedAt: call.lastResumedAt,
-                onHold: call.onHold,
-              ),
             ],
           ),
-          const SizedBox(height: 14),
-          // Action buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _CallControlButton(
-                icon: call.muted ? Icons.mic_off : Icons.mic,
-                label: 'MUTE',
-                active: call.muted,
-                enabled: call.state != CallState.ringing,
-                onTap: () => EngineChannel.instance.setMute(!call.muted),
-              ),
-              _CallControlButton(
-                icon: Icons.pause_circle_outline,
-                label: 'HOLD',
-                active: call.onHold,
-                enabled: call.state != CallState.ringing,
-                onTap: () => EngineChannel.instance.setHold(!call.onHold),
-              ),
-              _CallControlButton(
-                icon: Icons.grid_on,
-                label: 'KEYPAD',
-                active: false,
-                enabled: call.state != CallState.ringing,
-                onTap: () {},
-              ),
-              _CallControlButton(
-                icon: hasConsultationCall
-                    ? Icons.check_circle
-                    : Icons.phone_forwarded,
-                label: hasConsultationCall ? 'COMPLETE' : 'TRANSFER',
-                active: false,
-                enabled: call.state != CallState.ringing,
-                onTap: onTransfer,
-              ),
-              _CallControlButton(
-                icon: hasConsultationCall ? Icons.groups : Icons.groups,
-                label: hasConsultationCall ? 'JOIN' : 'CONFERENCE',
-                active: false,
-                enabled: call.state != CallState.ringing,
-                onTap: onConference,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

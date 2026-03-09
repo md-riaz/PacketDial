@@ -1038,7 +1038,10 @@ fn push_call_state(call: &Call) {
         "direction".to_owned(),
         serde_json::json!(call.direction.variant_name()),
     );
-    payload.insert("state".to_owned(), serde_json::json!(call.state.variant_name()));
+    payload.insert(
+        "state".to_owned(),
+        serde_json::json!(call.state.variant_name()),
+    );
     payload.insert("muted".to_owned(), serde_json::json!(call.muted));
     payload.insert("on_hold".to_owned(), serde_json::json!(call.on_hold));
     payload.insert(
@@ -3303,27 +3306,29 @@ static EVENT_CALLBACK: Lazy<Mutex<EngineEventCallback>> = Lazy::new(|| Mutex::ne
 static CLIENT_SENDERS: Lazy<Mutex<Vec<Sender<String>>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 fn invoke_event_callback(event_id: EngineEventId, message: &str) {
-    // IMPORTANT: The Dart side uses NativeCallable.listener which runs the
-    // callback ASYNCHRONOUSLY on the Dart event loop.  This means the C
-    // string pointer must remain valid after this function returns.
+    // IMPORTANT: NativeCallable.listener is asynchronous on the Dart side,
+    // so the C string pointer must remain valid after this function returns.
     //
-    // We keep two recent CString allocations alive (double-buffer) so
-    // the previous pointer is still valid while Dart processes it.
+    // Under event bursts (SIP capture + logs), a tiny buffer can be
+    // overwritten before Dart copies it, causing payload corruption.
+    // Keep a larger rolling buffer of recent payload CStrings.
     use once_cell::sync::Lazy;
+    use std::collections::VecDeque;
     use std::sync::Mutex;
-    static PREV: Lazy<Mutex<Option<CString>>> = Lazy::new(|| Mutex::new(None));
-    static CURR: Lazy<Mutex<Option<CString>>> = Lazy::new(|| Mutex::new(None));
+    const EVENT_PAYLOAD_RETAIN: usize = 4096;
+    static RETAINED_PAYLOADS: Lazy<Mutex<VecDeque<CString>>> =
+        Lazy::new(|| Mutex::new(VecDeque::with_capacity(EVENT_PAYLOAD_RETAIN)));
 
     if let Ok(g) = EVENT_CALLBACK.lock() {
         if let Some(cb) = *g {
             if let Ok(cs) = CString::new(message) {
                 let ptr = cs.as_ptr();
-                // Rotate: drop prev, move curr → prev, store new → curr
                 {
-                    let mut prev = PREV.lock().unwrap();
-                    let mut curr = CURR.lock().unwrap();
-                    *prev = curr.take();
-                    *curr = Some(cs);
+                    let mut retained = RETAINED_PAYLOADS.lock().unwrap();
+                    retained.push_back(cs);
+                    while retained.len() > EVENT_PAYLOAD_RETAIN {
+                        retained.pop_front();
+                    }
                 }
                 cb(event_id as i32, ptr);
             }

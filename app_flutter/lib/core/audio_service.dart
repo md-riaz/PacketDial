@@ -8,6 +8,7 @@ import 'package:ffi/ffi.dart';
 class AudioService {
   AudioService._();
   static final AudioService instance = AudioService._();
+  static const bool _enableLoopCallTones = false;
 
   static const int _sndAsync = 0x0001;
   static const int _sndNoDefault = 0x0002;
@@ -19,6 +20,8 @@ class AudioService {
     ffi.Pointer<ffi.Void>,
     int,
   )? _playSoundW;
+  String? _activeLoopFile;
+  ffi.Pointer<Utf16>? _activeLoopPathPtr;
 
   void init() {
     if (!Platform.isWindows) return;
@@ -36,6 +39,7 @@ class AudioService {
 
   Future<void> startRingtone() async {
     try {
+      if (!_enableLoopCallTones) return;
       _playLoopingAsset('ringtone.wav');
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringtone: $e');
@@ -44,6 +48,7 @@ class AudioService {
 
   Future<void> startRingback() async {
     try {
+      if (!_enableLoopCallTones) return;
       _playLoopingAsset('ringback.wav');
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringback: $e');
@@ -54,6 +59,8 @@ class AudioService {
     try {
       if (!Platform.isWindows) return;
       _playSoundW?.call(ffi.nullptr, ffi.nullptr, 0);
+      _activeLoopFile = null;
+      _freeActiveLoopPath();
     } catch (e) {
       debugPrint('[AudioService] Failed to stop audio: $e');
     }
@@ -74,18 +81,28 @@ class AudioService {
   void _playLoopingAsset(String fileName) {
     if (!Platform.isWindows) return;
     if (_playSoundW == null) return;
+    if (_activeLoopFile == fileName && _activeLoopPathPtr != null) {
+      return;
+    }
     final path = _resolveSoundPath(fileName);
     if (path == null) {
       debugPrint('[AudioService] Sound asset not found: $fileName');
       return;
     }
 
+    _freeActiveLoopPath();
     final ptr = path.toNativeUtf16();
-    try {
-      _playSoundW!.call(ptr, ffi.nullptr,
-          _sndAsync | _sndFilename | _sndNoDefault | _sndLoop);
-    } finally {
+    final rc = _playSoundW!.call(
+      ptr,
+      ffi.nullptr,
+      _sndAsync | _sndFilename | _sndNoDefault | _sndLoop,
+    );
+    if (rc != 0) {
+      _activeLoopFile = fileName;
+      _activeLoopPathPtr = ptr;
+    } else {
       calloc.free(ptr);
+      debugPrint('[AudioService] PlaySoundW failed for loop asset: $fileName');
     }
   }
 
@@ -122,4 +139,12 @@ class AudioService {
   }
 
   void dispose() {}
+
+  void _freeActiveLoopPath() {
+    final ptr = _activeLoopPathPtr;
+    if (ptr != null) {
+      calloc.free(ptr);
+      _activeLoopPathPtr = null;
+    }
+  }
 }

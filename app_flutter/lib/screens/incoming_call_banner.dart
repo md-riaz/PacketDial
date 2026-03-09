@@ -66,6 +66,7 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
     final customerJson =
         widget.callInfo['customer_data'] as Map<String, dynamic>?;
     if (customerJson != null) {
+      if (!mounted) return;
       setState(() {
         _customerData = CustomerData.fromJson(customerJson);
       });
