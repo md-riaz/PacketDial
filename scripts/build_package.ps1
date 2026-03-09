@@ -28,6 +28,10 @@ if (!(Test-Path $OutputDir)) {
 
 # 2. Build Flutter App
 Write-Host "[1/4] Building Flutter Windows app..." -ForegroundColor Yellow
+# Ensure stale plugin DLLs from previous dependency sets are not reused.
+if (Test-Path $BuildDir) {
+    Remove-Item -Recurse -Force $BuildDir
+}
 Set-Location app_flutter
 & flutter build windows --release
 if ($LASTEXITCODE -ne 0) {
@@ -93,7 +97,8 @@ if (!$Copied) {
 Write-Host "[3/4] Verifying package integrity..." -ForegroundColor Yellow
 if (!(Test-Path (Join-Path $PackageDir "PacketDial.exe"))) { Write-Host "Missing PacketDial.exe" -ForegroundColor Red; exit 1 }
 if (!(Test-Path (Join-Path $PackageDir "voip_core.dll"))) { Write-Host "Missing voip_core.dll" -ForegroundColor Red; exit 1 }
-if (!(Test-Path (Join-Path $PackageDir "audioplayers_windows_plugin.dll"))) { Write-Host "Missing audioplayers DLL" -ForegroundColor Red; exit 1 }
+if (!(Test-Path (Join-Path $PackageDir "flutter_windows.dll"))) { Write-Host "Missing flutter_windows.dll" -ForegroundColor Red; exit 1 }
+if (!(Test-Path (Join-Path $PackageDir "data\app.so"))) { Write-Host "Missing data\\app.so" -ForegroundColor Red; exit 1 }
 
 # Create README
 $ReadmeText = "PacketDial Portable`r`n`r`n1. Extract ALL files to a folder.`r`n2. Run PacketDial.exe.`r`n`r`nDo NOT move the .exe out of the folder."

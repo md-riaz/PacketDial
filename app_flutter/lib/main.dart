@@ -32,6 +32,19 @@ import 'core/clipboard_service.dart';
 import 'widgets/clipboard_popup.dart';
 import 'core/tray_controller.dart';
 
+String _resolveRuntimeIconPath() {
+  const candidates = [
+    'assets/app_icon.png',
+    'data/flutter_assets/assets/app_icon.png',
+    'assets/app_icon.ico',
+    'data/flutter_assets/assets/app_icon.ico',
+  ];
+  for (final path in candidates) {
+    if (File(path).existsSync()) return path;
+  }
+  return 'assets/app_icon.png';
+}
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -86,10 +99,19 @@ void main(List<String> args) async {
 
     await windowManager.show();
     await windowManager.focus();
-    await windowManager.setIcon('assets/app_icon.png');
+    final iconPath = _resolveRuntimeIconPath();
+    try {
+      await windowManager.setIcon(iconPath);
+    } catch (e) {
+      debugPrint('[APP] Failed to set window icon from $iconPath: $e');
+    }
 
     // Initialize System Tray
-    await TrayController.instance.init();
+    try {
+      await TrayController.instance.init();
+    } catch (e) {
+      debugPrint('[APP] Failed to initialize tray: $e');
+    }
   });
 
   // Initialize Isar

@@ -1,28 +1,42 @@
-import 'package:audioplayers/audioplayers.dart';
+import 'dart:ffi' as ffi;
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:ffi/ffi.dart';
 
 /// Service to handle application-level audio feedback (ringtones, ringback).
 class AudioService {
   AudioService._();
   static final AudioService instance = AudioService._();
 
-  final AudioPlayer _ringtonePlayer = AudioPlayer();
-  final AudioPlayer _ringbackPlayer = AudioPlayer();
-  final AudioPlayer _uiPlayer = AudioPlayer();
+  static const int _sndAsync = 0x0001;
+  static const int _sndNoDefault = 0x0002;
+  static const int _sndLoop = 0x0008;
+  static const int _sndFilename = 0x00020000;
 
-  bool _initialized = false;
+  int Function(
+    ffi.Pointer<Utf16>,
+    ffi.Pointer<ffi.Void>,
+    int,
+  )? _playSoundW;
 
   void init() {
-    if (_initialized) return;
-    _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
-    _ringbackPlayer.setReleaseMode(ReleaseMode.loop);
-    _initialized = true;
+    if (!Platform.isWindows) return;
+    try {
+      final winmm = ffi.DynamicLibrary.open('winmm.dll');
+      _playSoundW = winmm.lookupFunction<
+          ffi.Int32 Function(
+              ffi.Pointer<Utf16>, ffi.Pointer<ffi.Void>, ffi.Uint32),
+          int Function(
+              ffi.Pointer<Utf16>, ffi.Pointer<ffi.Void>, int)>('PlaySoundW');
+    } catch (e) {
+      debugPrint('[AudioService] Failed to initialize winmm audio: $e');
+    }
   }
 
   Future<void> startRingtone() async {
     try {
-      if (_ringtonePlayer.state == PlayerState.playing) return;
-      await _ringtonePlayer.play(AssetSource('sounds/ringtone.wav'));
+      _playLoopingAsset('ringtone.wav');
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringtone: $e');
     }
@@ -30,8 +44,7 @@ class AudioService {
 
   Future<void> startRingback() async {
     try {
-      if (_ringbackPlayer.state == PlayerState.playing) return;
-      await _ringbackPlayer.play(AssetSource('sounds/ringback.wav'));
+      _playLoopingAsset('ringback.wav');
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringback: $e');
     }
@@ -39,8 +52,8 @@ class AudioService {
 
   Future<void> stopAll() async {
     try {
-      await _ringtonePlayer.stop();
-      await _ringbackPlayer.stop();
+      if (!Platform.isWindows) return;
+      _playSoundW?.call(ffi.nullptr, ffi.nullptr, 0);
     } catch (e) {
       debugPrint('[AudioService] Failed to stop audio: $e');
     }
@@ -52,19 +65,61 @@ class AudioService {
       if (digit == '*') assetName = 'star';
       if (digit == '#') assetName = 'hash';
 
-      // Use low latency player for immediate digit feedback
-      await _uiPlayer.play(
-        AssetSource('sounds/dtmf_$assetName.wav'),
-        mode: PlayerMode.lowLatency,
-      );
+      _playOneShotAsset('dtmf_$assetName.wav');
     } catch (e) {
       debugPrint('[AudioService] Failed to play DTMF asset for $digit: $e');
     }
   }
 
-  void dispose() {
-    _ringtonePlayer.dispose();
-    _ringbackPlayer.dispose();
-    _uiPlayer.dispose();
+  void _playLoopingAsset(String fileName) {
+    if (!Platform.isWindows) return;
+    if (_playSoundW == null) return;
+    final path = _resolveSoundPath(fileName);
+    if (path == null) {
+      debugPrint('[AudioService] Sound asset not found: $fileName');
+      return;
+    }
+
+    final ptr = path.toNativeUtf16();
+    try {
+      _playSoundW!.call(ptr, ffi.nullptr,
+          _sndAsync | _sndFilename | _sndNoDefault | _sndLoop);
+    } finally {
+      calloc.free(ptr);
+    }
   }
+
+  void _playOneShotAsset(String fileName) {
+    if (!Platform.isWindows) return;
+    if (_playSoundW == null) return;
+    final path = _resolveSoundPath(fileName);
+    if (path == null) {
+      debugPrint('[AudioService] Sound asset not found: $fileName');
+      return;
+    }
+
+    final ptr = path.toNativeUtf16();
+    try {
+      _playSoundW!
+          .call(ptr, ffi.nullptr, _sndAsync | _sndFilename | _sndNoDefault);
+    } finally {
+      calloc.free(ptr);
+    }
+  }
+
+  String? _resolveSoundPath(String fileName) {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final candidates = <String>[
+      '$exeDir\\data\\flutter_assets\\assets\\sounds\\$fileName',
+      '${Directory.current.path}\\assets\\sounds\\$fileName',
+      '${Directory.current.path}\\data\\flutter_assets\\assets\\sounds\\$fileName',
+    ];
+
+    for (final path in candidates) {
+      if (File(path).existsSync()) return path;
+    }
+    return null;
+  }
+
+  void dispose() {}
 }
