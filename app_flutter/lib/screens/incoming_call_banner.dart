@@ -132,10 +132,9 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
       child: FadeTransition(
         opacity: _slideCtrl,
         child: Container(
-          color: const Color(0xEE070A16),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
+          color: const Color(0xFF070A16),
+          child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
               child: Container(
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
@@ -387,7 +386,6 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                   ),
                 ),
               ),
-            ),
           ),
         ),
       ),
