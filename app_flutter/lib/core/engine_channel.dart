@@ -417,7 +417,9 @@ class EngineChannel {
 
         // Handle Audio Feedback
         if (state == CallState.ringing) {
-          if (payload['direction'] == 'Incoming') {
+          final direction =
+              (payload['direction'] as String? ?? '').toLowerCase();
+          if (direction == 'incoming') {
             AudioService.instance.startRingtone();
             // Trigger CRM Ring Hook
             if (activeCall != null) {

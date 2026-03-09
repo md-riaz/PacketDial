@@ -12,9 +12,6 @@ class AudioService {
 
   bool _initialized = false;
   bool _configured = false;
-  bool _ringtoneLoaded = false;
-  bool _ringbackLoaded = false;
-
   void init() {
     if (_initialized) return;
     _initialized = true;
@@ -36,11 +33,9 @@ class AudioService {
     try {
       init();
       await _ensureConfigured();
-      if (!_ringtoneLoaded) {
-        await _ringtonePlayer.setSource(AssetSource('sounds/ringtone.wav'));
-        _ringtoneLoaded = true;
+      if (_ringtonePlayer.state != PlayerState.playing) {
+        await _ringtonePlayer.play(AssetSource('sounds/ringtone.wav'));
       }
-      await _ringtonePlayer.resume();
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringtone: $e');
     }
@@ -50,11 +45,9 @@ class AudioService {
     try {
       init();
       await _ensureConfigured();
-      if (!_ringbackLoaded) {
-        await _ringbackPlayer.setSource(AssetSource('sounds/ringback.wav'));
-        _ringbackLoaded = true;
+      if (_ringbackPlayer.state != PlayerState.playing) {
+        await _ringbackPlayer.play(AssetSource('sounds/ringback.wav'));
       }
-      await _ringbackPlayer.resume();
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringback: $e');
     }

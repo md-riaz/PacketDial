@@ -43,7 +43,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_FAILURE;
   }
 
-  window.SetQuitOnClose(true);
+  // Keep process alive on close requests; Dart decides whether to hide to tray
+  // or explicitly terminate. This avoids early-close races during startup.
+  window.SetQuitOnClose(false);
 
 
   ::MSG msg;

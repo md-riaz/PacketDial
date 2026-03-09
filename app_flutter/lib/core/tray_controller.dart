@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 class TrayController with TrayListener {
   static final TrayController instance = TrayController._();
   TrayController._();
+  DateTime? _initializedAt;
 
   Future<void> init() async {
     // In release builds, assets are under data/flutter_assets.
@@ -25,6 +27,7 @@ class TrayController with TrayListener {
     ];
     await trayManager.setContextMenu(Menu(items: items));
     trayManager.addListener(this);
+    _initializedAt = DateTime.now();
   }
 
   String _resolveTrayIconPath() {
@@ -44,23 +47,33 @@ class TrayController with TrayListener {
 
   @override
   void onTrayIconMouseDown() {
+    debugPrint('[TrayController] Tray icon left-click: show/focus window');
     windowManager.show();
     windowManager.focus();
   }
 
   @override
   void onTrayIconRightMouseDown() {
+    debugPrint('[TrayController] Tray icon right-click: open context menu');
     trayManager.popUpContextMenu();
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
+    debugPrint('[TrayController] Menu click: ${menuItem.key}');
     if (menuItem.key == 'show_window') {
       windowManager.show();
       windowManager.focus();
     } else if (menuItem.key == 'exit_app') {
+      final initializedAt = _initializedAt;
+      if (initializedAt != null &&
+          DateTime.now().difference(initializedAt).inSeconds < 3) {
+        debugPrint(
+            '[TrayController] Ignoring early exit_app click (startup tray noise)');
+        return;
+      }
+      debugPrint('[TrayController] Exiting app via tray menu');
       await windowManager.destroy();
-      exit(0);
     }
   }
 }

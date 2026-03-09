@@ -17,11 +17,11 @@ class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
     if (type != 'CallStateChanged') return;
 
     final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
-    final direction = payload['direction'] as String? ?? '';
-    final callState = payload['state'] as String? ?? '';
+    final direction = (payload['direction'] as String? ?? '').toLowerCase();
+    final callState = (payload['state'] as String? ?? '').toLowerCase();
     final dndEnabled = AppSettingsService.instance.dndEnabled;
 
-    if (direction == 'Incoming' && callState == 'Ringing' && !dndEnabled) {
+    if (direction == 'incoming' && callState == 'ringing' && !dndEnabled) {
       state = {
         'uri': payload['uri'] as String? ?? '',
         'direction': 'Incoming',
@@ -34,7 +34,7 @@ class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
       return;
     }
 
-    if (callState == 'InCall' || callState == 'Ended') {
+    if (callState == 'incall' || callState == 'ended') {
       state = null;
     }
   }

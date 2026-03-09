@@ -8,6 +8,7 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'dart:io';
 import 'dart:async';
 import 'core/app_theme.dart';
@@ -48,6 +49,15 @@ String _resolveRuntimeIconPath() {
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  assert(() {
+    // Ensure debug paint overlays are disabled (yellow/green baseline lines).
+    debugPaintBaselinesEnabled = false;
+    debugPaintSizeEnabled = false;
+    debugPaintPointersEnabled = false;
+    debugPaintLayerBordersEnabled = false;
+    debugRepaintRainbowEnabled = false;
+    return true;
+  }());
 
   // ── Global Error Handler ────────────────────────────────────────────────
   // Capture and log all uncaught Flutter errors
@@ -330,6 +340,7 @@ class _AppState extends ConsumerState<App>
 
   @override
   void onWindowClose() async {
+    debugPrint('[APP] onWindowClose triggered');
     // Check if there's an active call
     final hasActiveCall = EngineChannel.instance.activeCall != null;
     if (hasActiveCall && mounted) {
@@ -363,6 +374,7 @@ class _AppState extends ConsumerState<App>
     await widget.windowPrefs.saveGeometry();
     // Hide to tray instead of destroying
     await windowManager.hide();
+    debugPrint('[APP] Window hidden to tray from onWindowClose');
   }
 
   @override
@@ -499,15 +511,17 @@ class _AppState extends ConsumerState<App>
         ),
         // Incoming call banner overlay
         if (incomingCallInfo != null)
-          IncomingCallBanner(
-            callInfo: incomingCallInfo,
-            onAnswer: () {
-              EngineChannel.instance.engine.answerCall();
-            },
-            onReject: () {
-              EngineChannel.instance.engine.hangup();
-              ref.read(incomingCallProvider.notifier).clear();
-            },
+          Positioned.fill(
+            child: IncomingCallBanner(
+              callInfo: incomingCallInfo,
+              onAnswer: () {
+                EngineChannel.instance.engine.answerCall();
+              },
+              onReject: () {
+                EngineChannel.instance.engine.hangup();
+                ref.read(incomingCallProvider.notifier).clear();
+              },
+            ),
           ),
       ],
     );

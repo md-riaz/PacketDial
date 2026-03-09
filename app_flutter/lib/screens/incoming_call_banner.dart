@@ -5,8 +5,7 @@ import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
 import '../models/customer_data.dart';
 
-/// Incoming call banner - overlay shown at top of main window
-/// Replaces the separate multi-window popup
+/// Full-screen incoming call overlay.
 class IncomingCallBanner extends StatefulWidget {
   final Map<String, dynamic> callInfo;
   final VoidCallback onAnswer;
@@ -133,34 +132,38 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
       child: FadeTransition(
         opacity: _slideCtrl,
         child: Container(
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF0D0D1A),
-                Color(0xFF1A1040),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: AppTheme.callGreen.withValues(alpha: 0.5),
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.callGreen.withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          color: const Color(0xEE070A16),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF0D0D1A),
+                      Color(0xFF1A1040),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppTheme.callGreen.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.callGreen.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
                 // Header with pulse indicator
                 Row(
                   children: [
@@ -238,147 +241,152 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
                   ],
                 ),
 
-                const SizedBox(height: 16),
+                      const Spacer(),
 
-                // Caller details
-                if (callerNumber != null && callerNumber != displayName) ...[
-                  Text(
-                    callerNumber!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                ],
+                      // Caller details
+                      if (callerNumber != null && callerNumber != displayName) ...[
+                        Text(
+                          callerNumber!,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
 
-                if (callerDomain != null && callerDomain!.isNotEmpty) ...[
-                  Text(
-                    callerDomain!,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+                      if (callerDomain != null && callerDomain!.isNotEmpty) ...[
+                        Text(
+                          callerDomain!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
 
-                // Company badge
-                if (displayCompany != null && displayCompany.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      displayCompany,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+                      // Company badge
+                      if (displayCompany != null && displayCompany.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            displayCompany,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
-                // Account info
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.primary.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.sim_card,
-                        color: AppTheme.primary,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        accountName,
-                        style: const TextStyle(
-                          color: AppTheme.primary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                      // Account info
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppTheme.primary.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.sim_card,
+                              color: AppTheme.primary,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              accountName,
+                              style: const TextStyle(
+                                color: AppTheme.primary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+
+                      const Spacer(),
+
+                      // CRM link button
+                      if (_customerData?.hasContactLink == true) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _openCallerLink,
+                            icon: const Icon(Icons.open_in_browser, size: 16),
+                            label: const Text('Open CRM Record'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Action buttons
+                      if (!_answered)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Reject
+                            _ActionButton(
+                              icon: Icons.call_end,
+                              label: 'Reject',
+                              gradient: AppTheme.hangupButtonGradient,
+                              glowColor: AppTheme.hangupRed,
+                              onTap: _reject,
+                            ),
+                            const SizedBox(width: 40),
+                            // Answer
+                            _ActionButton(
+                              icon: Icons.call,
+                              label: 'Answer',
+                              gradient: AppTheme.callButtonGradient,
+                              glowColor: AppTheme.callGreen,
+                              onTap: _answer,
+                            ),
+                          ],
+                        )
+                      else
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation(
+                              AppTheme.accentBright.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // CRM link button
-                if (_customerData?.hasContactLink == true) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _openCallerLink,
-                      icon: const Icon(Icons.open_in_browser, size: 16),
-                      label: const Text('Open CRM Record'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // Action buttons
-                if (!_answered)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Reject
-                      _ActionButton(
-                        icon: Icons.call_end,
-                        label: 'Reject',
-                        gradient: AppTheme.hangupButtonGradient,
-                        glowColor: AppTheme.hangupRed,
-                        onTap: _reject,
-                      ),
-                      const SizedBox(width: 32),
-                      // Answer
-                      _ActionButton(
-                        icon: Icons.call,
-                        label: 'Answer',
-                        gradient: AppTheme.callButtonGradient,
-                        glowColor: AppTheme.callGreen,
-                        onTap: _answer,
-                      ),
-                    ],
-                  )
-                else
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(
-                        AppTheme.accentBright.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
         ),
