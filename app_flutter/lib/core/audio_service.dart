@@ -1,4 +1,4 @@
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
 
 /// Service to handle application-level audio feedback (ringtones, ringback, DTMF).
@@ -12,6 +12,9 @@ class AudioService {
 
   bool _initialized = false;
   bool _configured = false;
+  bool _ringtonePlaying = false;
+  bool _ringbackPlaying = false;
+
   void init() {
     if (_initialized) return;
     _initialized = true;
@@ -21,8 +24,8 @@ class AudioService {
     if (_configured) return;
     _configured = true;
     try {
-      await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
-      await _ringbackPlayer.setReleaseMode(ReleaseMode.loop);
+      await _ringtonePlayer.setLoopMode(LoopMode.one);
+      await _ringbackPlayer.setLoopMode(LoopMode.one);
     } catch (_) {
       _configured = false;
       rethrow;
@@ -33,8 +36,10 @@ class AudioService {
     try {
       init();
       await _ensureConfigured();
-      if (_ringtonePlayer.state != PlayerState.playing) {
-        await _ringtonePlayer.play(AssetSource('sounds/ringtone.wav'));
+      if (!_ringtonePlaying) {
+        await _ringtonePlayer.setAsset('assets/sounds/ringtone.wav');
+        await _ringtonePlayer.play();
+        _ringtonePlaying = true;
       }
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringtone: $e');
@@ -45,8 +50,10 @@ class AudioService {
     try {
       init();
       await _ensureConfigured();
-      if (_ringbackPlayer.state != PlayerState.playing) {
-        await _ringbackPlayer.play(AssetSource('sounds/ringback.wav'));
+      if (!_ringbackPlaying) {
+        await _ringbackPlayer.setAsset('assets/sounds/ringback.wav');
+        await _ringbackPlayer.play();
+        _ringbackPlaying = true;
       }
     } catch (e) {
       debugPrint('[AudioService] Failed to start ringback: $e');
@@ -57,6 +64,8 @@ class AudioService {
     try {
       await _ringtonePlayer.stop();
       await _ringbackPlayer.stop();
+      _ringtonePlaying = false;
+      _ringbackPlaying = false;
     } catch (e) {
       debugPrint('[AudioService] Failed to stop audio: $e');
     }
@@ -69,7 +78,9 @@ class AudioService {
       if (digit == '*') assetName = 'star';
       if (digit == '#') assetName = 'hash';
 
-      await _uiPlayer.play(AssetSource('sounds/dtmf_$assetName.wav'));
+      await _uiPlayer.setAsset('assets/sounds/dtmf_$assetName.wav');
+      await _uiPlayer.seek(Duration.zero);
+      await _uiPlayer.play();
     } catch (e) {
       debugPrint('[AudioService] Failed to play DTMF asset for $digit: $e');
     }

@@ -3,10 +3,10 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  audioplayers_windows
   bitsdojo_window_windows
   hotkey_manager_windows
   isar_flutter_libs
+  just_audio_windows
   local_notifier
   screen_retriever_windows
   tray_manager
