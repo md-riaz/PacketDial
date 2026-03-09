@@ -7,9 +7,10 @@ class TrayController with TrayListener {
   TrayController._();
 
   Future<void> init() async {
-    await trayManager.setIcon(
-      Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png',
-    );
+    // In release builds, assets are under data/flutter_assets.
+    // Prefer ICO on Windows (tray quality), then fall back to PNG.
+    final iconPath = _resolveTrayIconPath();
+    await trayManager.setIcon(iconPath);
 
     List<MenuItem> items = [
       MenuItem(
@@ -24,6 +25,21 @@ class TrayController with TrayListener {
     ];
     await trayManager.setContextMenu(Menu(items: items));
     trayManager.addListener(this);
+  }
+
+  String _resolveTrayIconPath() {
+    if (!Platform.isWindows) return 'assets/app_icon.png';
+
+    const candidates = [
+      'assets/app_icon.ico',
+      'data/flutter_assets/assets/app_icon.ico',
+      'assets/app_icon.png',
+      'data/flutter_assets/assets/app_icon.png',
+    ];
+    for (final path in candidates) {
+      if (File(path).existsSync()) return path;
+    }
+    return 'assets/app_icon.png';
   }
 
   @override

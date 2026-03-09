@@ -1030,37 +1030,47 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
 }
 
 fn push_call_state(call: &Call) {
-    let last_resumed_at_val = call
-        .last_resumed_at
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "null".to_owned());
+    let mut payload = serde_json::Map::new();
+    payload.insert("call_id".to_owned(), serde_json::json!(call.id));
+    payload.insert("account_id".to_owned(), serde_json::json!(call.account_id));
+    payload.insert("uri".to_owned(), serde_json::json!(call.uri));
+    payload.insert(
+        "direction".to_owned(),
+        serde_json::json!(call.direction.variant_name()),
+    );
+    payload.insert("state".to_owned(), serde_json::json!(call.state.variant_name()));
+    payload.insert("muted".to_owned(), serde_json::json!(call.muted));
+    payload.insert("on_hold".to_owned(), serde_json::json!(call.on_hold));
+    payload.insert(
+        "accumulated_active_secs".to_owned(),
+        serde_json::json!(call.accumulated_active_secs),
+    );
+    payload.insert(
+        "last_resumed_at".to_owned(),
+        match call.last_resumed_at {
+            Some(v) => serde_json::json!(v),
+            None => serde_json::Value::Null,
+        },
+    );
 
-    // Include recording_path only when call ends
-    let recording_path_json = if call.state == CallState::Ended {
-        match &call.recording_path {
-            Some(path) => {
-                let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
-                format!(r#","recording_path":"{}""#, escaped)
-            }
-            None => String::from(r#","recording_path":null"#),
-        }
-    } else {
-        String::new()
-    };
+    // Include recording_path only when call ends (legacy consumer behavior).
+    if call.state == CallState::Ended {
+        payload.insert(
+            "recording_path".to_owned(),
+            match &call.recording_path {
+                Some(path) => serde_json::json!(path),
+                None => serde_json::Value::Null,
+            },
+        );
+    }
 
-    push_event(format!(
-        r#"{{"type":"CallStateChanged","payload":{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","state":"{}","muted":{},"on_hold":{},"accumulated_active_secs":{},"last_resumed_at":{}{}}}}}"#,
-        call.id,
-        call.account_id,
-        call.uri,
-        call.direction.variant_name(),
-        call.state.variant_name(),
-        call.muted,
-        call.on_hold,
-        call.accumulated_active_secs,
-        last_resumed_at_val,
-        recording_path_json
-    ));
+    push_event(
+        serde_json::json!({
+            "type": "CallStateChanged",
+            "payload": payload,
+        })
+        .to_string(),
+    );
 }
 
 fn push_media_stats(stats: &MediaStats) {

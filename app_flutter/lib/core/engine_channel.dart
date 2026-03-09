@@ -168,7 +168,8 @@ class EngineChannel {
         _eventController.add(event);
       }
     } catch (e) {
-      // Ignore parsing errors
+      debugPrint(
+          '[EngineChannel] Dropped event (id=$eventId) due to parse error: $e');
     }
   }
 
