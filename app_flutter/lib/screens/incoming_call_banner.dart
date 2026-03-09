@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_theme.dart';
@@ -121,221 +122,236 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
         : (callerName.isNotEmpty ? callerName : 'Unknown Caller');
     final displayCompany = hasCustomerData ? _customerData!.company : null;
 
-    return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, -1),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _slideCtrl,
-        curve: Curves.easeOutCubic,
-      )),
-      child: FadeTransition(
-        opacity: _slideCtrl,
-        child: Container(
-          color: const Color(0xFF070A16),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0D0D1A), Color(0xFF161035)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter) {
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, -1),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: _slideCtrl,
+          curve: Curves.easeOutCubic,
+        )),
+        child: FadeTransition(
+          opacity: _slideCtrl,
+          child: Container(
+            color: const Color(0xFF070A16),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0D0D1A), Color(0xFF161035)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppTheme.callGreen.withValues(alpha: 0.6),
+                    width: 2,
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: AppTheme.callGreen.withValues(alpha: 0.6),
-                  width: 2,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        AnimatedBuilder(
-                          animation: _pulseCtrl,
-                          builder: (_, child) => Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.callGreen.withValues(
-                                      alpha: 0.25 + _pulseCtrl.value * 0.35),
-                                  blurRadius: 16 + _pulseCtrl.value * 10,
-                                ),
-                              ],
-                            ),
-                            child: child,
-                          ),
-                          child: CircleAvatar(
-                            radius: 30,
-                            backgroundColor:
-                                AppTheme.callGreen.withValues(alpha: 0.16),
-                            child: Text(
-                              displayName.isNotEmpty
-                                  ? displayName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.callGreenBright,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          AnimatedBuilder(
+                            animation: _pulseCtrl,
+                            builder: (_, child) => Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.callGreen.withValues(
+                                        alpha: 0.25 + _pulseCtrl.value * 0.35),
+                                    blurRadius: 16 + _pulseCtrl.value * 10,
+                                  ),
+                                ],
                               ),
+                              child: child,
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Incoming Call',
-                                style: TextStyle(
-                                  fontSize: 16,
+                            child: CircleAvatar(
+                              radius: 30,
+                              backgroundColor:
+                                  AppTheme.callGreen.withValues(alpha: 0.16),
+                              child: Text(
+                                displayName.isNotEmpty
+                                    ? displayName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  fontSize: 28,
                                   fontWeight: FontWeight.w700,
                                   color: AppTheme.callGreenBright,
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                displayName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Incoming Call',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.callGreenBright,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 6),
+                                Text(
+                                  displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      if (callerNumber != null && callerNumber != displayName)
+                        Text(
+                          callerNumber!,
+                          style: const TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      if (callerDomain != null && callerDomain!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          callerDomain!,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
-                    ),
-                    const Spacer(),
-                    if (callerNumber != null && callerNumber != displayName)
-                      Text(
-                        callerNumber!,
-                        style: const TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          fontFamily: 'monospace',
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
                         ),
-                      ),
-                    if (callerDomain != null && callerDomain!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        callerDomain!,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF202050),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppTheme.border.withValues(alpha: 0.8),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.sim_card, size: 16, color: AppTheme.textPrimary),
-                          const SizedBox(width: 8),
-                          Text(
-                            accountName,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF202050),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppTheme.border.withValues(alpha: 0.8),
                           ),
-                          if (accountUser.isNotEmpty) ...[
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.sim_card,
+                                size: 16, color: AppTheme.textPrimary),
                             const SizedBox(width: 8),
                             Text(
-                              '($accountUser)',
+                              accountName,
                               style: const TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                                color: AppTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (accountUser.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                '($accountUser)',
+                                style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (displayCompany != null &&
+                          displayCompany.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          displayCompany,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.accentBright,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      if (_customerData?.hasContactLink == true) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _openCallerLink,
+                            icon: const Icon(Icons.open_in_browser, size: 18),
+                            label: const Text('Open CRM Record'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.textPrimary,
+                              side: BorderSide(
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.5),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (!_answered)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.call_end,
+                                label: 'Reject (Esc)',
+                                gradient: AppTheme.hangupButtonGradient,
+                                glowColor: AppTheme.hangupRed,
+                                onTap: _reject,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _ActionButton(
+                                icon: Icons.call,
+                                label: 'Answer',
+                                gradient: AppTheme.callButtonGradient,
+                                glowColor: AppTheme.callGreen,
+                                onTap: _answer,
                               ),
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-                    if (displayCompany != null && displayCompany.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        displayCompany,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.accentBright,
-                          fontWeight: FontWeight.w600,
+                        )
+                      else
+                        const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: CircularProgressIndicator(strokeWidth: 2.6),
                         ),
-                      ),
                     ],
-                    const Spacer(),
-                    if (_customerData?.hasContactLink == true) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _openCallerLink,
-                          icon: const Icon(Icons.open_in_browser, size: 18),
-                          label: const Text('Open CRM Record'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.textPrimary,
-                            side: BorderSide(
-                              color: AppTheme.textSecondary.withValues(alpha: 0.5),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (!_answered)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.call_end,
-                              label: 'Reject (Esc)',
-                              gradient: AppTheme.hangupButtonGradient,
-                              glowColor: AppTheme.hangupRed,
-                              onTap: _reject,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _ActionButton(
-                              icon: Icons.call,
-                              label: 'Answer (Enter)',
-                              gradient: AppTheme.callButtonGradient,
-                              glowColor: AppTheme.callGreen,
-                              onTap: _answer,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      const Padding(
-                        padding: EdgeInsets.all(8),
-                        child: CircularProgressIndicator(strokeWidth: 2.6),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),

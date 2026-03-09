@@ -7,6 +7,7 @@ import '../core/sip_uri_utils.dart';
 import '../core/audio_service.dart';
 import '../core/engine_channel.dart';
 import '../core/account_service.dart';
+import '../core/recording_service.dart';
 import '../models/account_schema.dart';
 import '../models/account.dart';
 import '../models/audio_device.dart';
@@ -987,6 +988,24 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   void _hangup() => EngineChannel.instance.engine.hangup();
 
+  Future<void> _toggleRecording() async {
+    final wasRecording = RecordingService.instance.isRecording;
+    final ok = await RecordingService.instance.toggleRecording();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? (wasRecording ? 'Recording stopped' : 'Recording started')
+              : (wasRecording
+                  ? 'Failed to stop recording'
+                  : 'Failed to start recording'),
+        ),
+      ),
+    );
+    setState(() {});
+  }
+
   // Sub-labels for numpad keys
   static const _subLabels = {
     '2': 'ABC',
@@ -1053,10 +1072,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                           call: activeCall,
                           stats: stats,
                           onHangup: _hangup,
+                          onRecordToggle: _toggleRecording,
                           onTransfer: () => _showTransferDialog(activeCall),
                           onConference: () => _showConferenceDialog(activeCall),
                           hasConsultationCall: dialerUi.hasConsultationCall,
                           consultationDisplay: dialerUi.consultationDisplay,
+                          isRecording: RecordingService.instance.isRecording,
                         ),
                       )
                     else
@@ -1382,19 +1403,23 @@ class _ActiveCallCard extends StatelessWidget {
   final ActiveCall call;
   final MediaStats? stats;
   final VoidCallback onHangup;
+  final VoidCallback onRecordToggle;
   final VoidCallback onTransfer;
   final VoidCallback onConference;
   final bool hasConsultationCall;
   final String? consultationDisplay;
+  final bool isRecording;
 
   const _ActiveCallCard({
     required this.call,
     this.stats,
     required this.onHangup,
+    required this.onRecordToggle,
     required this.onTransfer,
     required this.onConference,
     this.hasConsultationCall = false,
     this.consultationDisplay,
+    required this.isRecording,
   });
 
   @override
@@ -1593,11 +1618,14 @@ class _ActiveCallCard extends StatelessWidget {
                       onTap: () => EngineChannel.instance.setHold(!call.onHold),
                     ),
                     _CallControlButton(
-                      icon: Icons.grid_on,
-                      label: 'KEYPAD',
-                      active: false,
+                      icon: isRecording
+                          ? Icons.stop_circle_outlined
+                          : Icons.fiber_manual_record,
+                      label: isRecording ? 'STOP REC' : 'RECORD',
+                      active: isRecording,
+                      activeColor: AppTheme.errorRed,
                       enabled: call.state != CallState.ringing,
-                      onTap: () {},
+                      onTap: onRecordToggle,
                     ),
                     _CallControlButton(
                       icon: hasConsultationCall
@@ -1685,12 +1713,14 @@ class _CallControlButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool active;
+  final Color? activeColor;
   final bool enabled;
   final VoidCallback onTap;
   const _CallControlButton({
     required this.icon,
     required this.label,
     required this.active,
+    this.activeColor,
     this.enabled = true,
     required this.onTap,
   });
@@ -1711,17 +1741,17 @@ class _CallControlButton extends StatelessWidget {
   }
 
   Widget _buildBody() {
-    final color = active ? AppTheme.warningAmber : AppTheme.primary;
+    final selectedColor = activeColor ?? AppTheme.warningAmber;
+    final color = active ? selectedColor : AppTheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: active
-            ? AppTheme.warningAmber.withValues(alpha: 0.1)
-            : Colors.transparent,
+        color:
+            active ? selectedColor.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: active
-              ? AppTheme.warningAmber.withValues(alpha: 0.3)
+              ? selectedColor.withValues(alpha: 0.3)
               : AppTheme.border.withValues(alpha: 0.3),
         ),
       ),

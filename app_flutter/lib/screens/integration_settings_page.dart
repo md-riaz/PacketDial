@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/app_settings_service.dart';
+import '../core/clipboard_service.dart';
+import '../core/customer_lookup_service.dart';
+import '../core/recording_service.dart';
 import '../models/dialing_rule.dart';
 import '../models/caller_id_transformation.dart';
 import '../core/app_theme.dart';
@@ -31,6 +34,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   final _screenPopUrlController = TextEditingController();
 
   // Controllers for recording upload
+  final _localRecordingDirController = TextEditingController();
   final _recordingUploadUrlController = TextEditingController();
   final _recordingFieldNameController = TextEditingController();
 
@@ -44,17 +48,27 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     _loadSettings();
   }
 
-  void _loadSettings() {
+  Future<void> _loadSettings() async {
     _ringWebhookController.text = _settings.ringWebhookUrl;
     _endWebhookController.text = _settings.endWebhookUrl;
     _customerLookupUrlController.text = _settings.customerLookupUrl;
     _customerLookupTimeoutController.text =
         (_settings.customerLookupTimeoutMs / 1000).toString();
     _screenPopUrlController.text = _settings.screenPopUrl;
+    var recordingDir = _settings.localRecordingDirectory.trim();
+    if (recordingDir.isEmpty) {
+      final defaultDir = await RecordingService.instance.getRecordingsDir();
+      recordingDir = defaultDir.path;
+      await _settings.setLocalRecordingDirectory(recordingDir);
+    }
+    _localRecordingDirController.text = recordingDir;
     _recordingUploadUrlController.text = _settings.recordingUploadUrl;
     _recordingFieldNameController.text = _settings.recordingFileFieldName;
     _clipboardIntervalController.text =
         (_settings.clipboardPollIntervalMs / 1000).toString();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -65,6 +79,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     _customerLookupUrlController.dispose();
     _customerLookupTimeoutController.dispose();
     _screenPopUrlController.dispose();
+    _localRecordingDirController.dispose();
     _recordingUploadUrlController.dispose();
     _recordingFieldNameController.dispose();
     _clipboardIntervalController.dispose();
@@ -123,15 +138,13 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         SwitchListTile(
           title: const Text('Incoming Call Webhook'),
           subtitle: const Text('Triggered when call starts ringing'),
-          value: _settings.ringWebhookUrl.isNotEmpty,
+          value: _settings.ringWebhookEnabled,
           onChanged: (value) async {
-            if (!value) {
-              await _settings.setRingWebhookUrl('');
-              setState(() {});
-            }
+            await _settings.setRingWebhookEnabled(value);
+            setState(() {});
           },
         ),
-        if (_settings.ringWebhookUrl.isNotEmpty)
+        if (_settings.ringWebhookEnabled)
           Padding(
             padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
             child: TextField(
@@ -260,7 +273,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: () {
-            _settings.clearCustomerLookupCache();
+            CustomerLookupService.instance.clearCache();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Customer lookup cache cleared')),
             );
@@ -305,7 +318,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'Example: https://portal.alpha.net.bd/callcenter.php?apikey=XYZ&phone=%NUMBER%',
+                  'Example: https://portal.example.com/callcenter.php?apikey=YOUR_API_KEY&phone=%NUMBER%',
                   style: TextStyle(
                     color: AppTheme.textTertiary,
                     fontSize: 12,
@@ -326,11 +339,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             controller: _screenPopUrlController,
             decoration: const InputDecoration(
               labelText: 'URL',
-              helperMaxLines: 4,
-              helperText:
-                  'Use placeholders in query params.\n'
-                  'Example: https://portal.example.com/callcenter.php?apikey=YOUR_API_KEY&phone=%NUMBER%\n'
-                  'Supported: %NUMBER%, %NAME%, %COMPANY%, %EXTID%, %DID%, %ID%, %ACCOUNT_ID%, %STATE%, %DIRECTION%, %CONTACT_LINK%',
               border: OutlineInputBorder(),
             ),
           ),
@@ -396,7 +404,65 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildSectionTitle('Call Recording Upload'),
+        _buildSectionTitle('Local Call Recording'),
+        _buildInfoCard(
+          'Record all calls locally for all accounts when enabled.',
+          'Saved as WAV files in the app recordings folder.',
+        ),
+        const SizedBox(height: 24),
+        SwitchListTile(
+          title: const Text('Enable Local Call Recording'),
+          subtitle: const Text('Auto-record every active call'),
+          value: _settings.localCallRecordingEnabled,
+          onChanged: (value) async {
+            if (value && _localRecordingDirController.text.trim().isEmpty) {
+              final defaultDir =
+                  await RecordingService.instance.getRecordingsDir();
+              _localRecordingDirController.text = defaultDir.path;
+              await _settings.setLocalRecordingDirectory(defaultDir.path);
+            }
+            await _settings.setLocalCallRecordingEnabled(value);
+            setState(() {});
+          },
+        ),
+        const ListTile(
+          title: Text('Recording Folder'),
+          subtitle: Text('Local path where call recordings are saved'),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            controller: _localRecordingDirController,
+            decoration: const InputDecoration(
+              labelText: 'Folder Path',
+              helperText: 'Defaults to app Documents/recordings folder.',
+              hintText: r'C:\Recordings\PacketDial',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const ListTile(
+          title: Text('Recording Format'),
+          subtitle: Text('File format for new local recordings'),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButtonFormField<String>(
+            initialValue: _settings.localRecordingFormat,
+            decoration: const InputDecoration(border: OutlineInputBorder()),
+            items: const [
+              DropdownMenuItem(value: 'wav', child: Text('WAV')),
+              DropdownMenuItem(value: 'mp3', child: Text('MP3')),
+            ],
+            onChanged: (value) async {
+              if (value == null) return;
+              await _settings.setLocalRecordingFormat(value);
+            },
+          ),
+        ),
+        const Divider(height: 32),
+        _buildSectionTitle('Recording Upload'),
         _buildInfoCard(
           'Automatically upload call recordings to your server.',
           'Uses HTTP POST with multipart/form-data.',
@@ -447,6 +513,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         ElevatedButton.icon(
           onPressed: () async {
             await _settings
+                .setLocalRecordingDirectory(_localRecordingDirController.text);
+            await _settings
                 .setRecordingUploadUrl(_recordingUploadUrlController.text);
             await _settings
                 .setRecordingFileFieldName(_recordingFieldNameController.text);
@@ -475,11 +543,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           value: _settings.clipboardMonitoringEnabled,
           onChanged: (value) async {
             await _settings.setClipboardMonitoringEnabled(value);
-            setState(() {});
-            // Restart service if enabled
             if (value) {
-              // Will be started in main.dart
+              ClipboardService.instance.startMonitoring();
+            } else {
+              ClipboardService.instance.stopMonitoring();
             }
+            setState(() {});
           },
         ),
         const Divider(height: 32),

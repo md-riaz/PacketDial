@@ -301,6 +301,13 @@ class _AppState extends ConsumerState<App>
     final state = (payload['state'] as String? ?? '').toLowerCase();
 
     if (direction == 'incoming' && state == 'ringing') {
+      final settings = AppSettingsService.instance;
+      final suppressForScreenPop = settings.screenPopSuppressWindow &&
+          settings.screenPopUrl.trim().isNotEmpty &&
+          settings.screenPopEvent == 'ring';
+      if (suppressForScreenPop) {
+        return;
+      }
       try {
         if (await windowManager.isMinimized()) {
           await windowManager.restore();

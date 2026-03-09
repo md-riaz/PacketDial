@@ -25,7 +25,7 @@ class IntegrationService {
   }) async {
     _lastExtId = extid;
     _lastDidNumber = didNumber;
-    
+
     // 1. Look up customer data from CRM
     final customerData = await CustomerLookupService.instance.lookup(
       call.uri,
@@ -34,8 +34,9 @@ class IntegrationService {
     _lastCustomerData = customerData;
 
     // 2. Trigger Ring Webhook
-    final urlTemplate = AppSettingsService.instance.ringWebhookUrl;
-    if (urlTemplate.isNotEmpty) {
+    final settings = AppSettingsService.instance;
+    final urlTemplate = settings.ringWebhookUrl;
+    if (settings.ringWebhookEnabled && urlTemplate.isNotEmpty) {
       final url = _replacePlaceholders(
         urlTemplate,
         call,
@@ -81,7 +82,7 @@ class IntegrationService {
       extid: _lastExtId,
       didNumber: _lastDidNumber,
     );
-    
+
     // 1. Trigger End Webhook
     if (settings.callEndWebhookEnabled && settings.endWebhookUrl.isNotEmpty) {
       final url = _replacePlaceholders(
@@ -98,8 +99,8 @@ class IntegrationService {
     }
 
     // 2. Upload recording if configured
-    if (recordingPath != null && 
-        recordingPath.isNotEmpty && 
+    if (recordingPath != null &&
+        recordingPath.isNotEmpty &&
         settings.recordingUploadEnabled &&
         settings.recordingUploadUrl.isNotEmpty) {
       await _uploadRecording(settings.recordingUploadUrl, recordingPath, call);
@@ -159,9 +160,11 @@ class IntegrationService {
         : fallbackName;
     final resolvedCompany = customerData?.company.trim() ?? '';
 
-    result = result.replaceAll('%NUMBER%', Uri.encodeComponent(transformedNumber));
+    result =
+        result.replaceAll('%NUMBER%', Uri.encodeComponent(transformedNumber));
     result = result.replaceAll('%NAME%', Uri.encodeComponent(resolvedName));
-    result = result.replaceAll('%COMPANY%', Uri.encodeComponent(resolvedCompany));
+    result =
+        result.replaceAll('%COMPANY%', Uri.encodeComponent(resolvedCompany));
     result = result.replaceAll('%EXTID%', Uri.encodeComponent(extid ?? ''));
     result = result.replaceAll('%DID%', Uri.encodeComponent(didNumber ?? ''));
     result = result.replaceAll('%ID%', call.callId.toString());
@@ -181,7 +184,8 @@ class IntegrationService {
     }
 
     if (recordingPath != null && recordingPath.isNotEmpty) {
-      result = result.replaceAll('%RECORD%', Uri.encodeComponent(recordingPath));
+      result =
+          result.replaceAll('%RECORD%', Uri.encodeComponent(recordingPath));
       result = result.replaceAll(
         '%RECORDFILENAME%',
         Uri.encodeComponent(Uri.parse(recordingPath).pathSegments.last),
@@ -193,10 +197,10 @@ class IntegrationService {
 
   /// Get the last looked up customer data
   CustomerData? get lastCustomerData => _lastCustomerData;
-  
+
   /// Get the last extid
   String? get lastExtId => _lastExtId;
-  
+
   /// Get the last DID number
   String? get lastDidNumber => _lastDidNumber;
 

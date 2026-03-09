@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../core/app_theme.dart';
 import '../core/app_settings_service.dart';
+import '../core/clipboard_service.dart';
 import '../core/contacts_service.dart';
 import 'diagnostics_screen.dart';
 import 'integration_settings_page.dart';
@@ -1019,6 +1020,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               onChanged: (value) async {
                 await AppSettingsService.instance
                     .setClipboardMonitoringEnabled(value);
+                if (value) {
+                  ClipboardService.instance.startMonitoring();
+                } else {
+                  ClipboardService.instance.stopMonitoring();
+                }
                 setState(() {});
               },
               activeThumbColor: AppTheme.primary,

@@ -27,32 +27,36 @@ class AppSettingsService {
 
   // Integration settings - Webhooks
   String _ringWebhookUrl = '';
+  bool _ringWebhookEnabled = false;
   String _endWebhookUrl = '';
   bool _callEndWebhookEnabled = true;
-  
+
   // Integration settings - Customer Lookup
   String _customerLookupUrl = '';
   int _customerLookupTimeoutMs = 5000;
   bool _customerLookupEnabled = false;
-  
+
   // Integration settings - Screen Pop
   String _screenPopUrl = '';
   String _screenPopEvent = 'ring'; // 'ring' or 'answer'
   bool _screenPopOpenBrowser = true;
   bool _screenPopSuppressWindow = false;
-  
+
   // Integration settings - Clipboard
   bool _clipboardMonitoringEnabled = false;
   int _clipboardPollIntervalMs = 500;
-  
+
   // Integration settings - Recording Upload
+  bool _localCallRecordingEnabled = false;
+  String _localRecordingDirectory = '';
+  String _localRecordingFormat = 'wav';
   String _recordingUploadUrl = '';
   String _recordingFileFieldName = 'recording';
   bool _recordingUploadEnabled = false;
-  
+
   // Dialing Rules
   List<DialingRule> _dialingRules = [];
-  
+
   // Caller ID Transformations
   List<CallerIdTransformation> _callerIdTransformations = [];
 
@@ -65,37 +69,41 @@ class AppSettingsService {
   bool get autoAnswerEnabled => _autoAnswerEnabled;
   bool get dndEnabled => _dndEnabled;
   bool get blfEnabled => _blfEnabled;
-  
+
   // Getters - Webhooks
   String get ringWebhookUrl => _ringWebhookUrl;
+  bool get ringWebhookEnabled => _ringWebhookEnabled;
   String get endWebhookUrl => _endWebhookUrl;
   bool get callEndWebhookEnabled => _callEndWebhookEnabled;
-  
+
   // Getters - Customer Lookup
   String get customerLookupUrl => _customerLookupUrl;
   int get customerLookupTimeoutMs => _customerLookupTimeoutMs;
   bool get customerLookupEnabled => _customerLookupEnabled;
-  
+
   // Getters - Screen Pop
   String get screenPopUrl => _screenPopUrl;
   String get screenPopEvent => _screenPopEvent;
   bool get screenPopOpenBrowser => _screenPopOpenBrowser;
   bool get screenPopSuppressWindow => _screenPopSuppressWindow;
-  
+
   // Getters - Clipboard
   bool get clipboardMonitoringEnabled => _clipboardMonitoringEnabled;
   int get clipboardPollIntervalMs => _clipboardPollIntervalMs;
-  
+
   // Getters - Recording Upload
+  bool get localCallRecordingEnabled => _localCallRecordingEnabled;
+  String get localRecordingDirectory => _localRecordingDirectory;
+  String get localRecordingFormat => _localRecordingFormat;
   String get recordingUploadUrl => _recordingUploadUrl;
   String get recordingFileFieldName => _recordingFileFieldName;
   bool get recordingUploadEnabled => _recordingUploadEnabled;
-  
+
   // Getters - Dialing Rules
   List<DialingRule> get dialingRules => List.unmodifiable(_dialingRules);
-  
+
   // Getters - Caller ID Transformations
-  List<CallerIdTransformation> get callerIdTransformations => 
+  List<CallerIdTransformation> get callerIdTransformations =>
       List.unmodifiable(_callerIdTransformations);
 
   /// Load settings from file on app startup.
@@ -116,33 +124,50 @@ class AppSettingsService {
         _dndEnabled = data['dnd_enabled'] as bool? ?? false;
         _blfEnabled = data['blf_enabled'] as bool? ?? true;
         _ringWebhookUrl = data['ring_webhook_url'] as String? ?? '';
+        _ringWebhookEnabled =
+            data['ring_webhook_enabled'] as bool? ?? _ringWebhookUrl.isNotEmpty;
         _endWebhookUrl = data['end_webhook_url'] as String? ?? '';
-        _callEndWebhookEnabled = data['call_end_webhook_enabled'] as bool? ?? true;
+        _callEndWebhookEnabled =
+            data['call_end_webhook_enabled'] as bool? ?? true;
         _customerLookupUrl = data['customer_lookup_url'] as String? ?? '';
-        _customerLookupTimeoutMs = data['customer_lookup_timeout_ms'] as int? ?? 5000;
-        _customerLookupEnabled = data['customer_lookup_enabled'] as bool? ?? false;
+        _customerLookupTimeoutMs =
+            data['customer_lookup_timeout_ms'] as int? ?? 5000;
+        _customerLookupEnabled =
+            data['customer_lookup_enabled'] as bool? ?? false;
         _screenPopUrl = data['screen_pop_url'] as String? ?? '';
         _screenPopEvent = data['screen_pop_event'] as String? ?? 'ring';
-        _screenPopOpenBrowser = data['screen_pop_open_browser'] as bool? ?? true;
-        _screenPopSuppressWindow = data['screen_pop_suppress_window'] as bool? ?? false;
+        _screenPopOpenBrowser =
+            data['screen_pop_open_browser'] as bool? ?? true;
+        _screenPopSuppressWindow =
+            data['screen_pop_suppress_window'] as bool? ?? false;
         _clipboardMonitoringEnabled =
             data['clipboard_monitoring_enabled'] as bool? ?? false;
-        _clipboardPollIntervalMs = data['clipboard_poll_interval_ms'] as int? ?? 500;
+        _clipboardPollIntervalMs =
+            data['clipboard_poll_interval_ms'] as int? ?? 500;
+        _localCallRecordingEnabled =
+            data['local_call_recording_enabled'] as bool? ?? false;
+        _localRecordingDirectory =
+            data['local_recording_directory'] as String? ?? '';
+        _localRecordingFormat =
+            data['local_recording_format'] as String? ?? 'wav';
         _recordingUploadUrl = data['recording_upload_url'] as String? ?? '';
         _recordingFileFieldName =
             data['recording_file_field_name'] as String? ?? 'recording';
-        _recordingUploadEnabled = data['recording_upload_enabled'] as bool? ?? false;
-        
+        _recordingUploadEnabled =
+            data['recording_upload_enabled'] as bool? ?? false;
+
         // Load dialing rules
         final dialingRulesJson = data['dialing_rules'] as List? ?? [];
         _dialingRules = dialingRulesJson
             .map((r) => DialingRule.fromJson(r as Map<String, dynamic>))
             .toList();
-        
+
         // Load caller ID transformations
-        final transformationsJson = data['caller_id_transformations'] as List? ?? [];
+        final transformationsJson =
+            data['caller_id_transformations'] as List? ?? [];
         _callerIdTransformations = transformationsJson
-            .map((t) => CallerIdTransformation.fromJson(t as Map<String, dynamic>))
+            .map((t) =>
+                CallerIdTransformation.fromJson(t as Map<String, dynamic>))
             .toList();
 
         debugPrint('[AppSettings] Loaded settings from file');
@@ -180,6 +205,7 @@ class AppSettingsService {
         'dnd_enabled': _dndEnabled,
         'blf_enabled': _blfEnabled,
         'ring_webhook_url': _ringWebhookUrl,
+        'ring_webhook_enabled': _ringWebhookEnabled,
         'end_webhook_url': _endWebhookUrl,
         'call_end_webhook_enabled': _callEndWebhookEnabled,
         'customer_lookup_url': _customerLookupUrl,
@@ -191,11 +217,15 @@ class AppSettingsService {
         'screen_pop_suppress_window': _screenPopSuppressWindow,
         'clipboard_monitoring_enabled': _clipboardMonitoringEnabled,
         'clipboard_poll_interval_ms': _clipboardPollIntervalMs,
+        'local_call_recording_enabled': _localCallRecordingEnabled,
+        'local_recording_directory': _localRecordingDirectory,
+        'local_recording_format': _localRecordingFormat,
         'recording_upload_url': _recordingUploadUrl,
         'recording_file_field_name': _recordingFileFieldName,
         'recording_upload_enabled': _recordingUploadEnabled,
         'dialing_rules': _dialingRules.map((r) => r.toJson()).toList(),
-        'caller_id_transformations': _callerIdTransformations.map((t) => t.toJson()).toList(),
+        'caller_id_transformations':
+            _callerIdTransformations.map((t) => t.toJson()).toList(),
       };
       await file.writeAsString(jsonEncode(data), flush: true);
       debugPrint('[AppSettings] Saved settings to file');
@@ -236,6 +266,11 @@ class AppSettingsService {
 
   Future<void> setRingWebhookUrl(String url) async {
     _ringWebhookUrl = url;
+    await saveSettings();
+  }
+
+  Future<void> setRingWebhookEnabled(bool enabled) async {
+    _ringWebhookEnabled = enabled;
     await saveSettings();
   }
 
@@ -299,6 +334,22 @@ class AppSettingsService {
     await saveSettings();
   }
 
+  Future<void> setLocalCallRecordingEnabled(bool enabled) async {
+    _localCallRecordingEnabled = enabled;
+    await saveSettings();
+  }
+
+  Future<void> setLocalRecordingDirectory(String directory) async {
+    _localRecordingDirectory = directory;
+    await saveSettings();
+  }
+
+  Future<void> setLocalRecordingFormat(String format) async {
+    if (format != 'wav' && format != 'mp3') return;
+    _localRecordingFormat = format;
+    await saveSettings();
+  }
+
   Future<void> setRecordingFileFieldName(String name) async {
     _recordingFileFieldName = name;
     await saveSettings();
@@ -336,7 +387,8 @@ class AppSettingsService {
   }
 
   // Caller ID Transformations methods
-  Future<void> addCallerIdTransformation(CallerIdTransformation transformation) async {
+  Future<void> addCallerIdTransformation(
+      CallerIdTransformation transformation) async {
     _callerIdTransformations.add(transformation);
     _callerIdTransformations.sort((a, b) => b.priority.compareTo(a.priority));
     await saveSettings();
@@ -347,8 +399,10 @@ class AppSettingsService {
     await saveSettings();
   }
 
-  Future<void> updateCallerIdTransformation(CallerIdTransformation transformation) async {
-    final index = _callerIdTransformations.indexWhere((t) => t.id == transformation.id);
+  Future<void> updateCallerIdTransformation(
+      CallerIdTransformation transformation) async {
+    final index =
+        _callerIdTransformations.indexWhere((t) => t.id == transformation.id);
     if (index >= 0) {
       _callerIdTransformations[index] = transformation;
       _callerIdTransformations.sort((a, b) => b.priority.compareTo(a.priority));
@@ -371,7 +425,8 @@ class AppSettingsService {
   /// Transform a caller ID using transformation rules
   String transformCallerId(String callerId) {
     String result = callerId;
-    for (final transformation in _callerIdTransformations.where((t) => t.enabled)) {
+    for (final transformation
+        in _callerIdTransformations.where((t) => t.enabled)) {
       final transformed = transformation.apply(result);
       if (transformed != null) {
         result = transformed;

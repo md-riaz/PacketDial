@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'app_settings_service.dart';
 import 'engine_channel.dart';
 import 'integration_service.dart';
 
@@ -15,8 +16,11 @@ class RecordingService {
 
   /// Get the default recordings directory
   Future<Directory> getRecordingsDir() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final recordingsDir = Directory(p.join(appDir.path, 'recordings'));
+    final configuredDir = AppSettingsService.instance.localRecordingDirectory;
+    final dirPath = configuredDir.trim().isNotEmpty
+        ? configuredDir.trim()
+        : p.join((await getApplicationDocumentsDirectory()).path, 'recordings');
+    final recordingsDir = Directory(dirPath);
     if (!await recordingsDir.exists()) {
       await recordingsDir.create(recursive: true);
     }
@@ -26,8 +30,11 @@ class RecordingService {
   /// Generate a recording file path
   Future<String> generateRecordingPath() async {
     final dir = await getRecordingsDir();
-    final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
-    return p.join(dir.path, 'call_$timestamp.wav');
+    final format = AppSettingsService.instance.localRecordingFormat;
+    final ext = (format == 'mp3') ? 'mp3' : 'wav';
+    final timestamp =
+        DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+    return p.join(dir.path, 'call_$timestamp.$ext');
   }
 
   /// Start recording the current call
@@ -39,9 +46,11 @@ class RecordingService {
 
     try {
       _currentRecordingPath = await generateRecordingPath();
-      debugPrint('[RecordingService] Starting recording: $_currentRecordingPath');
+      debugPrint(
+          '[RecordingService] Starting recording: $_currentRecordingPath');
 
-      final result = EngineChannel.instance.engine.startRecording(_currentRecordingPath!);
+      final result =
+          EngineChannel.instance.engine.startRecording(_currentRecordingPath!);
 
       if (result == 0) {
         _isRecording = true;
@@ -117,7 +126,11 @@ class RecordingService {
       final files = await dir.list().toList();
       return files
           .whereType<File>()
-          .where((f) => f.path.endsWith('.wav'))
+          .where(
+            (f) =>
+                f.path.toLowerCase().endsWith('.wav') ||
+                f.path.toLowerCase().endsWith('.mp3'),
+          )
           .toList();
     } catch (e) {
       debugPrint('[RecordingService] Error getting recordings: $e');
@@ -151,7 +164,8 @@ class RecordingService {
       _currentRecordingPath = null;
 
       if (path != null && activeCall != null) {
-        debugPrint('[RecordingService] Call ended, triggering upload for: $path');
+        debugPrint(
+            '[RecordingService] Call ended, triggering upload for: $path');
         // Fire and forget - don't await
         IntegrationService.instance.onCallEnd(
           activeCall,

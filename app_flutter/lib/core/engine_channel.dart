@@ -15,6 +15,7 @@ import '../models/sip_message.dart';
 import '../models/media_stats.dart';
 import '../models/call_history_schema.dart';
 import 'package:isar/isar.dart';
+import 'app_settings_service.dart';
 import 'audio_service.dart';
 import 'integration_service.dart';
 import 'recording_service.dart';
@@ -347,6 +348,30 @@ class EngineChannel {
     return _engine?.mergeConference(callAId, callBId) ?? -1;
   }
 
+  Future<void> _startRecordingDeferred(int callId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final current = activeCall;
+    if (current == null || current.callId != callId) return;
+    if (current.state != CallState.inCall) return;
+    if (RecordingService.instance.isRecording) return;
+
+    try {
+      await RecordingService.instance.startRecording();
+    } catch (e) {
+      debugPrint('[EngineChannel] Deferred recording start failed: $e');
+    }
+  }
+
+  Future<void> _stopRecordingDeferred() async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!RecordingService.instance.isRecording) return;
+    try {
+      await RecordingService.instance.stopRecording();
+    } catch (e) {
+      debugPrint('[EngineChannel] Deferred recording stop failed: $e');
+    }
+  }
+
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     final payload =
@@ -447,9 +472,12 @@ class EngineChannel {
         } else if (state == CallState.inCall || state == CallState.ended) {
           AudioService.instance.stopAll();
 
-          // Auto-start recording on call answer (if enabled in future)
-          if (state == CallState.inCall && previousState == null) {
-            // Recording can be started manually via UI
+          // Auto-start local recording for every call when enabled.
+          if (state == CallState.inCall &&
+              previousState != CallState.inCall &&
+              AppSettingsService.instance.localCallRecordingEnabled &&
+              !RecordingService.instance.isRecording) {
+            unawaited(_startRecordingDeferred(callId));
           }
           if (state == CallState.inCall && previousState != CallState.inCall) {
             IntegrationService.instance.onCallAnswered(eventCall);
@@ -457,9 +485,12 @@ class EngineChannel {
         }
 
         if (state == CallState.ended) {
+          final endedRecordingPath = (payload['recording_path'] as String?) ??
+              RecordingService.instance.currentRecordingPath;
+
           // Stop recording if active
           if (RecordingService.instance.isRecording) {
-            RecordingService.instance.stopRecording();
+            unawaited(_stopRecordingDeferred());
           }
 
           if (activeCall?.callId == callId) {
@@ -515,7 +546,7 @@ class EngineChannel {
             if (activeCall != null) {
               IntegrationService.instance.onCallEnd(
                 activeCall!,
-                recordingPath: payload['recording_path'] as String?,
+                recordingPath: endedRecordingPath,
               );
             }
 
