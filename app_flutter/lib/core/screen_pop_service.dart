@@ -6,6 +6,7 @@ import '../models/call.dart';
 import '../models/customer_data.dart';
 import 'app_settings_service.dart';
 import 'dialing_rules_service.dart';
+import 'sip_uri_utils.dart';
 
 /// Service for triggering screen pop on incoming calls
 class ScreenPopService {
@@ -28,9 +29,7 @@ class ScreenPopService {
       return;
     }
 
-    // Check if we should trigger on this event
-    final shouldTrigger = settings.screenPopEvent == 'ring';
-    if (!shouldTrigger) {
+    if (settings.screenPopEvent != 'ring') {
       return;
     }
 
@@ -57,9 +56,34 @@ class ScreenPopService {
       return;
     }
 
-    // Check if we should trigger on this event
-    final shouldTrigger = settings.screenPopEvent == 'answer';
-    if (!shouldTrigger) {
+    if (settings.screenPopEvent != 'answer') {
+      return;
+    }
+
+    await _triggerScreenPop(
+      settings.screenPopUrl,
+      call,
+      customerData: customerData,
+      extid: extid,
+      didNumber: didNumber,
+      openBrowser: settings.screenPopOpenBrowser,
+    );
+  }
+
+  /// Trigger screen pop when call has ended
+  Future<void> onCallEnded(
+    ActiveCall call, {
+    CustomerData? customerData,
+    String? extid,
+    String? didNumber,
+  }) async {
+    final settings = AppSettingsService.instance;
+
+    if (settings.screenPopUrl.isEmpty) {
+      return;
+    }
+
+    if (settings.screenPopEvent != 'end') {
       return;
     }
 
@@ -122,14 +146,20 @@ class ScreenPopService {
     String? didNumber,
   }) {
     var result = template;
-    
-    // Transform number using dialing rules
-    final transformedNumber = _dialingRules.transform(call.uri);
-    
+
+    // Parse SIP URI first so placeholders are always usable values.
+    final extractedNumber = SipUriUtils.extractNumber(call.uri) ?? call.uri;
+    final transformedNumber = _dialingRules.transform(extractedNumber.trim());
+    final fallbackName = SipUriUtils.friendlyName(call.uri);
+    final resolvedName = (customerData?.contactName.trim().isNotEmpty ?? false)
+        ? customerData!.contactName.trim()
+        : fallbackName;
+    final resolvedCompany = customerData?.company.trim() ?? '';
+
     // Replace placeholders
     result = result.replaceAll('%NUMBER%', Uri.encodeComponent(transformedNumber));
-    result = result.replaceAll('%NAME%', Uri.encodeComponent(customerData?.contactName ?? ''));
-    result = result.replaceAll('%COMPANY%', Uri.encodeComponent(customerData?.company ?? ''));
+    result = result.replaceAll('%NAME%', Uri.encodeComponent(resolvedName));
+    result = result.replaceAll('%COMPANY%', Uri.encodeComponent(resolvedCompany));
     result = result.replaceAll('%EXTID%', Uri.encodeComponent(extid ?? ''));
     result = result.replaceAll('%DID%', Uri.encodeComponent(didNumber ?? ''));
     result = result.replaceAll('%ID%', call.callId.toString());

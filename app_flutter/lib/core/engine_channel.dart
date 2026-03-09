@@ -414,6 +414,25 @@ class EngineChannel {
       case 'CallStateChanged':
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
         final state = CallState.fromString(payload['state'] as String? ?? '');
+        final previousState = activeCall?.state;
+        final eventCall = ActiveCall(
+          callId: callId,
+          accountId: payload['account_id'] as String? ?? '',
+          uri: payload['uri'] as String? ?? '',
+          direction:
+              CallDirection.fromString(payload['direction'] as String? ?? ''),
+          state: state,
+          muted: payload['muted'] as bool? ?? false,
+          onHold: payload['on_hold'] as bool? ?? false,
+          startedAt: activeCall?.startedAt ??
+              ((state == CallState.inCall) ? DateTime.now() : null),
+          accumulatedSeconds: payload['accumulated_active_secs'] as int? ?? 0,
+          lastResumedAt: payload['last_resumed_at'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  (payload['last_resumed_at'] as int) * 1000)
+              : null,
+        );
+        activeCall = eventCall;
 
         // Handle Audio Feedback
         if (state == CallState.ringing) {
@@ -421,10 +440,7 @@ class EngineChannel {
               (payload['direction'] as String? ?? '').toLowerCase();
           if (direction == 'incoming') {
             AudioService.instance.startRingtone();
-            // Trigger CRM Ring Hook
-            if (activeCall != null) {
-              IntegrationService.instance.onIncomingCall(activeCall!);
-            }
+            IntegrationService.instance.onIncomingCall(eventCall);
           } else {
             AudioService.instance.startRingback();
           }
@@ -432,8 +448,11 @@ class EngineChannel {
           AudioService.instance.stopAll();
 
           // Auto-start recording on call answer (if enabled in future)
-          if (state == CallState.inCall && activeCall == null) {
+          if (state == CallState.inCall && previousState == null) {
             // Recording can be started manually via UI
+          }
+          if (state == CallState.inCall && previousState != CallState.inCall) {
+            IntegrationService.instance.onCallAnswered(eventCall);
           }
         }
 
@@ -505,24 +524,6 @@ class EngineChannel {
           mediaStats.remove(callId);
           // Refresh call history
           _engine?.queryCallHistory();
-        } else {
-          activeCall = ActiveCall(
-            callId: callId,
-            accountId: payload['account_id'] as String? ?? '',
-            uri: payload['uri'] as String? ?? '',
-            direction:
-                CallDirection.fromString(payload['direction'] as String? ?? ''),
-            state: state,
-            muted: payload['muted'] as bool? ?? false,
-            onHold: payload['on_hold'] as bool? ?? false,
-            startedAt: activeCall?.startedAt ??
-                ((state == CallState.inCall) ? DateTime.now() : null),
-            accumulatedSeconds: payload['accumulated_active_secs'] as int? ?? 0,
-            lastResumedAt: payload['last_resumed_at'] != null
-                ? DateTime.fromMillisecondsSinceEpoch(
-                    (payload['last_resumed_at'] as int) * 1000)
-                : null,
-          );
         }
 
       case 'MediaStatsUpdated':

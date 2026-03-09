@@ -279,7 +279,41 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         _buildSectionTitle('Screen Pop Configuration'),
         _buildInfoCard(
           'Open a CRM page or trigger a webhook when calls come in.',
-          'Supports browser launch or background HTTP request.',
+          'Supports browser launch or background HTTP request. Use placeholders in URL query params.',
+        ),
+        const SizedBox(height: 12),
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Supported placeholders',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '%NUMBER%, %NAME%, %COMPANY%, %EXTID%, %DID%, %ID%, %ACCOUNT_ID%, %STATE%, %DIRECTION%, %CONTACT_LINK%',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Example: https://portal.alpha.net.bd/callcenter.php?apikey=XYZ&phone=%NUMBER%',
+                  style: TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 24),
         const ListTile(
@@ -292,7 +326,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             controller: _screenPopUrlController,
             decoration: const InputDecoration(
               labelText: 'URL',
-              hintText: 'https://crm.example.com/customer?phone=%NUMBER%',
+              helperMaxLines: 4,
+              helperText:
+                  'Use placeholders in query params.\n'
+                  'Example: https://portal.example.com/callcenter.php?apikey=YOUR_API_KEY&phone=%NUMBER%\n'
+                  'Supported: %NUMBER%, %NAME%, %COMPANY%, %EXTID%, %DID%, %ID%, %ACCOUNT_ID%, %STATE%, %DIRECTION%, %CONTACT_LINK%',
               border: OutlineInputBorder(),
             ),
           ),
@@ -313,6 +351,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               DropdownMenuItem(
                   value: 'ring', child: Text('Incoming Call Ring')),
               DropdownMenuItem(value: 'answer', child: Text('Call Answered')),
+              DropdownMenuItem(value: 'end', child: Text('Call Ended')),
             ],
             onChanged: (value) async {
               if (value != null) {
