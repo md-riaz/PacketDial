@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
@@ -14,6 +13,7 @@ import '../models/audio_device.dart';
 import '../models/call.dart';
 import '../models/media_stats.dart';
 import '../providers/engine_provider.dart';
+import '../providers/dialer_ui_provider.dart';
 
 final selectedAccountProvider = FutureProvider<AccountSchema?>((ref) {
   return ref.watch(accountServiceProvider).getSelectedAccount();
@@ -29,9 +29,6 @@ class DialerScreen extends ConsumerStatefulWidget {
 class _DialerScreenState extends ConsumerState<DialerScreen> {
   final _uriCtrl = TextEditingController();
   final _focusNode = FocusNode();
-  int? _consultationCallId;
-  String? _consultationUri;
-  StreamSubscription<Map<String, dynamic>>? _callEventSub;
 
   @override
   void initState() {
@@ -41,96 +38,21 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         _focusNode.requestFocus();
       }
     });
-    _callEventSub = EngineChannel.instance.events.listen(_handleCallEvent);
-  }
-
-  void _safeSetState(VoidCallback fn) {
-    if (!mounted) return;
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    final inBuildPhase = phase == SchedulerPhase.transientCallbacks ||
-        phase == SchedulerPhase.midFrameMicrotasks ||
-        phase == SchedulerPhase.persistentCallbacks;
-
-    if (inBuildPhase) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(fn);
-      });
-    } else {
-      setState(fn);
-    }
-  }
-
-  void _handleCallEvent(Map<String, dynamic> event) {
-    if (!mounted) return;
-    final type = event['type'] as String?;
-    final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
-
-    if (type == 'CallStateChanged') {
-      final callId = (payload['call_id'] as num?)?.toInt();
-      final state = payload['state'] as String?;
-      final direction = payload['direction'] as String?;
-      final uri = payload['uri'] as String?;
-
-      // Track consultation call: new outgoing call while another is on hold
-      if (callId != null && state == 'Ringing' && direction == 'Outgoing') {
-        final activeCall = EngineChannel.instance.activeCall;
-        if (activeCall != null && activeCall.onHold) {
-          _safeSetState(() {
-            _consultationCallId = callId;
-            _consultationUri = uri;
-          });
-        }
-      }
-
-      // Update when consultation call is answered (InCall state)
-      if (callId != null &&
-          state == 'InCall' &&
-          callId == _consultationCallId) {
-        _safeSetState(() => _consultationUri = uri);
-      }
-
-      // Clear when consultation call ends
-      if (state == 'Ended' && callId == _consultationCallId) {
-        _safeSetState(() {
-          _consultationCallId = null;
-          _consultationUri = null;
-        });
-      }
-
-      // Clear if original call ends (no longer in consult state)
-      if (activeCallEnded(payload) && _consultationCallId != null) {
-        _safeSetState(() {
-          _consultationCallId = null;
-          _consultationUri = null;
-        });
-      }
-    }
-  }
-
-  bool activeCallEnded(Map<String, dynamic> payload) {
-    final state = payload['state'] as String?;
-    final callId = (payload['call_id'] as num?)?.toInt();
-    final activeCall = EngineChannel.instance.activeCall;
-    return state == 'Ended' &&
-        activeCall != null &&
-        callId == activeCall.callId;
   }
 
   @override
   void dispose() {
-    _callEventSub?.cancel();
     _uriCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
   /// Check if there's a consultation call active.
-  bool _hasConsultationCall() => _consultationCallId != null;
+  bool _hasConsultationCall() => ref.read(dialerUiProvider).hasConsultationCall;
 
   /// Get consultation call display info.
-  String? get _consultationDisplay => _consultationUri != null
-      ? SipUriUtils.friendlyName(_consultationUri!)
-      : null;
+  String? get _consultationDisplay =>
+      ref.read(dialerUiProvider).consultationDisplay;
 
   void _dialKey(String digit, bool isCallActive) {
     // Local feedback (Spec 6.2)
@@ -636,7 +558,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Shows dialog to complete consult transfer when consultation call is active.
   void _showCompleteTransferDialog(ActiveCall heldCall) {
-    final consultationId = _consultationCallId;
+    final consultationId = ref.read(dialerUiProvider).consultationCallId;
     final consultationTarget = _consultationDisplay;
     if (consultationId == null) return;
 
@@ -836,7 +758,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       final result = EngineChannel.instance.startAttendedXfer(call.callId, uri);
       if (result >= 0) {
         // Store consultation call ID
-        setState(() => _consultationCallId = result);
+        ref.read(dialerUiProvider.notifier).setConsultationCallId(result);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Calling $uri for consultation...'),
@@ -898,7 +820,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     // Put current call on hold and dial the participant
     final result = EngineChannel.instance.startAttendedXfer(call.callId, uri);
     if (result >= 0) {
-      setState(() => _consultationCallId = result);
+      ref.read(dialerUiProvider.notifier).setConsultationCallId(result);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Calling $uri to add to conference...'),
@@ -914,7 +836,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Complete a consult transfer - transfer the held call to the consultation target.
   void _completeTransfer(ActiveCall heldCall) {
-    final consultationId = _consultationCallId;
+    final consultationId = ref.read(dialerUiProvider).consultationCallId;
     if (consultationId == null) return;
 
     final result =
@@ -936,10 +858,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ),
       );
 
-      setState(() {
-        _consultationCallId = null;
-        _consultationUri = null;
-      });
+      ref.read(dialerUiProvider.notifier).clearConsultation();
     } else {
       _showErrorDialog('Transfer Failed', _getTransferErrorMessage(result));
     }
@@ -947,7 +866,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Join the held call and active call into a conference.
   void _joinConference(ActiveCall heldCall) {
-    final consultationId = _consultationCallId;
+    final consultationId = ref.read(dialerUiProvider).consultationCallId;
     final consultationTarget = _consultationDisplay;
     if (consultationId == null) return;
 
@@ -1060,10 +979,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ),
       );
 
-      setState(() {
-        _consultationCallId = null;
-        _consultationUri = null;
-      });
+      ref.read(dialerUiProvider.notifier).clearConsultation();
     } else {
       _showErrorDialog('Conference Failed', _getTransferErrorMessage(result));
     }
@@ -1089,6 +1005,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     final activeAccountAsync = ref.watch(selectedAccountProvider);
     final activeCall = ref.watch(activeCallProvider);
     final stats = ref.watch(activeCallMediaStatsProvider);
+    final dialerUi = ref.watch(dialerUiProvider);
 
     return Shortcuts(
       shortcuts: {
@@ -1138,8 +1055,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                           onHangup: _hangup,
                           onTransfer: () => _showTransferDialog(activeCall),
                           onConference: () => _showConferenceDialog(activeCall),
-                          hasConsultationCall: _hasConsultationCall(),
-                          consultationDisplay: _consultationDisplay,
+                          hasConsultationCall: dialerUi.hasConsultationCall,
+                          consultationDisplay: dialerUi.consultationDisplay,
                         ),
                       )
                     else

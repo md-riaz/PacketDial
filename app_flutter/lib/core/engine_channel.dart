@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
@@ -171,24 +172,41 @@ class EngineChannel {
       final eventType = _eventIdToType(eventId);
 
       // Create event map
-      final event = {
-        'type': eventType,
-        'payload': payload,
-      };
-
-      // Store in event log
-      _appendEventLog(eventType, payload);
-
-      // Handle the event
-      _handleEvent(event);
-
-      // Broadcast to listeners
-      if (!_eventController.isClosed) {
-        _eventController.add(event);
-      }
+      _dispatchEvent(eventType, payload);
     } catch (e) {
       debugPrint(
           '[EngineChannel] Dropped event (id=$eventId) due to parse error: $e');
+    }
+  }
+
+  void _dispatchEvent(String eventType, Map<String, dynamic> payload) {
+    final event = <String, dynamic>{'type': eventType, 'payload': payload};
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    final inBuildPhase = phase == SchedulerPhase.transientCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks ||
+        phase == SchedulerPhase.persistentCallbacks;
+
+    if (inBuildPhase) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _processEvent(eventType, payload, event);
+      });
+      return;
+    }
+
+    _processEvent(eventType, payload, event);
+  }
+
+  void _processEvent(String eventType, Map<String, dynamic> payload,
+      Map<String, dynamic> event) {
+    // Store in event log
+    _appendEventLog(eventType, payload);
+
+    // Handle the event
+    _handleEvent(event);
+
+    // Broadcast to listeners
+    if (!_eventController.isClosed) {
+      _eventController.add(event);
     }
   }
 

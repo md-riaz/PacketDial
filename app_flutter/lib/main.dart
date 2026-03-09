@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'dart:ui' as ui;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
@@ -22,6 +21,7 @@ import 'models/account_schema.dart';
 import 'models/call_history_schema.dart';
 import 'ffi/engine.dart';
 import 'providers/engine_provider.dart';
+import 'providers/incoming_call_provider.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/dialer_screen.dart';
@@ -174,7 +174,7 @@ void main(List<String> args) async {
   );
 }
 
-class App extends StatefulWidget {
+class App extends ConsumerStatefulWidget {
   final Isar isar;
   final AccountService accountService;
   final WindowPrefs windowPrefs;
@@ -188,10 +188,10 @@ class App extends StatefulWidget {
   });
 
   @override
-  State<App> createState() => _AppState();
+  ConsumerState<App> createState() => _AppState();
 }
 
-class _AppState extends State<App>
+class _AppState extends ConsumerState<App>
     with SingleTickerProviderStateMixin, WindowListener {
   int _selectedIndex = 0;
   String _status = 'Initializing…';
@@ -203,26 +203,6 @@ class _AppState extends State<App>
   late final AnimationController _splashCtrl;
   late final Animation<double> _splashFade;
   late final Animation<double> _splashScale;
-
-  // Incoming call banner state
-  Map<String, dynamic>? _incomingCallInfo;
-  StreamSubscription? _callStateSub;
-
-  void _safeSetState(VoidCallback fn) {
-    if (!mounted) return;
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    final inBuildPhase = phase == SchedulerPhase.transientCallbacks ||
-        phase == SchedulerPhase.midFrameMicrotasks ||
-        phase == SchedulerPhase.persistentCallbacks;
-
-    if (inBuildPhase) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(fn);
-      });
-    } else {
-      setState(fn);
-    }
-  }
 
   @override
   void initState() {
@@ -240,46 +220,7 @@ class _AppState extends State<App>
     windowManager.addListener(this);
     // Prevent default close — we handle it in onWindowClose
     windowManager.setPreventClose(true);
-    _initIncomingCallListener();
     _boot();
-  }
-
-  void _initIncomingCallListener() {
-    _callStateSub?.cancel();
-    _callStateSub = EngineChannel.instance.eventStream.listen((event) {
-      if (!mounted) return;
-      final type = event['type'] as String?;
-      final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
-
-      if (type == 'CallStateChanged') {
-        final direction = payload['direction'] as String? ?? '';
-        final state = payload['state'] as String? ?? '';
-
-        // Check DND mode
-        final dndEnabled = AppSettingsService.instance.dndEnabled;
-
-        if (direction == 'Incoming' && state == 'Ringing' && !dndEnabled) {
-          // Show incoming call banner
-          _safeSetState(() {
-            _incomingCallInfo = {
-              'uri': payload['uri'] as String? ?? '',
-              'direction': 'Incoming',
-              'account_name':
-                  payload['account_name'] as String? ?? 'SIP Account',
-              'account_user': payload['account_user'] as String? ?? '',
-              'extid': payload['extid'] as String? ?? '',
-              'customer_data':
-                  payload['customer_data'] as Map<String, dynamic>? ?? {},
-            };
-          });
-        } else if (state == 'InCall' || state == 'Ended') {
-          // Hide banner
-          _safeSetState(() {
-            _incomingCallInfo = null;
-          });
-        }
-      }
-    });
   }
 
   Future<void> _boot() async {
@@ -445,7 +386,6 @@ class _AppState extends State<App>
     windowManager.removeListener(this);
     _regFailureSub?.cancel();
     _clipboardSub?.cancel();
-    _callStateSub?.cancel();
     _splashCtrl.dispose();
     ClipboardService.instance.dispose();
     EngineChannel.instance.dispose();
@@ -535,6 +475,7 @@ class _AppState extends State<App>
 
   // ── Main App Shell ──────────────────────────────────────────────────────
   Widget _buildMainShell() {
+    final incomingCallInfo = ref.watch(incomingCallProvider);
     return Stack(
       children: [
         Scaffold(
@@ -557,17 +498,15 @@ class _AppState extends State<App>
           bottomNavigationBar: _buildNavBar(),
         ),
         // Incoming call banner overlay
-        if (_incomingCallInfo != null)
+        if (incomingCallInfo != null)
           IncomingCallBanner(
-            callInfo: _incomingCallInfo!,
+            callInfo: incomingCallInfo,
             onAnswer: () {
               EngineChannel.instance.engine.answerCall();
             },
             onReject: () {
               EngineChannel.instance.engine.hangup();
-              setState(() {
-                _incomingCallInfo = null;
-              });
+              ref.read(incomingCallProvider.notifier).clear();
             },
           ),
       ],

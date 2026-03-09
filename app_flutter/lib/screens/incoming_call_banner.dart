@@ -24,7 +24,7 @@ class IncomingCallBanner extends StatefulWidget {
 }
 
 class _IncomingCallBannerState extends State<IncomingCallBanner>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
   late final AnimationController _slideCtrl;
   bool _answered = false;
