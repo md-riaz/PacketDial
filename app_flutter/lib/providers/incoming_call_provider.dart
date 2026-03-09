@@ -22,11 +22,28 @@ class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
     final dndEnabled = AppSettingsService.instance.dndEnabled;
 
     if (direction == 'incoming' && callState == 'ringing' && !dndEnabled) {
+      final accountId = payload['account_id'] as String? ?? '';
+      final account = EngineChannel.instance.accounts[accountId];
+      final payloadAccountName = payload['account_name'] as String? ?? '';
+      final payloadAccountUser = payload['account_user'] as String? ?? '';
+      final resolvedAccountName = payloadAccountName.isNotEmpty
+          ? payloadAccountName
+          : (account?.accountName.isNotEmpty == true
+              ? account!.accountName
+              : (account?.displayName.isNotEmpty == true
+                  ? account!.displayName
+                  : (account?.username.isNotEmpty == true
+                      ? account!.username
+                      : 'SIP Account')));
+      final resolvedAccountUser = payloadAccountUser.isNotEmpty
+          ? payloadAccountUser
+          : (account?.username ?? '');
+
       state = {
         'uri': payload['uri'] as String? ?? '',
         'direction': 'Incoming',
-        'account_name': payload['account_name'] as String? ?? 'SIP Account',
-        'account_user': payload['account_user'] as String? ?? '',
+        'account_name': resolvedAccountName,
+        'account_user': resolvedAccountUser,
         'extid': payload['extid'] as String? ?? '',
         'customer_data':
             payload['customer_data'] as Map<String, dynamic>? ?? {},

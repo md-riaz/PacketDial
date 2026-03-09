@@ -134,258 +134,211 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
         child: Container(
           color: const Color(0xFF070A16),
           child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF0D0D1A),
-                      Color(0xFF1A1040),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.callGreen.withValues(alpha: 0.5),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.callGreen.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
+            padding: const EdgeInsets.all(14),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0D0D1A), Color(0xFF161035)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                // Header with pulse indicator
-                Row(
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: AppTheme.callGreen.withValues(alpha: 0.6),
+                  width: 2,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                child: Column(
                   children: [
-                    AnimatedBuilder(
-                      animation: _pulseCtrl,
-                      builder: (_, child) => Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.callGreen.withValues(
-                                  alpha: 0.3 + _pulseCtrl.value * 0.4),
-                              blurRadius: 12 + _pulseCtrl.value * 12,
-                              spreadRadius: _pulseCtrl.value * 3,
+                    Row(
+                      children: [
+                        AnimatedBuilder(
+                          animation: _pulseCtrl,
+                          builder: (_, child) => Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.callGreen.withValues(
+                                      alpha: 0.25 + _pulseCtrl.value * 0.35),
+                                  blurRadius: 16 + _pulseCtrl.value * 10,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: child,
-                      ),
-                      child: CircleAvatar(
-                        radius: 24,
-                        backgroundColor:
-                            AppTheme.callGreen.withValues(alpha: 0.2),
-                        child: Text(
-                          displayName.isNotEmpty
-                              ? displayName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.callGreen,
+                            child: child,
+                          ),
+                          child: CircleAvatar(
+                            radius: 30,
+                            backgroundColor:
+                                AppTheme.callGreen.withValues(alpha: 0.16),
+                            child: Text(
+                              displayName.isNotEmpty
+                                  ? displayName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.callGreenBright,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                Icons.call,
-                                color: AppTheme.callGreen,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'INCOMING CALL',
+                              const Text(
+                                'Incoming Call',
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w700,
-                                  color:
-                                      AppTheme.callGreen.withValues(alpha: 0.9),
-                                  letterSpacing: 1,
+                                  color: AppTheme.callGreenBright,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.textPrimary,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            displayName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-
-                      const Spacer(),
-
-                      // Caller details
-                      if (callerNumber != null && callerNumber != displayName) ...[
-                        Text(
-                          callerNumber!,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            color: AppTheme.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'monospace',
-                          ),
+                    const Spacer(),
+                    if (callerNumber != null && callerNumber != displayName)
+                      Text(
+                        callerNumber!,
+                        style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          fontFamily: 'monospace',
                         ),
-                        const SizedBox(height: 6),
-                      ],
-
-                      if (callerDomain != null && callerDomain!.isNotEmpty) ...[
-                        Text(
-                          callerDomain!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textTertiary,
-                          ),
+                      ),
+                    if (callerDomain != null && callerDomain!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        callerDomain!,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // Company badge
-                      if (displayCompany != null && displayCompany.isNotEmpty) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            displayCompany,
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF202050),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppTheme.border.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.sim_card, size: 16, color: AppTheme.textPrimary),
+                          const SizedBox(width: 8),
+                          Text(
+                            accountName,
                             style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.primary,
-                              fontWeight: FontWeight.w500,
+                              color: AppTheme.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      // Account info
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppTheme.primary.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.sim_card,
-                              color: AppTheme.primary,
-                              size: 14,
-                            ),
-                            const SizedBox(width: 6),
+                          if (accountUser.isNotEmpty) ...[
+                            const SizedBox(width: 8),
                             Text(
-                              accountName,
+                              '($accountUser)',
                               style: const TextStyle(
-                                color: AppTheme.primary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                    if (displayCompany != null && displayCompany.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        displayCompany,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.accentBright,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-
-                      const Spacer(),
-
-                      // CRM link button
-                      if (_customerData?.hasContactLink == true) ...[
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: _openCallerLink,
-                            icon: const Icon(Icons.open_in_browser, size: 16),
-                            label: const Text('Open CRM Record'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+                    ],
+                    const Spacer(),
+                    if (_customerData?.hasContactLink == true) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _openCallerLink,
+                          icon: const Icon(Icons.open_in_browser, size: 18),
+                          label: const Text('Open CRM Record'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.textPrimary,
+                            side: BorderSide(
+                              color: AppTheme.textSecondary.withValues(alpha: 0.5),
                             ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // Action buttons
-                      if (!_answered)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Reject
-                            _ActionButton(
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (!_answered)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ActionButton(
                               icon: Icons.call_end,
-                              label: 'Reject',
+                              label: 'Reject (Esc)',
                               gradient: AppTheme.hangupButtonGradient,
                               glowColor: AppTheme.hangupRed,
                               onTap: _reject,
                             ),
-                            const SizedBox(width: 40),
-                            // Answer
-                            _ActionButton(
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ActionButton(
                               icon: Icons.call,
-                              label: 'Answer',
+                              label: 'Answer (Enter)',
                               gradient: AppTheme.callButtonGradient,
                               glowColor: AppTheme.callGreen,
                               onTap: _answer,
                             ),
-                          ],
-                        )
-                      else
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation(
-                              AppTheme.accentBright.withValues(alpha: 0.8),
-                            ),
                           ),
-                        ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+                        ],
+                      )
+                    else
+                      const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(strokeWidth: 2.6),
+                      ),
+                  ],
                 ),
               ),
+            ),
           ),
         ),
       ),
@@ -425,34 +378,34 @@ class _ActionButtonState extends State<_ActionButton> {
       child: AnimatedScale(
         scale: _pressed ? 0.9 : 1.0,
         duration: const Duration(milliseconds: 100),
-        child: Column(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: widget.gradient,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.glowColor.withValues(alpha: 0.4),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+        child: Container(
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: widget.gradient,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: widget.glowColor.withValues(alpha: 0.35),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
-              child: Icon(widget.icon, color: Colors.white, size: 26),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              widget.label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textSecondary,
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(widget.icon, color: Colors.white, size: 26),
+              const SizedBox(width: 10),
+              Text(
+                widget.label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
