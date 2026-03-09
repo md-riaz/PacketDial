@@ -50,7 +50,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
           ),
           title: const Text(
             'BLF Contacts',
-            style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
           ),
           actions: [
             IconButton(
@@ -114,27 +115,31 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
                     child: TextField(
                       decoration: InputDecoration(
                         hintText: 'Search contacts...',
-                        hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                        hintStyle:
+                            const TextStyle(color: AppTheme.textTertiary),
                         filled: true,
                         fillColor: AppTheme.inputFill,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
-                        prefixIcon: const Icon(Icons.search, color: AppTheme.textTertiary),
+                        prefixIcon: const Icon(Icons.search,
+                            color: AppTheme.textTertiary),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.clear, color: AppTheme.textTertiary),
+                                icon: const Icon(Icons.clear,
+                                    color: AppTheme.textTertiary),
                                 onPressed: () {
                                   setState(() => _searchQuery = '');
                                 },
                               )
                             : null,
                       ),
-                      onChanged: (value) => setState(() => _searchQuery = value),
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
                     ),
                   ),
-                  
+
                   // Stats row
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -143,29 +148,38 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
                         _buildStatChip(
                           Icons.circle,
                           AppTheme.callGreen,
-                          ContactsService.instance.getByPresence('Available').length.toString(),
+                          ContactsService.instance
+                              .getByPresence('Available')
+                              .length
+                              .toString(),
                           'Available',
                         ),
                         const SizedBox(width: 8),
                         _buildStatChip(
                           Icons.circle,
                           AppTheme.errorRed,
-                          ContactsService.instance.getByPresence('Busy').length.toString(),
+                          ContactsService.instance
+                              .getByPresence('Busy')
+                              .length
+                              .toString(),
                           'Busy',
                         ),
                         const SizedBox(width: 8),
                         _buildStatChip(
                           Icons.circle,
                           AppTheme.textTertiary,
-                          ContactsService.instance.getByPresence('Unknown').length.toString(),
+                          ContactsService.instance
+                              .getByPresence('Unknown')
+                              .length
+                              .toString(),
                           'Unknown',
                         ),
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Contacts list
                   Expanded(
                     child: _buildContactsList(),
@@ -176,7 +190,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
     );
   }
 
-  Widget _buildStatChip(IconData icon, Color color, String count, String label) {
+  Widget _buildStatChip(
+      IconData icon, Color color, String count, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -257,15 +272,16 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
       itemCount: contacts.length,
       itemBuilder: (context, index) {
         final contact = contacts[index];
-        return _ContactTile(contact: contact, onEdit: () => _showEditContactDialog(contact));
+        return _ContactTile(
+            contact: contact, onEdit: () => _showEditContactDialog(contact));
       },
     );
   }
 
   void _showAddContactDialog() {
     final nameCtrl = TextEditingController();
-    final uriCtrl = TextEditingController();
     final extCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -292,22 +308,6 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: uriCtrl,
-              decoration: InputDecoration(
-                labelText: 'SIP URI',
-                labelStyle: const TextStyle(color: AppTheme.textTertiary),
-                hintText: 'sip:user@domain.com',
-                filled: true,
-                fillColor: AppTheme.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
               controller: extCtrl,
               decoration: InputDecoration(
                 labelText: 'Extension (optional)',
@@ -321,20 +321,38 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               ),
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneCtrl,
+              decoration: InputDecoration(
+                labelText: 'Phone number',
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
+                hintText: '+8801XXXXXXXXX',
+                filled: true,
+                fillColor: AppTheme.inputFill,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              keyboardType: TextInputType.phone,
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
-              if (nameCtrl.text.isNotEmpty && uriCtrl.text.isNotEmpty) {
+              if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
                 ContactsService.instance.addContact(BlfContact(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   name: nameCtrl.text,
-                  sipUri: uriCtrl.text,
+                  sipUri: phoneCtrl.text,
                   extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
                 ));
                 Navigator.pop(context);
@@ -350,8 +368,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
 
   void _showEditContactDialog(BlfContact contact) {
     final nameCtrl = TextEditingController(text: contact.name);
-    final uriCtrl = TextEditingController(text: contact.sipUri);
     final extCtrl = TextEditingController(text: contact.extension ?? '');
+    final phoneCtrl = TextEditingController(text: contact.sipUri);
 
     showDialog(
       context: context,
@@ -378,9 +396,9 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: uriCtrl,
+              controller: extCtrl,
               decoration: InputDecoration(
-                labelText: 'SIP URI',
+                labelText: 'Extension (optional)',
                 labelStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.inputFill,
@@ -393,10 +411,11 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: extCtrl,
+              controller: phoneCtrl,
               decoration: InputDecoration(
-                labelText: 'Extension',
+                labelText: 'Phone number',
                 labelStyle: const TextStyle(color: AppTheme.textTertiary),
+                hintText: '+8801XXXXXXXXX',
                 filled: true,
                 fillColor: AppTheme.inputFill,
                 border: OutlineInputBorder(
@@ -404,6 +423,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
                   borderSide: BorderSide.none,
                 ),
               ),
+              keyboardType: TextInputType.phone,
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
           ],
@@ -411,7 +431,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           TextButton(
             onPressed: () {
@@ -426,7 +447,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               ContactsService.instance.updateContact(BlfContact(
                 id: contact.id,
                 name: nameCtrl.text,
-                sipUri: uriCtrl.text,
+                sipUri: phoneCtrl.text,
                 extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
                 presenceState: contact.presenceState,
                 activity: contact.activity,
@@ -447,15 +468,16 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
-      
+
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
         final success = await ContactsService.instance.importContacts(file);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(success ? 'Contacts imported successfully' : 'Import failed'),
+              content: Text(
+                  success ? 'Contacts imported successfully' : 'Import failed'),
               backgroundColor: success ? AppTheme.callGreen : AppTheme.errorRed,
               behavior: SnackBarBehavior.floating,
             ),
@@ -480,12 +502,12 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
     try {
       final file = await ContactsService.instance.getDefaultExportFile();
       final success = await ContactsService.instance.exportContacts(file);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success 
-                ? 'Contacts exported to ${file.path}' 
+            content: Text(success
+                ? 'Contacts exported to ${file.path}'
                 : 'Export failed'),
             backgroundColor: success ? AppTheme.callGreen : AppTheme.errorRed,
             behavior: SnackBarBehavior.floating,
@@ -520,7 +542,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -546,10 +569,14 @@ class _ContactTile extends StatelessWidget {
 
   Color get _presenceColor {
     switch (contact.presenceState) {
-      case 'Available': return AppTheme.callGreen;
-      case 'Busy': return AppTheme.errorRed;
-      case 'Ringing': return AppTheme.warningAmber;
-      default: return AppTheme.textTertiary;
+      case 'Available':
+        return AppTheme.callGreen;
+      case 'Busy':
+        return AppTheme.errorRed;
+      case 'Ringing':
+        return AppTheme.warningAmber;
+      default:
+        return AppTheme.textTertiary;
     }
   }
 
@@ -569,7 +596,8 @@ class _ContactTile extends StatelessWidget {
         ),
         title: Text(
           contact.name,
-          style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+              color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

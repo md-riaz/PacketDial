@@ -546,8 +546,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                         value: true,
                         title: Text('Consult Transfer',
                             style: TextStyle(color: AppTheme.textPrimary)),
-                        subtitle: Text(
-                            'Speak to target first, then transfer',
+                        subtitle: Text('Speak to target first, then transfer',
                             style: TextStyle(
                                 color: AppTheme.textTertiary, fontSize: 11)),
                         contentPadding: EdgeInsets.zero,
@@ -1086,6 +1085,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     // 2. Active Call Panel (expands to fill space)
                     if (activeCall != null)
                       Expanded(
+                        flex: 2,
                         child: _ActiveCallCard(
                           call: activeCall,
                           stats: stats,
@@ -1437,6 +1437,7 @@ class _ActiveCallCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 200),
       padding: const EdgeInsets.all(14),
       decoration: AppTheme.glassCard(
         color: hasConsultationCall
@@ -1597,6 +1598,7 @@ class _ActiveCallCard extends StatelessWidget {
                 startTime: call.startedAt,
                 accumulatedSeconds: call.accumulatedSeconds,
                 lastResumedAt: call.lastResumedAt,
+                onHold: call.onHold,
               ),
             ],
           ),
@@ -1772,11 +1774,13 @@ class _TimerWidget extends StatefulWidget {
   final DateTime? startTime;
   final int accumulatedSeconds;
   final DateTime? lastResumedAt;
+  final bool onHold;
 
   const _TimerWidget({
     this.startTime,
     this.accumulatedSeconds = 0,
     this.lastResumedAt,
+    this.onHold = false,
   });
 
   @override
@@ -1786,19 +1790,41 @@ class _TimerWidget extends StatefulWidget {
 class _TimerWidgetState extends State<_TimerWidget> {
   Timer? _timer;
   Duration _duration = Duration.zero;
+  int _baseAccumulatedSeconds = 0;
+  DateTime? _resumeAt;
 
   @override
   void initState() {
     super.initState();
+    _syncStateFromWidget(force: true);
     _startTimer();
   }
 
   @override
   void didUpdateWidget(_TimerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.onHold != widget.onHold &&
+        widget.lastResumedAt == null &&
+        widget.startTime != null) {
+      if (widget.onHold) {
+        _updateDuration();
+        _baseAccumulatedSeconds = _duration.inSeconds;
+        _resumeAt = null;
+      } else {
+        _resumeAt = DateTime.now();
+      }
+    }
+
     if (oldWidget.startTime != widget.startTime ||
         oldWidget.lastResumedAt != widget.lastResumedAt ||
         oldWidget.accumulatedSeconds != widget.accumulatedSeconds) {
+      _syncStateFromWidget();
+    }
+
+    if (oldWidget.startTime != widget.startTime ||
+        oldWidget.lastResumedAt != widget.lastResumedAt ||
+        oldWidget.accumulatedSeconds != widget.accumulatedSeconds ||
+        oldWidget.onHold != widget.onHold) {
       _startTimer();
     }
   }
@@ -1823,13 +1849,41 @@ class _TimerWidgetState extends State<_TimerWidget> {
     _updateDuration();
   }
 
+  void _syncStateFromWidget({bool force = false}) {
+    if (widget.startTime == null) {
+      _baseAccumulatedSeconds = 0;
+      _resumeAt = null;
+      return;
+    }
+
+    if (widget.lastResumedAt != null) {
+      _baseAccumulatedSeconds = widget.accumulatedSeconds;
+      _resumeAt = widget.lastResumedAt;
+      return;
+    }
+
+    if (widget.accumulatedSeconds > 0) {
+      _baseAccumulatedSeconds = widget.accumulatedSeconds;
+      _resumeAt = widget.onHold ? null : (force ? DateTime.now() : _resumeAt);
+      return;
+    }
+
+    // Fallback for early call phase where backend doesn't expose timing fields yet.
+    if (force || _resumeAt == null) {
+      _baseAccumulatedSeconds = 0;
+      _resumeAt = widget.onHold ? null : widget.startTime;
+    }
+  }
+
   void _updateDuration() {
     setState(() {
-      if (widget.lastResumedAt != null) {
-        _duration = Duration(seconds: widget.accumulatedSeconds) +
-            DateTime.now().difference(widget.lastResumedAt!);
+      if (widget.startTime == null) {
+        _duration = Duration.zero;
+      } else if (_resumeAt != null) {
+        _duration = Duration(seconds: _baseAccumulatedSeconds) +
+            DateTime.now().difference(_resumeAt!);
       } else {
-        _duration = Duration(seconds: widget.accumulatedSeconds);
+        _duration = Duration(seconds: _baseAccumulatedSeconds);
       }
     });
   }

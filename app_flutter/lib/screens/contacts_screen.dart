@@ -56,7 +56,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
         body: Column(
           children: [
             const SizedBox(height: 16),
-            
+
             // Search bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -70,10 +70,12 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  prefixIcon: const Icon(Icons.search, color: AppTheme.textTertiary),
+                  prefixIcon:
+                      const Icon(Icons.search, color: AppTheme.textTertiary),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, color: AppTheme.textTertiary),
+                          icon: const Icon(Icons.clear,
+                              color: AppTheme.textTertiary),
                           onPressed: () {
                             setState(() => _searchQuery = '');
                           },
@@ -83,9 +85,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 onChanged: (value) => setState(() => _searchQuery = value),
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Presence filter chips
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -104,9 +106,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Stats row
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -115,29 +117,38 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   _buildStatChip(
                     Icons.circle,
                     AppTheme.callGreen,
-                    ContactsService.instance.getByPresence('Available').length.toString(),
+                    ContactsService.instance
+                        .getByPresence('Available')
+                        .length
+                        .toString(),
                     'Available',
                   ),
                   const SizedBox(width: 8),
                   _buildStatChip(
                     Icons.circle,
                     AppTheme.errorRed,
-                    ContactsService.instance.getByPresence('Busy').length.toString(),
+                    ContactsService.instance
+                        .getByPresence('Busy')
+                        .length
+                        .toString(),
                     'Busy',
                   ),
                   const SizedBox(width: 8),
                   _buildStatChip(
                     Icons.circle,
                     AppTheme.textTertiary,
-                    ContactsService.instance.getByPresence('Unknown').length.toString(),
+                    ContactsService.instance
+                        .getByPresence('Unknown')
+                        .length
+                        .toString(),
                     'Unknown',
                   ),
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Contacts list
             Expanded(
               child: _buildContactsList(),
@@ -169,7 +180,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     );
   }
 
-  Widget _buildStatChip(IconData icon, Color color, String count, String label) {
+  Widget _buildStatChip(
+      IconData icon, Color color, String count, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -213,7 +225,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     }).toList();
 
     if (_filterPresence != 'All') {
-      contacts = contacts.where((c) => c.presenceState == _filterPresence).toList();
+      contacts =
+          contacts.where((c) => c.presenceState == _filterPresence).toList();
     }
 
     if (contacts.isEmpty) {
@@ -228,8 +241,10 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              _searchQuery.isEmpty 
-                  ? (_filterPresence == 'All' ? 'No contacts yet' : 'No contacts with this status')
+              _searchQuery.isEmpty
+                  ? (_filterPresence == 'All'
+                      ? 'No contacts yet'
+                      : 'No contacts with this status')
                   : 'No contacts found',
               style: const TextStyle(
                 color: AppTheme.textTertiary,
@@ -263,8 +278,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
   void _showAddContactDialog() {
     final nameCtrl = TextEditingController();
-    final uriCtrl = TextEditingController();
     final extCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
 
     showDialog(
       context: context,
@@ -291,22 +306,6 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: uriCtrl,
-              decoration: InputDecoration(
-                labelText: 'SIP URI',
-                labelStyle: const TextStyle(color: AppTheme.textTertiary),
-                hintText: 'sip:user@domain.com',
-                filled: true,
-                fillColor: AppTheme.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
               controller: extCtrl,
               decoration: InputDecoration(
                 labelText: 'Extension (optional)',
@@ -320,20 +319,38 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               ),
               style: const TextStyle(color: AppTheme.textPrimary),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneCtrl,
+              decoration: InputDecoration(
+                labelText: 'Phone number',
+                labelStyle: const TextStyle(color: AppTheme.textTertiary),
+                hintText: '+8801XXXXXXXXX',
+                filled: true,
+                fillColor: AppTheme.inputFill,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              keyboardType: TextInputType.phone,
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
-              if (nameCtrl.text.isNotEmpty && uriCtrl.text.isNotEmpty) {
+              if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
                 ContactsService.instance.addContact(BlfContact(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   name: nameCtrl.text,
-                  sipUri: uriCtrl.text,
+                  sipUri: phoneCtrl.text,
                   extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
                 ));
                 Navigator.pop(context);
@@ -367,19 +384,27 @@ class _ContactTile extends StatelessWidget {
 
   Color get _presenceColor {
     switch (contact.presenceState) {
-      case 'Available': return AppTheme.callGreen;
-      case 'Busy': return AppTheme.errorRed;
-      case 'Ringing': return AppTheme.warningAmber;
-      default: return AppTheme.textTertiary;
+      case 'Available':
+        return AppTheme.callGreen;
+      case 'Busy':
+        return AppTheme.errorRed;
+      case 'Ringing':
+        return AppTheme.warningAmber;
+      default:
+        return AppTheme.textTertiary;
     }
   }
 
   IconData get _presenceIcon {
     switch (contact.presenceState) {
-      case 'Available': return Icons.check_circle;
-      case 'Busy': return Icons.remove_circle;
-      case 'Ringing': return Icons.phone;
-      default: return Icons.help_outline;
+      case 'Available':
+        return Icons.check_circle;
+      case 'Busy':
+        return Icons.remove_circle;
+      case 'Ringing':
+        return Icons.phone;
+      default:
+        return Icons.help_outline;
     }
   }
 
@@ -399,7 +424,8 @@ class _ContactTile extends StatelessWidget {
         ),
         title: Text(
           contact.name,
-          style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+              color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
