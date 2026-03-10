@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
@@ -10,7 +11,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
-import 'dart:async';
 import 'core/app_theme.dart';
 import 'core/sip_uri_utils.dart';
 import 'core/engine_channel.dart';
@@ -558,16 +558,25 @@ class _AppState extends ConsumerState<App>
             child: IncomingCallBanner(
               callInfo: incomingCallInfo,
               onAnswer: () {
-                // Schedule answer on next frame to avoid blocking UI
-                SchedulerBinding.instance.addPostFrameCallback((_) {
-                  EngineChannel.instance.engine.answerCall();
-                });
+                debugPrint('[MAIN] onAnswer clicked');
+                // Answer call - runs in background thread (non-blocking)
+                try {
+                  final rc = EngineChannel.instance.engine.answerCall();
+                  debugPrint('[MAIN] answerCall() returned: $rc');
+                  debugPrint('[MAIN] Answer initiated - check logs for call state updates');
+                } catch (e, stack) {
+                  debugPrint('[MAIN] ERROR in answerCall: $e\n$stack');
+                }
               },
               onReject: () {
+                debugPrint('[MAIN] onReject clicked');
                 // Schedule reject on next frame to avoid blocking UI
                 SchedulerBinding.instance.addPostFrameCallback((_) {
+                  debugPrint('[MAIN] Reject: calling hangup');
                   EngineChannel.instance.engine.hangup();
+                  debugPrint('[MAIN] Reject: hangup completed');
                   ref.read(incomingCallProvider.notifier).clear();
+                  debugPrint('[MAIN] Reject: cleared incoming call state');
                 });
               },
             ),

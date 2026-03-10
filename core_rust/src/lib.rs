@@ -1657,7 +1657,9 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
+    log_engine(LogLevel::Debug, "cmd_call_answer: START");
     let mut calls_guard = CALLS.lock().unwrap();
+    log_engine(LogLevel::Debug, "cmd_call_answer: Got CALLS lock");
     let call_id = match p["call_id"].as_u64() {
         Some(n) => Some(n as u32),
         None => {
@@ -1671,17 +1673,29 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
         }
     };
     let call_id = match call_id {
-        Some(id) => id,
-        None => return EngineErrorCode::NotFound,
+        Some(id) => {
+            log_engine(LogLevel::Debug, &format!("cmd_call_answer: Found call_id={}", id));
+            id
+        },
+        None => {
+            log_engine(LogLevel::Error, "cmd_call_answer: No ringing call found");
+            return EngineErrorCode::NotFound;
+        }
     };
 
     match calls_guard.iter_mut().find(|c| c.id == call_id) {
-        None => EngineErrorCode::NotFound,
+        None => {
+            log_engine(LogLevel::Error, "cmd_call_answer: Call not found in guard");
+            EngineErrorCode::NotFound
+        },
         Some(call) => {
+            log_engine(LogLevel::Debug, &format!("cmd_call_answer: call.pjsip_call_id={:?}", call.pjsip_call_id));
             // Answer via PJSIP shim
             match call.pjsip_call_id {
                 Some(pj_id) => {
+                    log_engine(LogLevel::Info, &format!("cmd_call_answer: Calling pd_call_answer({pj_id})..."));
                     let rc = unsafe { pd_call_answer(pj_id) };
+                    log_engine(LogLevel::Info, &format!("cmd_call_answer: pd_call_answer({pj_id}) returned rc={rc}"));
                     if rc != 0 {
                         log_engine(
                             LogLevel::Warn,
@@ -1689,6 +1703,7 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
                         );
                     }
                     // State will be updated via on_call_state callback
+                    log_engine(LogLevel::Debug, "cmd_call_answer: Returning Ok");
                     EngineErrorCode::Ok
                 }
                 None => {

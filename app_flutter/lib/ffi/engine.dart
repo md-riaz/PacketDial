@@ -2,6 +2,7 @@ import 'dart:ffi' as ffi;
 import 'dart:io';
 
 import 'package:ffi/ffi.dart' as ffi_alloc;
+import 'package:flutter/foundation.dart';
 
 typedef _EngineInitC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineShutdownC = ffi.Int32 Function();
@@ -248,7 +249,17 @@ class VoipEngine {
 
   /// Answer an incoming call.
   /// Returns 0 on success, non-zero on error.
-  int answerCall() => _answerCall();
+  int answerCall() {
+    debugPrint('[FFI] answerCall() called');
+    try {
+      final rc = _answerCall();
+      debugPrint('[FFI] answerCall() returned: $rc');
+      return rc;
+    } catch (e, stack) {
+      debugPrint('[FFI] answerCall() ERROR: $e\n$stack');
+      rethrow;
+    }
+  }
 
   /// Export account profile configuration.
   /// Returns 0 on success, non-zero on error.

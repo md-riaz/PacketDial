@@ -324,6 +324,14 @@ static void on_call_state(pjsua_call_id call_id, pjsip_event *e)
     pj_bzero(&ci, sizeof(ci));
     if (pjsua_call_get_info(call_id, &ci) != PJ_SUCCESS) return;
 
+    /* Log call state change */
+    if (g_on_log) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "[PD_SHIM] on_call_state: call_id=%d state=%d last_status=%d",
+                 (int)call_id, (int)ci.state, (int)ci.last_status);
+        g_on_log(3, msg);  /* PJ_LOG_INFO = 3 */
+    }
+
     g_on_call((int)call_id, (int)ci.state, (int)ci.last_status);
 }
 
@@ -989,8 +997,40 @@ int pd_call_make(int acc_id, const char *dst_uri)
 
 int pd_call_answer(int call_id)
 {
+    pj_status_t rc;
+    char err_buf[128];
+    pj_str_t err_str;
+
+    /* Log entry */
+    if (g_on_log) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "[PD_SHIM] pd_call_answer: ENTER call_id=%d", call_id);
+        g_on_log(3, msg);
+    }
+
     pd_ensure_thread();
-    return (int)pjsua_call_answer((pjsua_call_id)call_id, 200, NULL, NULL);
+
+    /* Log before answer */
+    if (g_on_log) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "[PD_SHIM] pd_call_answer: Calling pjsua_call_answer(%d)...", call_id);
+        g_on_log(3, msg);
+    }
+
+    rc = pjsua_call_answer((pjsua_call_id)call_id, 200, NULL, NULL);
+
+    /* Get error string */
+    err_str = pj_strerror(rc, err_buf, sizeof(err_buf));
+
+    /* Log after answer */
+    if (g_on_log) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "[PD_SHIM] pd_call_answer: EXIT call_id=%d rc=%d (%.*s)",
+                 call_id, rc, (int)err_str.slen, err_str.ptr);
+        g_on_log(3, msg);
+    }
+
+    return (int)rc;
 }
 
 int pd_call_hangup(int call_id)
