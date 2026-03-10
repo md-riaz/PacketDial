@@ -1661,7 +1661,7 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
 
     // Find the call and get its PJSIP ID while holding the lock
     let pj_id_result = {
-        let mut calls_guard = CALLS.lock().unwrap();
+        let calls_guard = CALLS.lock().unwrap();
         log_engine(LogLevel::Debug, "cmd_call_answer: Got CALLS lock");
 
         let call_id = match p["call_id"].as_u64() {
