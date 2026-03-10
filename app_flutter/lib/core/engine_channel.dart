@@ -172,8 +172,12 @@ class EngineChannel {
       // Map event ID to event type string
       final eventType = _eventIdToType(eventId);
 
-      // Create event map
-      _dispatchEvent(eventType, payload);
+      // Always hop off the FFI callback stack before touching app/services code.
+      // Incoming call events originate from native worker threads; processing
+      // them synchronously here can trigger plugin calls from the wrong context.
+      Future<void>(() {
+        _dispatchEvent(eventType, payload);
+      });
     } catch (e) {
       debugPrint(
           '[EngineChannel] Dropped event (id=$eventId) due to parse error: $e');

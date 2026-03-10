@@ -14,6 +14,7 @@ class AudioService {
   bool _configured = false;
   bool _ringtonePlaying = false;
   bool _ringbackPlaying = false;
+  Future<void> _opChain = Future<void>.value();
 
   void init() {
     if (_initialized) return;
@@ -32,58 +33,74 @@ class AudioService {
     }
   }
 
+  Future<void> _enqueue(Future<void> Function() op) {
+    _opChain = _opChain.then((_) => op()).catchError((e, _) {
+      debugPrint('[AudioService] Audio operation failed: $e');
+    });
+    return _opChain;
+  }
+
   Future<void> startRingtone() async {
-    try {
-      init();
-      await _ensureConfigured();
-      if (!_ringtonePlaying) {
+    return _enqueue(() async {
+      try {
+        init();
+        await _ensureConfigured();
+        if (_ringtonePlaying) return;
+        _ringtonePlaying = true;
         await _ringtonePlayer.setAsset('assets/sounds/ringtone.wav');
         await _ringtonePlayer.play();
-        _ringtonePlaying = true;
+      } catch (e) {
+        _ringtonePlaying = false;
+        debugPrint('[AudioService] Failed to start ringtone: $e');
       }
-    } catch (e) {
-      debugPrint('[AudioService] Failed to start ringtone: $e');
-    }
+    });
   }
 
   Future<void> startRingback() async {
-    try {
-      init();
-      await _ensureConfigured();
-      if (!_ringbackPlaying) {
+    return _enqueue(() async {
+      try {
+        init();
+        await _ensureConfigured();
+        if (_ringbackPlaying) return;
+        _ringbackPlaying = true;
         await _ringbackPlayer.setAsset('assets/sounds/ringback.wav');
         await _ringbackPlayer.play();
-        _ringbackPlaying = true;
+      } catch (e) {
+        _ringbackPlaying = false;
+        debugPrint('[AudioService] Failed to start ringback: $e');
       }
-    } catch (e) {
-      debugPrint('[AudioService] Failed to start ringback: $e');
-    }
+    });
   }
 
   Future<void> stopAll() async {
-    try {
-      await _ringtonePlayer.stop();
-      await _ringbackPlayer.stop();
-      _ringtonePlaying = false;
-      _ringbackPlaying = false;
-    } catch (e) {
-      debugPrint('[AudioService] Failed to stop audio: $e');
-    }
+    return _enqueue(() async {
+      try {
+        await _ringtonePlayer.stop();
+        await _ringbackPlayer.stop();
+        _ringtonePlaying = false;
+        _ringbackPlaying = false;
+      } catch (e) {
+        debugPrint('[AudioService] Failed to stop audio: $e');
+      }
+    });
   }
 
   Future<void> playDialTone(String digit) async {
-    try {
-      init();
-      var assetName = digit;
-      if (digit == '*') assetName = 'star';
-      if (digit == '#') assetName = 'hash';
+    return _enqueue(() async {
+      try {
+        init();
+        var assetName = digit;
+        if (digit == '*') assetName = 'star';
+        if (digit == '#') assetName = 'hash';
 
-      await _uiPlayer.setAsset('assets/sounds/dtmf_$assetName.wav');
-      await _uiPlayer.seek(Duration.zero);
-      await _uiPlayer.play();
-    } catch (e) {
-      debugPrint('[AudioService] Failed to play DTMF asset for $digit: $e');
-    }
+        await _uiPlayer.stop();
+        await _uiPlayer.setAsset('assets/sounds/dtmf_$assetName.wav');
+        await _uiPlayer.seek(Duration.zero);
+        await _uiPlayer.play();
+      } catch (e) {
+        debugPrint('[AudioService] Failed to play DTMF asset for $digit: $e');
+      }
+    });
   }
 
   Future<void> dispose() async {
