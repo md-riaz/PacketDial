@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import 'path_provider_service.dart';
 import 'package:path/path.dart' as p;
 import 'app_settings_service.dart';
 import 'engine_channel.dart';
@@ -19,7 +19,8 @@ class RecordingService {
     final configuredDir = AppSettingsService.instance.localRecordingDirectory;
     final dirPath = configuredDir.trim().isNotEmpty
         ? configuredDir.trim()
-        : p.join((await getApplicationDocumentsDirectory()).path, 'recordings');
+        : p.join((await PathProviderService.instance.getDataDirectory()).path,
+            'recordings');
     final recordingsDir = Directory(dirPath);
     if (!await recordingsDir.exists()) {
       await recordingsDir.create(recursive: true);

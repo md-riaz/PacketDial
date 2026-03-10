@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:isar/isar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../models/account_schema.dart';
 import '../models/account.dart';
 import '../models/call_history_schema.dart';
 import '../providers/engine_provider.dart';
-import 'package:uuid/uuid.dart';
 import 'engine_channel.dart';
+import 'path_provider_service.dart';
 
 /// Result of a trial registration attempt.
 class RegistrationResult {
@@ -22,15 +23,13 @@ final accountServiceProvider =
 
 class AccountService extends ChangeNotifier {
   final Ref _ref;
-  Isar? isar;
+  List<AccountSchema> _accounts = [];
+  List<CallHistorySchema> _history = [];
+  bool _isLoaded = false;
 
   AccountService(this._ref);
 
   /// Attempt a trial SIP registration to validate credentials.
-  ///
-  /// Registers with a temporary UUID, waits up to [timeout] for a
-  /// `RegistrationStateChanged` event, then unregisters the temporary
-  /// account regardless of the outcome.
   Future<RegistrationResult> tryRegister({
     required String username,
     required String password,
@@ -48,11 +47,6 @@ class AccountService extends ChangeNotifier {
 
     debugPrint('--- [AccountService] Starting trial registration ---');
     debugPrint('Temp UUID: $tempUuid');
-    debugPrint('User: $username');
-    debugPrint('Server: $server');
-    debugPrint('Transport: $transport');
-    if (domain?.isNotEmpty == true) debugPrint('Domain: $domain');
-    if (proxy?.isNotEmpty == true) debugPrint('Proxy: $proxy');
 
     StreamSubscription<Map<String, dynamic>>? sub;
     Timer? timer;
@@ -98,7 +92,6 @@ class AccountService extends ChangeNotifier {
     });
 
     try {
-      // Use the new flexible JSON-based command to pass ALL parameters
       final payload = {
         'uuid': tempUuid,
         'username': username,
@@ -109,7 +102,6 @@ class AccountService extends ChangeNotifier {
         'sip_proxy': proxy,
         'stun_server': stunServer ?? '',
         'auth_username': authUsername,
-        // Default other fields for the trial
         'account_name': 'Trial Account',
         'display_name': username,
       };
@@ -117,12 +109,10 @@ class AccountService extends ChangeNotifier {
       debugPrint(
           '[AccountService] tryRegister payload: ${jsonEncode(payload)}');
       final rc = engine.sendCommand('AccountUpsert', jsonEncode(payload));
-      debugPrint('[AccountService] AccountUpsert returned rc=$rc');
 
       if (rc == 0) {
         final regRc = engine.sendCommand(
             'AccountRegister', jsonEncode({'uuid': tempUuid}));
-        debugPrint('[AccountService] AccountRegister returned rc=$regRc');
         if (regRc != 0 && !completer.isCompleted) {
           completer.complete(RegistrationResult(
             success: false,
@@ -147,49 +137,114 @@ class AccountService extends ChangeNotifier {
 
     final result = await completer.future;
 
-    // Cleanup: cancel the listener and remove the trial account entirely
     timer.cancel();
     await sub.cancel();
     debugPrint('[AccountService] Purging trial account $tempUuid');
-    final deleteRc = engine.deleteAccount(tempUuid);
-    debugPrint(
-        '[AccountService] Trial account purge AccountDeleteProfile rc=$deleteRc');
+    engine.deleteAccount(tempUuid);
 
     return result;
   }
 
-  Future<void> init(Isar isar) async {
-    this.isar = isar;
+  Future<void> init() async {
+    if (_isLoaded) return;
+    await loadAccounts();
+    await loadHistory();
+    _isLoaded = true;
+  }
+
+  Future<File> _getAccountsFile() async {
+    final dir = await PathProviderService.instance.getDataDirectory();
+    return File('${dir.path}/accounts.json');
+  }
+
+  Future<File> _getHistoryFile() async {
+    final dir = await PathProviderService.instance.getDataDirectory();
+    return File('${dir.path}/call_history.json');
+  }
+
+  Future<void> loadAccounts() async {
+    try {
+      final file = await _getAccountsFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final List<dynamic> jsonList = jsonDecode(content);
+        _accounts = jsonList.map((j) => AccountSchema.fromJson(j)).toList();
+      } else {
+        _accounts = [];
+        await _saveAccounts();
+      }
+    } catch (e) {
+      debugPrint('[AccountService] Error loading accounts: $e');
+      _accounts = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadHistory() async {
+    try {
+      final file = await _getHistoryFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final List<dynamic> jsonList = jsonDecode(content);
+        _history = jsonList.map((j) => CallHistorySchema.fromJson(j)).toList();
+      } else {
+        _history = [];
+        await _saveHistory();
+      }
+    } catch (e) {
+      debugPrint('[AccountService] Error loading history: $e');
+      _history = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> _saveAccounts() async {
+    try {
+      final file = await _getAccountsFile();
+      await file.writeAsString(
+          jsonEncode(_accounts.map((a) => a.toJson()).toList()),
+          flush: true);
+    } catch (e) {
+      debugPrint('[AccountService] Error saving accounts: $e');
+    }
+  }
+
+  Future<void> _saveHistory() async {
+    try {
+      final file = await _getHistoryFile();
+      await file.writeAsString(
+          jsonEncode(_history.map((h) => h.toJson()).toList()),
+          flush: true);
+    } catch (e) {
+      debugPrint('[AccountService] Error saving history: $e');
+    }
   }
 
   Future<List<AccountSchema>> getAllAccounts() async {
-    return isar!.accountSchemas.where().findAll();
+    return _accounts;
   }
 
   Future<AccountSchema?> getSelectedAccount() async {
-    return isar!.accountSchemas.filter().isSelectedEqualTo(true).findFirst();
+    try {
+      return _accounts.firstWhere((a) => a.isSelected);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<AccountSchema?> getAccountByUuid(String uuid) async {
-    return isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
+    try {
+      return _accounts.firstWhere((a) => a.uuid == uuid);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> setSelectedAccount(String uuid) async {
-    await isar!.writeTxn(() async {
-      // Unselect all
-      final accounts = await isar!.accountSchemas.where().findAll();
-      for (final a in accounts) {
-        a.isSelected = false;
-        await isar!.accountSchemas.put(a);
-      }
-      // Select the new one
-      final selected =
-          await isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
-      if (selected != null) {
-        selected.isSelected = true;
-        await isar!.accountSchemas.put(selected);
-      }
-    });
+    for (final a in _accounts) {
+      a.isSelected = (a.uuid == uuid);
+    }
+    await _saveAccounts();
     notifyListeners();
   }
 
@@ -197,52 +252,53 @@ class AccountService extends ChangeNotifier {
     if (account.uuid.isEmpty) {
       account.uuid = const Uuid().v4();
     }
-    await isar!.writeTxn(() async {
-      final count = await isar!.accountSchemas.count();
-      if (count == 0) {
+
+    final index = _accounts.indexWhere((a) => a.uuid == account.uuid);
+    if (index >= 0) {
+      _accounts[index] = account;
+    } else {
+      if (_accounts.isEmpty) {
         account.isSelected = true;
-      } else if (account.isSelected == false && account.id == null) {
-        // New account, but not the first, ensure isSelected is false
+      } else {
         account.isSelected = false;
       }
-      await isar!.accountSchemas.put(account);
-    });
+      _accounts.add(account);
+    }
+    await _saveAccounts();
     notifyListeners();
   }
 
   Future<void> deleteAccount(String uuid) async {
-    final unregRc = unregister(uuid);
-    final deleteRc = _ref.read(engineProvider).deleteAccount(uuid);
-    debugPrint(
-        '[AccountService] AccountDeleteProfile uuid=$uuid rc=$deleteRc (unregister_rc=$unregRc)');
+    unregister(uuid);
+    _ref.read(engineProvider).deleteAccount(uuid);
 
-    await isar!.writeTxn(() async {
-      final deleting =
-          await isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
-      final wasSelected = deleting?.isSelected ?? false;
-      await isar!.accountSchemas.filter().uuidEqualTo(uuid).deleteAll();
-
-      if (wasSelected) {
-        final fallback = await isar!.accountSchemas.where().findFirst();
-        if (fallback != null) {
-          fallback.isSelected = true;
-          await isar!.accountSchemas.put(fallback);
-        }
+    final index = _accounts.indexWhere((a) => a.uuid == uuid);
+    if (index >= 0) {
+      final wasSelected = _accounts[index].isSelected;
+      _accounts.removeAt(index);
+      if (wasSelected && _accounts.isNotEmpty) {
+        _accounts[0].isSelected = true;
       }
-    });
+      await _saveAccounts();
+    }
     notifyListeners();
   }
 
   Future<void> setAccountEnabled(String uuid, bool enabled) async {
-    await isar!.writeTxn(() async {
-      final account =
-          await isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
-      if (account != null) {
-        account.isEnabled = enabled;
-        await isar!.accountSchemas.put(account);
-      }
-    });
-    notifyListeners();
+    final account = getAccountByUuidSync(uuid);
+    if (account != null) {
+      account.isEnabled = enabled;
+      await _saveAccounts();
+      notifyListeners();
+    }
+  }
+
+  AccountSchema? getAccountByUuidSync(String uuid) {
+    try {
+      return _accounts.firstWhere((a) => a.uuid == uuid);
+    } catch (_) {
+      return null;
+    }
   }
 
   // Registration bridge
@@ -276,16 +332,12 @@ class AccountService extends ChangeNotifier {
         '[AccountService] AccountUpsert payload: ${jsonEncode(safePayload)}');
 
     final upsertRc = engine.sendCommand('AccountUpsert', jsonEncode(payload));
-    debugPrint(
-        '[AccountService] AccountUpsert uuid=${schema.uuid} rc=$upsertRc');
     if (upsertRc != 0) {
       return upsertRc;
     }
 
     final regRc = engine.sendCommand(
         'AccountRegister', jsonEncode({'uuid': schema.uuid}));
-    debugPrint(
-        '[AccountService] AccountRegister uuid=${schema.uuid} rc=$regRc');
     return regRc;
   }
 
@@ -293,16 +345,12 @@ class AccountService extends ChangeNotifier {
     final engine = _ref.read(engineProvider);
     final rc =
         engine.sendCommand('AccountUnregister', jsonEncode({'uuid': uuid}));
-    debugPrint('[AccountService] AccountUnregister uuid=$uuid rc=$rc');
     return rc;
   }
 
   Future<void> autoRegisterAll() async {
-    final all = await isar!.accountSchemas.where().findAll();
-    if (all.isEmpty) return;
-
-    // Only register accounts that have isEnabled set to true
-    for (final acct in all) {
+    if (_accounts.isEmpty) return;
+    for (final acct in _accounts) {
       if (acct.isEnabled) {
         register(acct);
       }
@@ -310,9 +358,20 @@ class AccountService extends ChangeNotifier {
   }
 
   // History persistence
+  List<CallHistorySchema> getHistory() => List.unmodifiable(_history);
+
   Future<void> saveCallHistory(CallHistorySchema entry) async {
-    await isar!.writeTxn(() async {
-      await isar!.callHistorySchemas.put(entry);
-    });
+    if (entry.id.isEmpty) {
+      entry.id = const Uuid().v4();
+    }
+    _history.add(entry);
+    await _saveHistory();
+    notifyListeners();
+  }
+
+  Future<void> clearHistory() async {
+    _history.clear();
+    await _saveHistory();
+    notifyListeners();
   }
 }

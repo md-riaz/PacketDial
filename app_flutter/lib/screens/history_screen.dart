@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
 import 'package:intl/intl.dart';
 import '../core/app_theme.dart';
 import '../core/sip_uri_utils.dart';
@@ -8,16 +7,15 @@ import '../core/account_service.dart';
 import '../models/call_history_schema.dart';
 import '../providers/engine_provider.dart';
 
-final historyListProvider = FutureProvider<List<CallHistorySchema>>((ref) {
-  final isar = ref.read(accountServiceProvider).isar;
-  if (isar == null) return [];
-  return isar.callHistorySchemas.where().sortByTimestampDesc().findAll();
+final historyListProvider = Provider<List<CallHistorySchema>>((ref) {
+  final history = ref.watch(accountServiceProvider).getHistory();
+  return history.reversed.toList(); // Most recent first
 });
 
 /// Provider for call statistics
-final callStatsProvider = FutureProvider<CallStats>((ref) {
-  final isar = ref.read(accountServiceProvider).isar;
-  if (isar == null) {
+final callStatsProvider = Provider<CallStats>((ref) {
+  final history = ref.watch(accountServiceProvider).getHistory();
+  if (history.isEmpty) {
     return CallStats.empty();
   }
 
@@ -25,45 +23,42 @@ final callStatsProvider = FutureProvider<CallStats>((ref) {
   final now = DateTime.now();
   final thirtyDaysAgo = now.subtract(const Duration(days: 30));
 
-  return isar.callHistorySchemas
-      .filter()
-      .timestampGreaterThan(thirtyDaysAgo)
-      .findAll()
-      .then((history) {
-    int totalCalls = history.length;
-    int incomingCalls = 0;
-    int outgoingCalls = 0;
-    int answeredCalls = 0;
-    int missedCalls = 0;
-    int totalDurationSecs = 0;
+  final recentHistory =
+      history.where((h) => h.timestamp.isAfter(thirtyDaysAgo)).toList();
 
-    for (final entry in history) {
-      final isOutgoing = entry.direction.toLowerCase() == 'outgoing';
-      final isAnswered = entry.result == 'Answered';
+  int totalCalls = recentHistory.length;
+  int incomingCalls = 0;
+  int outgoingCalls = 0;
+  int answeredCalls = 0;
+  int missedCalls = 0;
+  int totalDurationSecs = 0;
 
-      if (isOutgoing) {
-        outgoingCalls++;
-      } else {
-        incomingCalls++;
-      }
+  for (final entry in recentHistory) {
+    final isOutgoing = entry.direction.toLowerCase() == 'outgoing';
+    final isAnswered = entry.result == 'Answered';
 
-      if (isAnswered) {
-        answeredCalls++;
-        totalDurationSecs += entry.durationSeconds;
-      } else {
-        missedCalls++;
-      }
+    if (isOutgoing) {
+      outgoingCalls++;
+    } else {
+      incomingCalls++;
     }
 
-    return CallStats(
-      totalCalls: totalCalls,
-      incomingCalls: incomingCalls,
-      outgoingCalls: outgoingCalls,
-      answeredCalls: answeredCalls,
-      missedCalls: missedCalls,
-      totalDurationSecs: totalDurationSecs,
-    );
-  });
+    if (isAnswered) {
+      answeredCalls++;
+      totalDurationSecs += entry.durationSeconds;
+    } else {
+      missedCalls++;
+    }
+  }
+
+  return CallStats(
+    totalCalls: totalCalls,
+    incomingCalls: incomingCalls,
+    outgoingCalls: outgoingCalls,
+    answeredCalls: answeredCalls,
+    missedCalls: missedCalls,
+    totalDurationSecs: totalDurationSecs,
+  );
 });
 
 /// Call statistics data class
@@ -119,8 +114,8 @@ class HistoryScreen extends ConsumerStatefulWidget {
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
-    final historyAsync = ref.watch(historyListProvider);
-    final statsAsync = ref.watch(callStatsProvider);
+    final history = ref.watch(historyListProvider);
+    final stats = ref.watch(callStatsProvider);
 
     // Refresh when engine events indicate a change
     ref.listen(engineEventsProvider, (prev, next) {
@@ -140,12 +135,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 size: 20, color: AppTheme.textTertiary),
             tooltip: 'Clear History',
             onPressed: () async {
-              final isar = ref.read(accountServiceProvider).isar;
-              if (isar != null) {
-                await isar.writeTxn(() => isar.callHistorySchemas.clear());
-                ref.invalidate(historyListProvider);
-                ref.invalidate(callStatsProvider);
-              }
+              await ref.read(accountServiceProvider).clearHistory();
             },
           ),
         ],
@@ -153,33 +143,16 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       body: Column(
         children: [
           // Call Statistics Summary
-          statsAsync.when(
-            data: (stats) => _buildStatsSummary(stats),
-            loading: () => const SizedBox.shrink(),
-            error: (err, _) => const SizedBox.shrink(),
-          ),
+          _buildStatsSummary(stats),
           // History list
           Expanded(
-            child: historyAsync.when(
-              data: (history) => history.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(10),
-                      itemCount: history.length,
-                      itemBuilder: (_, i) => _HistoryCard(entry: history[i]),
-                    ),
-              loading: () => Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(
-                      AppTheme.primary.withValues(alpha: 0.6)),
-                ),
-              ),
-              error: (e, _) => Center(
-                child: Text('Error: $e',
-                    style: const TextStyle(color: AppTheme.errorRed)),
-              ),
-            ),
+            child: history.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.all(10),
+                    itemCount: history.length,
+                    itemBuilder: (_, i) => _HistoryCard(entry: history[i]),
+                  ),
           ),
         ],
       ),

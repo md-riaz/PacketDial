@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import 'path_provider_service.dart';
 import '../models/dialing_rule.dart';
 import '../models/caller_id_transformation.dart';
 
@@ -172,7 +172,7 @@ class AppSettingsService {
 
         debugPrint('[AppSettings] Loaded settings from file');
       } else {
-        // Initialize with defaults
+        // Initialize with default codec list
         _codecPriorities = [
           {'codec': 'PCMU', 'priority': 10, 'enabled': true},
           {'codec': 'PCMA', 'priority': 9, 'enabled': true},
@@ -181,6 +181,8 @@ class AppSettingsService {
           {'codec': 'OPUS', 'priority': 6, 'enabled': true},
         ];
         debugPrint('[AppSettings] Initialized with defaults');
+        // Save defaults immediately so the user can see/edit the file
+        await saveSettings();
       }
     } catch (e) {
       debugPrint('[AppSettings] Error loading settings: $e');
@@ -437,7 +439,7 @@ class AppSettingsService {
 
   /// Get settings file path.
   Future<File> _getSettingsFile() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await PathProviderService.instance.getDataDirectory();
     return File('${dir.path}/app_settings.json');
   }
 

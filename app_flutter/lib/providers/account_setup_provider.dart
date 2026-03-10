@@ -112,24 +112,24 @@ class AccountSetupNotifier extends AutoDisposeNotifier<AccountSetupState> {
       }
 
       // Registration succeeded, save the account
-      final schema = AccountSchema()
-        ..id = existing?.id
-        ..uuid = existing?.uuid ?? ''
-        ..accountName = name
-        ..displayName = displayName
-        ..server = server
-        ..sipProxy = proxy
-        ..username = username
-        ..authUsername = authUsername
-        ..domain = domain
-        ..password = password
-        ..transport = state.transport
-        ..stunServer = stunServer
-        ..turnServer = turnServer
-        ..tlsEnabled = state.transport == 'tls'
-        ..srtpEnabled = state.srtpEnabled
-        ..autoRegister = true
-        ..isSelected = existing?.isSelected ?? false;
+      final schema = AccountSchema(
+        uuid: existing?.uuid ?? '',
+        accountName: name,
+        displayName: displayName,
+        server: server,
+        sipProxy: proxy,
+        username: username,
+        authUsername: authUsername,
+        domain: domain,
+        password: password,
+        transport: state.transport,
+        stunServer: stunServer,
+        turnServer: turnServer,
+        tlsEnabled: state.transport == 'tls',
+        srtpEnabled: state.srtpEnabled,
+        autoRegister: true,
+        isSelected: existing?.isSelected ?? false,
+      );
 
       await service.saveAccount(schema);
       final rc = service.register(schema);

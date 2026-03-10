@@ -1,37 +1,46 @@
-import 'package:isar/isar.dart';
+import '../core/encryption_service.dart';
 
-part 'account_schema.g.dart';
-
-@collection
 class AccountSchema {
-  Id? id; // Isar internal ID
+  String uuid; // Hidden internal ID for engine
+  String accountName; // User-facing friendly label
+  String displayName;
+  String server; // SIP Registrar
+  String sipProxy; // Optional proxy
+  String username; // User ID / Extension
+  String authUsername; // Login ID (often same as username)
+  String domain; // SIP Domain
+  String password;
+  String transport; // 'udp', 'tcp', 'tls'
+  String stunServer;
+  String turnServer;
+  bool tlsEnabled;
+  bool srtpEnabled;
+  bool autoRegister;
+  bool isSelected;
+  bool isEnabled;
 
-  @Index(unique: true, replace: true)
-  late String uuid; // Hidden internal ID for engine
-
-  late String accountName; // User-facing friendly label
-
-  late String displayName;
-  late String server; // SIP Registrar
-  late String sipProxy; // Optional proxy
-  late String username; // User ID / Extension
-  late String authUsername; // Login ID (often same as username)
-  late String domain; // SIP Domain
-  late String password;
-  late String transport; // 'udp', 'tcp', 'tls'
-  late String stunServer;
-  late String turnServer;
-  late bool tlsEnabled;
-  late bool srtpEnabled;
-  late bool autoRegister;
-  late bool isSelected;
-  late bool isEnabled;
-
-  // We don't persist registrationState as it's runtime-only
+  AccountSchema({
+    required this.uuid,
+    required this.accountName,
+    required this.displayName,
+    required this.server,
+    this.sipProxy = '',
+    required this.username,
+    required this.authUsername,
+    this.domain = '',
+    required this.password,
+    this.transport = 'udp',
+    this.stunServer = '',
+    this.turnServer = '',
+    this.tlsEnabled = false,
+    this.srtpEnabled = false,
+    this.autoRegister = true,
+    this.isSelected = false,
+    this.isEnabled = true,
+  });
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'uuid': uuid,
       'accountName': accountName,
       'displayName': displayName,
@@ -40,7 +49,8 @@ class AccountSchema {
       'username': username,
       'authUsername': authUsername,
       'domain': domain,
-      'password': password,
+      'password': EncryptionService.encrypt(password),
+      'plain_pass': '', // Placeholder for manual overrides
       'transport': transport,
       'stunServer': stunServer,
       'turnServer': turnServer,
@@ -52,25 +62,32 @@ class AccountSchema {
     };
   }
 
-  static AccountSchema fromJson(Map<String, dynamic> json) {
-    return AccountSchema()
-      ..id = json['id'] as int?
-      ..uuid = json['uuid'] as String? ?? ''
-      ..accountName = json['accountName'] as String? ?? ''
-      ..displayName = json['displayName'] as String? ?? ''
-      ..server = json['server'] as String? ?? ''
-      ..sipProxy = json['sipProxy'] as String? ?? ''
-      ..username = json['username'] as String? ?? ''
-      ..authUsername = json['authUsername'] as String? ?? ''
-      ..domain = json['domain'] as String? ?? ''
-      ..password = json['password'] as String? ?? ''
-      ..transport = json['transport'] as String? ?? 'udp'
-      ..stunServer = json['stunServer'] as String? ?? ''
-      ..turnServer = json['turnServer'] as String? ?? ''
-      ..tlsEnabled = json['tlsEnabled'] as bool? ?? false
-      ..srtpEnabled = json['srtpEnabled'] as bool? ?? false
-      ..autoRegister = json['autoRegister'] as bool? ?? true
-      ..isSelected = json['isSelected'] as bool? ?? false
-      ..isEnabled = json['isEnabled'] as bool? ?? true;
+  factory AccountSchema.fromJson(Map<String, dynamic> json) {
+    final rawPassword = json['password'] as String? ?? '';
+    final decryptedPassword = EncryptionService.decrypt(rawPassword);
+
+    // Check for "plain_pass" override
+    final plainPass = json['plain_pass'] as String? ?? '';
+    final finalPassword = plainPass.isNotEmpty ? plainPass : decryptedPassword;
+
+    return AccountSchema(
+      uuid: json['uuid'] as String? ?? '',
+      accountName: json['accountName'] as String? ?? '',
+      displayName: json['displayName'] as String? ?? '',
+      server: json['server'] as String? ?? '',
+      sipProxy: json['sipProxy'] as String? ?? '',
+      username: json['username'] as String? ?? '',
+      authUsername: json['authUsername'] as String? ?? '',
+      domain: json['domain'] as String? ?? '',
+      password: finalPassword,
+      transport: json['transport'] as String? ?? 'udp',
+      stunServer: json['stunServer'] as String? ?? '',
+      turnServer: json['turnServer'] as String? ?? '',
+      tlsEnabled: json['tlsEnabled'] as bool? ?? false,
+      srtpEnabled: json['srtpEnabled'] as bool? ?? false,
+      autoRegister: json['autoRegister'] as bool? ?? true,
+      isSelected: json['isSelected'] as bool? ?? false,
+      isEnabled: json['isEnabled'] as bool? ?? true,
+    );
   }
 }

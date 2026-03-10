@@ -14,7 +14,7 @@ import '../models/log_entry.dart';
 import '../models/sip_message.dart';
 import '../models/media_stats.dart';
 import '../models/call_history_schema.dart';
-import 'package:isar/isar.dart';
+import 'account_service.dart';
 import 'audio_service.dart';
 import 'call_event_service.dart';
 import 'integration_service.dart';
@@ -38,7 +38,7 @@ class EngineChannel {
   static final EngineChannel instance = EngineChannel._();
 
   VoipEngine? _engine;
-  Isar? _isar;
+  AccountService? _accountService;
   ffi.NativeCallable<ffi.Void Function(ffi.Int32, ffi.Pointer<ffi.Int8>)>?
       _nativeCallable;
 
@@ -83,7 +83,7 @@ class EngineChannel {
   // --- Lifecycle --------------------------------------------------------------
 
   /// Attach the channel to a loaded [VoipEngine] and register callback.
-  void attach(VoipEngine engine, Isar isar) {
+  void attach(VoipEngine engine, AccountService accountService) {
     // CRITICAL: Ensure any old callback is nulled in the native engine first
     // to prevent crashes if native worker threads try to call a deleted callback pointer.
     try {
@@ -91,7 +91,7 @@ class EngineChannel {
     } catch (_) {}
 
     _engine = engine;
-    _isar = isar;
+    _accountService = accountService;
 
     // Use NativeCallable.listener for thread-safe callbacks from PJSIP worker threads.
     _nativeCallable = ffi.NativeCallable<
@@ -352,7 +352,6 @@ class EngineChannel {
     return _engine?.mergeConference(callAId, callBId) ?? -1;
   }
 
-
   Future<void> _stopRecordingDeferred() async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!RecordingService.instance.isRecording) return;
@@ -449,7 +448,8 @@ class EngineChannel {
         );
         activeCall = eventCall;
 
-        debugPrint('[EngineChannel] Emitting CallEvent for call $callId, state $state');
+        debugPrint(
+            '[EngineChannel] Emitting CallEvent for call $callId, state $state');
 
         // Emit call event to all listeners (thread-safe, no platform calls)
         CallEventService.instance.addEvent(CallEvent(
@@ -461,8 +461,7 @@ class EngineChannel {
           accountName: payload['account_name'] as String?,
           accountUser: payload['account_user'] as String?,
           extid: payload['extid'] as String?,
-          customerData:
-              payload['customer_data'] as Map<String, dynamic>?,
+          customerData: payload['customer_data'] as Map<String, dynamic>?,
           timestamp: DateTime.now(),
         ));
 
@@ -476,8 +475,8 @@ class EngineChannel {
           }
 
           if (activeCall?.callId == callId) {
-            // Save to Isar
-            if (_isar != null) {
+            // Save to JSON via AccountService
+            if (_accountService != null) {
               final sipCode = (payload['sip_code'] as num?)?.toInt();
               final sipReason = payload['sip_reason'] as String?;
 
@@ -507,21 +506,23 @@ class EngineChannel {
                 }
               }
 
-              final entry = CallHistorySchema()
-                ..accountId = activeCall!.accountId
-                ..uri = activeCall!.uri
-                ..direction = activeCall!.direction.name
-                ..timestamp = DateTime.now()
-                ..durationSeconds = activeCall!.startedAt != null
+              final entry = CallHistorySchema(
+                id: '', // Will be set in AccountService
+                accountId: activeCall!.accountId,
+                uri: activeCall!.uri,
+                direction: activeCall!.direction.name,
+                timestamp: DateTime.now(),
+                durationSeconds: activeCall!.startedAt != null
                     ? DateTime.now()
                         .difference(activeCall!.startedAt!)
                         .inSeconds
-                    : 0
-                ..sipCode = sipCode
-                ..sipReason = sipReason
-                ..result = result;
+                    : 0,
+                sipCode: sipCode,
+                sipReason: sipReason,
+                result: result,
+              );
 
-              _isar!.writeTxn(() => _isar!.callHistorySchemas.put(entry));
+              _accountService!.saveCallHistory(entry);
             }
 
             // Trigger CRM End Hook and Recording Upload

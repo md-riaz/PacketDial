@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 import 'app_theme.dart';
+import 'path_provider_service.dart';
 
 /// Persists window position, size, and always-on-top preference.
 class WindowPrefs {
@@ -11,18 +14,50 @@ class WindowPrefs {
   static const _kH = 'window_h';
   static const _kAlwaysOnTop = 'always_on_top';
 
-  late final SharedPreferences _prefs;
+  Map<String, dynamic> _data = {};
+  bool _initialized = false;
 
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    if (_initialized) return;
+    try {
+      final file = await _getFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        _data = jsonDecode(content) as Map<String, dynamic>;
+      } else {
+        // Initialize with default values
+        _data = {
+          _kAlwaysOnTop: false,
+        };
+        await _save();
+      }
+    } catch (e) {
+      debugPrint('[WindowPrefs] Error initializing: $e');
+    }
+    _initialized = true;
+  }
+
+  Future<File> _getFile() async {
+    final dir = await PathProviderService.instance.getDataDirectory();
+    return File('${dir.path}/window_prefs.json');
+  }
+
+  Future<void> _save() async {
+    try {
+      final file = await _getFile();
+      await file.writeAsString(jsonEncode(_data), flush: true);
+    } catch (e) {
+      debugPrint('[WindowPrefs] Error saving: $e');
+    }
   }
 
   // ── Always-on-top ──────────────────────────────────────────────────────
 
-  bool get alwaysOnTop => _prefs.getBool(_kAlwaysOnTop) ?? false;
+  bool get alwaysOnTop => _data[_kAlwaysOnTop] as bool? ?? false;
 
   Future<void> setAlwaysOnTop(bool value) async {
-    await _prefs.setBool(_kAlwaysOnTop, value);
+    _data[_kAlwaysOnTop] = value;
+    await _save();
     await windowManager.setAlwaysOnTop(value);
   }
 
@@ -33,23 +68,26 @@ class WindowPrefs {
 
   // ── Window geometry ────────────────────────────────────────────────────
 
-  bool get hasSavedGeometry => _prefs.containsKey(_kW);
+  bool get hasSavedGeometry => _data.containsKey(_kW);
 
   Future<void> saveGeometry() async {
     final pos = await windowManager.getPosition();
     final size = await windowManager.getSize();
-    await _prefs.setDouble(_kX, pos.dx);
-    await _prefs.setDouble(_kY, pos.dy);
-    await _prefs.setDouble(_kW, size.width);
-    await _prefs.setDouble(_kH, size.height);
+    _data[_kX] = pos.dx;
+    _data[_kY] = pos.dy;
+    _data[_kW] = size.width;
+    _data[_kH] = size.height;
+    await _save();
   }
 
   Future<void> restoreGeometry() async {
     if (!hasSavedGeometry) return;
-    final w = _prefs.getDouble(_kW) ?? AppTheme.defaultWindowSize.width;
-    final h = _prefs.getDouble(_kH) ?? AppTheme.defaultWindowSize.height;
-    final x = _prefs.getDouble(_kX);
-    final y = _prefs.getDouble(_kY);
+    final w =
+        (_data[_kW] as num?)?.toDouble() ?? AppTheme.defaultWindowSize.width;
+    final h =
+        (_data[_kH] as num?)?.toDouble() ?? AppTheme.defaultWindowSize.height;
+    final x = (_data[_kX] as num?)?.toDouble();
+    final y = (_data[_kY] as num?)?.toDouble();
 
     await windowManager.setSize(Size(w, h));
     if (x != null && y != null) {

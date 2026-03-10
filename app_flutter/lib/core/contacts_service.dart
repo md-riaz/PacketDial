@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import 'path_provider_service.dart';
 
 /// Contact entry for BLF/Presence monitoring.
 class BlfContact {
@@ -74,6 +74,10 @@ class ContactsService {
           jsonList.map((j) => BlfContact.fromJson(j)).toList(),
         );
         debugPrint('[ContactsService] Loaded ${_contacts.length} contacts');
+      } else {
+        // Save empty list to create the file
+        await saveContacts();
+        debugPrint('[ContactsService] Created initial contacts file');
       }
     } catch (e) {
       debugPrint('[ContactsService] Error loading contacts: $e');
@@ -186,13 +190,13 @@ class ContactsService {
 
   /// Get contacts file path.
   Future<File> _getContactsFile() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await PathProviderService.instance.getDataDirectory();
     return File('${dir.path}/blf_contacts.json');
   }
 
   /// Get default contacts file for import/export.
   Future<File> getDefaultExportFile() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await PathProviderService.instance.getDataDirectory();
     return File('${dir.path}/packetdial_contacts.json');
   }
 }

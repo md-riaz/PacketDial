@@ -6,8 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
@@ -18,8 +17,6 @@ import 'core/account_service.dart';
 import 'core/contacts_service.dart';
 import 'core/app_settings_service.dart';
 import 'core/window_prefs.dart';
-import 'models/account_schema.dart';
-import 'models/call_history_schema.dart';
 import 'ffi/engine.dart';
 import 'providers/engine_provider.dart';
 import 'providers/incoming_call_provider.dart';
@@ -116,16 +113,9 @@ void main(List<String> args) async {
     }
   });
 
-  // Initialize Isar
-  final dir = await getApplicationSupportDirectory();
-  final isar = await Isar.open(
-    [AccountSchemaSchema, CallHistorySchemaSchema],
-    directory: dir.path,
-  );
-
   final container = ProviderContainer();
   final accountService = container.read(accountServiceProvider);
-  await accountService.init(isar);
+  await accountService.init();
 
   // Register Global Hotkey (Alt + D) to dial from clipboard
   HotKey dialHotkey = HotKey(
@@ -166,7 +156,6 @@ void main(List<String> args) async {
     UncontrolledProviderScope(
       container: container,
       child: App(
-        isar: isar,
         accountService: accountService,
         windowPrefs: windowPrefs,
         args: processedArgs, // Pass processed args
@@ -176,13 +165,11 @@ void main(List<String> args) async {
 }
 
 class App extends ConsumerStatefulWidget {
-  final Isar isar;
   final AccountService accountService;
   final WindowPrefs windowPrefs;
   final List<String> args;
   const App({
     super.key,
-    required this.isar,
     required this.accountService,
     required this.windowPrefs,
     required this.args,
@@ -241,7 +228,7 @@ class _AppState extends ConsumerState<App>
       final v = engine.version();
 
       // CRITICAL: Attach first so we don't miss "EngineReady" or early logs
-      EngineChannel.instance.attach(engine, widget.isar);
+      EngineChannel.instance.attach(engine, widget.accountService);
 
       final rc = engine.init(userAgent);
       // rc == 0 → OK, rc == 1 → AlreadyInitialized (hot restart: DLL still loaded)
