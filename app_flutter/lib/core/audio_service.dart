@@ -62,11 +62,9 @@ class AudioService {
           startRingback();
         }
       }
-    } else if (state == 'callstate.incall' || state == 'ended') {
-      // Guard: Only stop if something is actually playing
-      if (_ringtonePlaying || _ringbackPlaying) {
-        stopAll();
-      }
+    } else if (state == 'callstate.incall' || state == 'callstate.ended') {
+      // Always stop - don't check flags as they might be out of sync
+      stopAll();
     }
   }
 

@@ -1658,62 +1658,70 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
 
 fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
     log_engine(LogLevel::Debug, "cmd_call_answer: START");
-    let mut calls_guard = CALLS.lock().unwrap();
-    log_engine(LogLevel::Debug, "cmd_call_answer: Got CALLS lock");
-    let call_id = match p["call_id"].as_u64() {
-        Some(n) => Some(n as u32),
-        None => {
-            // Find first ringing incoming call
-            calls_guard
-                .iter()
-                .find(|c| {
-                    c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming)
-                })
-                .map(|c| c.id)
-        }
-    };
-    let call_id = match call_id {
-        Some(id) => {
-            log_engine(LogLevel::Debug, &format!("cmd_call_answer: Found call_id={}", id));
-            id
-        },
-        None => {
-            log_engine(LogLevel::Error, "cmd_call_answer: No ringing call found");
-            return EngineErrorCode::NotFound;
-        }
-    };
 
-    match calls_guard.iter_mut().find(|c| c.id == call_id) {
-        None => {
-            log_engine(LogLevel::Error, "cmd_call_answer: Call not found in guard");
-            EngineErrorCode::NotFound
-        },
-        Some(call) => {
-            log_engine(LogLevel::Debug, &format!("cmd_call_answer: call.pjsip_call_id={:?}", call.pjsip_call_id));
-            // Answer via PJSIP shim
-            match call.pjsip_call_id {
-                Some(pj_id) => {
-                    log_engine(LogLevel::Info, &format!("cmd_call_answer: Calling pd_call_answer({pj_id})..."));
-                    let rc = unsafe { pd_call_answer(pj_id) };
-                    log_engine(LogLevel::Info, &format!("cmd_call_answer: pd_call_answer({pj_id}) returned rc={rc}"));
-                    if rc != 0 {
-                        log_engine(
-                            LogLevel::Warn,
-                            &format!("CallAnswer: pd_call_answer({pj_id}) rc={rc}"),
-                        );
-                    }
-                    // State will be updated via on_call_state callback
-                    log_engine(LogLevel::Debug, "cmd_call_answer: Returning Ok");
-                    EngineErrorCode::Ok
-                }
-                None => {
-                    log_engine(
-                        LogLevel::Error,
-                        &format!("CallAnswer: call {call_id} has no PJSIP call id"),
-                    );
-                    EngineErrorCode::NotFound
-                }
+    // Find the call and get its PJSIP ID while holding the lock
+    let pj_id_result = {
+        let mut calls_guard = CALLS.lock().unwrap();
+        log_engine(LogLevel::Debug, "cmd_call_answer: Got CALLS lock");
+
+        let call_id = match p["call_id"].as_u64() {
+            Some(n) => Some(n as u32),
+            None => {
+                // Find first ringing incoming call
+                calls_guard
+                    .iter()
+                    .find(|c| {
+                        c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming)
+                    })
+                    .map(|c| c.id)
             }
+        };
+        let call_id = match call_id {
+            Some(id) => {
+                log_engine(LogLevel::Debug, &format!("cmd_call_answer: Found call_id={}", id));
+                id
+            },
+            None => {
+                log_engine(LogLevel::Error, "cmd_call_answer: No ringing call found");
+                return EngineErrorCode::NotFound;
+            }
+        };
+
+        // Get the PJSIP call ID while holding the lock
+        match calls_guard.iter().find(|c| c.id == call_id) {
+            None => {
+                log_engine(LogLevel::Error, "cmd_call_answer: Call not found in guard");
+                return EngineErrorCode::NotFound;
+            },
+            Some(call) => {
+                log_engine(LogLevel::Debug, &format!("cmd_call_answer: call.pjsip_call_id={:?}", call.pjsip_call_id));
+                call.pjsip_call_id
+            }
+        }
+    }; // ← Lock released here!
+
+    // Now call PJSIP WITHOUT holding the lock to avoid deadlock
+    match pj_id_result {
+        Some(pj_id) => {
+            log_engine(LogLevel::Info, &format!("cmd_call_answer: Calling pd_call_answer({pj_id})..."));
+            let rc = unsafe { pd_call_answer(pj_id) };
+            log_engine(LogLevel::Info, &format!("cmd_call_answer: pd_call_answer({pj_id}) returned rc={rc}"));
+            if rc != 0 {
+                log_engine(
+                    LogLevel::Warn,
+                    &format!("CallAnswer: pd_call_answer({pj_id}) rc={rc}"),
+                );
+            }
+            // State will be updated via on_call_state callback
+            log_engine(LogLevel::Debug, "cmd_call_answer: Returning Ok");
+            EngineErrorCode::Ok
+        }
+        None => {
+            log_engine(
+                LogLevel::Error,
+                "CallAnswer: call has no PJSIP call id",
+            );
+            EngineErrorCode::NotFound
         }
     }
 }
@@ -3598,12 +3606,21 @@ pub extern "C" fn engine_answer_call() -> i32 {
                 .map(|c| c.id)
         };
         let call_id = match call_id {
-            Some(id) => id,
-            None => return EngineErrorCode::NotFound as i32,
+            Some(id) => {
+                log_engine(LogLevel::Info, &format!("engine_answer_call: Found call_id={}", id));
+                id
+            },
+            None => {
+                log_engine(LogLevel::Error, "engine_answer_call: No ringing call found");
+                return EngineErrorCode::NotFound as i32;
+            }
         };
 
+        log_engine(LogLevel::Info, &format!("engine_answer_call: Dispatching CallAnswer for call_id={}", call_id));
         let answer_json = serde_json::json!({ "call_id": call_id });
-        dispatch_command("CallAnswer", &answer_json) as i32
+        let rc = dispatch_command("CallAnswer", &answer_json);
+        log_engine(LogLevel::Info, &format!("engine_answer_call: CallAnswer completed rc={:?}", rc));
+        rc as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
