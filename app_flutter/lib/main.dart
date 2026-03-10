@@ -563,7 +563,8 @@ class _AppState extends ConsumerState<App>
                 try {
                   final rc = EngineChannel.instance.engine.answerCall();
                   debugPrint('[MAIN] answerCall() returned: $rc');
-                  debugPrint('[MAIN] Answer initiated - check logs for call state updates');
+                  debugPrint(
+                      '[MAIN] Answer initiated - check logs for call state updates');
                 } catch (e, stack) {
                   debugPrint('[MAIN] ERROR in answerCall: $e\n$stack');
                 }
@@ -746,17 +747,27 @@ class CockpitFooter extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final account = ref.watch(activeAccountProvider);
+    final summary = ref.watch(registrationSummaryProvider);
+    final activeAccount = ref.watch(activeAccountProvider);
     final regState = ref.watch(registrationStateProvider);
     final activeCall = ref.watch(activeCallProvider);
 
-    bool isRegistered = regState == 'Registered';
-    bool isFailed = regState.startsWith('Registration Failed');
-    bool hasCall = activeCall != null;
+    // Multi-account summary vs single account
+    final bool isMulti = summary.totalEnabled > 1;
 
-    final statusColor = isRegistered
-        ? AppTheme.callGreen
-        : (isFailed ? AppTheme.errorRed : AppTheme.warningAmber);
+    // Status color logic (Spec 2.2 + USER)
+    Color statusColor;
+    if (summary.totalRegistered > 0) {
+      statusColor = AppTheme.callGreen;
+    } else if (summary.totalFailed > 0) {
+      statusColor = AppTheme.errorRed;
+    } else if (summary.totalRegistering > 0) {
+      statusColor = AppTheme.warningAmber;
+    } else {
+      statusColor = AppTheme.textTertiary;
+    }
+
+    bool hasCall = activeCall != null;
 
     return Container(
       height: 28,
@@ -777,7 +788,9 @@ class CockpitFooter extends ConsumerWidget {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              account != null ? '${account.username}: $regState' : regState,
+              (!isMulti && activeAccount != null)
+                  ? '${activeAccount.username}: $regState'
+                  : regState,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
               style: TextStyle(

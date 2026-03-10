@@ -301,29 +301,10 @@ class AccountService extends ChangeNotifier {
     final all = await isar!.accountSchemas.where().findAll();
     if (all.isEmpty) return;
 
-    bool didRegister = false;
-
-    // Register all accounts that have isEnabled enabled
+    // Only register accounts that have isEnabled set to true
     for (final acct in all) {
       if (acct.isEnabled) {
-        final rc = register(acct);
-        if (rc == 0) {
-          didRegister = true;
-        } else {
-          debugPrint(
-              '[AccountService] autoRegister failed for ${acct.uuid} rc=$rc');
-        }
-      }
-    }
-
-    // Fallback: if no account had isEnabled, register the selected one
-    // or the first account
-    if (!didRegister) {
-      final selected = all.where((a) => a.isSelected).firstOrNull ?? all.first;
-      final rc = register(selected);
-      if (rc != 0) {
-        debugPrint(
-            '[AccountService] fallback autoRegister failed for ${selected.uuid} rc=$rc');
+        register(acct);
       }
     }
   }
