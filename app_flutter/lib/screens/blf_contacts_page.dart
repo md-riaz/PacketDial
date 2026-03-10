@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../core/app_theme.dart';
 import '../core/contacts_service.dart';
+import '../providers/contacts_provider.dart';
 
 /// BLF Contacts management page.
 class BlfContactsPage extends ConsumerStatefulWidget {
@@ -15,22 +16,11 @@ class BlfContactsPage extends ConsumerStatefulWidget {
 }
 
 class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
-  bool _isLoading = true;
   String _searchQuery = '';
 
   @override
-  void initState() {
-    super.initState();
-    _loadContacts();
-  }
-
-  Future<void> _loadContacts() async {
-    await ContactsService.instance.loadContacts();
-    setState(() => _isLoading = false);
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final allContacts = ref.watch(contactsProvider);
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -101,91 +91,83 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
             ),
           ],
         ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(AppTheme.primary),
+        body: Column(
+          children: [
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search contacts...',
+                  hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                  filled: true,
+                  fillColor: AppTheme.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  prefixIcon:
+                      const Icon(Icons.search, color: AppTheme.textTertiary),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear,
+                              color: AppTheme.textTertiary),
+                          onPressed: () {
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
                 ),
-              )
-            : Column(
+                onChanged: (value) => setState(() => _searchQuery = value),
+              ),
+            ),
+
+            // Stats row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
                 children: [
-                  // Search bar
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search contacts...',
-                        hintStyle:
-                            const TextStyle(color: AppTheme.textTertiary),
-                        filled: true,
-                        fillColor: AppTheme.inputFill,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
-                        prefixIcon: const Icon(Icons.search,
-                            color: AppTheme.textTertiary),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear,
-                                    color: AppTheme.textTertiary),
-                                onPressed: () {
-                                  setState(() => _searchQuery = '');
-                                },
-                              )
-                            : null,
-                      ),
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                    ),
+                  _buildStatChip(
+                    Icons.circle,
+                    AppTheme.callGreen,
+                    allContacts
+                        .where((c) => c.presenceState == 'Available')
+                        .length
+                        .toString(),
+                    'Available',
                   ),
-
-                  // Stats row
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        _buildStatChip(
-                          Icons.circle,
-                          AppTheme.callGreen,
-                          ContactsService.instance
-                              .getByPresence('Available')
-                              .length
-                              .toString(),
-                          'Available',
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStatChip(
-                          Icons.circle,
-                          AppTheme.errorRed,
-                          ContactsService.instance
-                              .getByPresence('Busy')
-                              .length
-                              .toString(),
-                          'Busy',
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStatChip(
-                          Icons.circle,
-                          AppTheme.textTertiary,
-                          ContactsService.instance
-                              .getByPresence('Unknown')
-                              .length
-                              .toString(),
-                          'Unknown',
-                        ),
-                      ],
-                    ),
+                  const SizedBox(width: 8),
+                  _buildStatChip(
+                    Icons.circle,
+                    AppTheme.errorRed,
+                    allContacts
+                        .where((c) => c.presenceState == 'Busy')
+                        .length
+                        .toString(),
+                    'Busy',
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // Contacts list
-                  Expanded(
-                    child: _buildContactsList(),
+                  const SizedBox(width: 8),
+                  _buildStatChip(
+                    Icons.circle,
+                    AppTheme.textTertiary,
+                    allContacts
+                        .where((c) => c.presenceState == 'Unknown')
+                        .length
+                        .toString(),
+                    'Unknown',
                   ),
                 ],
               ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Contacts list
+            Expanded(
+              child: _buildContactsList(allContacts),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -225,8 +207,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
     );
   }
 
-  Widget _buildContactsList() {
-    final contacts = ContactsService.instance.contacts.where((c) {
+  Widget _buildContactsList(List<BlfContact> allContacts) {
+    final contacts = allContacts.where((c) {
       if (_searchQuery.isEmpty) return true;
       final query = _searchQuery.toLowerCase();
       return c.name.toLowerCase().contains(query) ||
@@ -349,14 +331,13 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
           FilledButton(
             onPressed: () {
               if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
-                ContactsService.instance.addContact(BlfContact(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameCtrl.text,
-                  sipUri: phoneCtrl.text,
-                  extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
-                ));
+                ref.read(contactsProvider.notifier).addContact(BlfContact(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      name: nameCtrl.text,
+                      sipUri: phoneCtrl.text,
+                      extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
+                    ));
                 Navigator.pop(context);
-                setState(() {});
               }
             },
             child: const Text('Add'),
@@ -436,24 +417,22 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
           ),
           TextButton(
             onPressed: () {
-              ContactsService.instance.deleteContact(contact.id);
+              ref.read(contactsProvider.notifier).deleteContact(contact.id);
               Navigator.pop(context);
-              setState(() {});
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
           FilledButton(
             onPressed: () {
-              ContactsService.instance.updateContact(BlfContact(
-                id: contact.id,
-                name: nameCtrl.text,
-                sipUri: phoneCtrl.text,
-                extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
-                presenceState: contact.presenceState,
-                activity: contact.activity,
-              ));
+              ref.read(contactsProvider.notifier).updateContact(BlfContact(
+                    id: contact.id,
+                    name: nameCtrl.text,
+                    sipUri: phoneCtrl.text,
+                    extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
+                    presenceState: contact.presenceState,
+                    activity: contact.activity,
+                  ));
               Navigator.pop(context);
-              setState(() {});
             },
             child: const Text('Save'),
           ),
@@ -471,7 +450,8 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        final success = await ContactsService.instance.importContacts(file);
+        final success =
+            await ref.read(contactsProvider.notifier).importContacts(file);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -482,7 +462,6 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          setState(() {});
         }
       }
     } catch (e) {
@@ -500,8 +479,10 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
 
   Future<void> _exportContacts() async {
     try {
-      final file = await ContactsService.instance.getDefaultExportFile();
-      final success = await ContactsService.instance.exportContacts(file);
+      final file =
+          await ref.read(contactsServiceProvider).getDefaultExportFile();
+      final success =
+          await ref.read(contactsServiceProvider).exportContacts(file);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -555,8 +536,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
     );
 
     if (confirmed == true) {
-      await ContactsService.instance.clearAll();
-      setState(() {});
+      await ref.read(contactsProvider.notifier).clearAll();
     }
   }
 }

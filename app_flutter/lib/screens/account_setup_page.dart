@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
-import '../core/account_service.dart';
 import '../models/account_schema.dart';
+import '../providers/account_setup_provider.dart';
 
 class AccountSetupPage extends ConsumerStatefulWidget {
   final AccountSchema? existing;
@@ -28,15 +28,13 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
   final stunCtrl = TextEditingController();
   final turnCtrl = TextEditingController();
 
-  String transport = 'udp';
-  bool srtpEnabled = false;
-
-  bool isRegistering = false;
-  String? registrationError;
-
   @override
   void initState() {
     super.initState();
+    // Initialize provider state after frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(accountSetupProvider.notifier).loadAccount(widget.existing);
+    });
     _loadAccountData(widget.existing);
     serverCtrl.addListener(_onServerChanged);
   }
@@ -63,10 +61,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       proxyCtrl.text = e.sipProxy;
       if (domainCtrl.text.isNotEmpty) debugPrint('Domain: ${domainCtrl.text}');
       if (proxyCtrl.text.isNotEmpty) debugPrint('Proxy: ${proxyCtrl.text}');
-      transport = e.transport;
       stunCtrl.text = e.stunServer;
       turnCtrl.text = e.turnServer;
-      srtpEnabled = e.srtpEnabled;
       debugPrint(
           '[AccountSetupPage] Loaded account: ${e.accountName}, server: ${e.server}, user: ${e.username}');
     } else {
@@ -81,8 +77,6 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       proxyCtrl.clear();
       stunCtrl.clear();
       turnCtrl.clear();
-      transport = 'udp';
-      srtpEnabled = false;
     }
   }
 
@@ -105,6 +99,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
+    final state = ref.watch(accountSetupProvider);
+    final notifier = ref.read(accountSetupProvider.notifier);
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -131,7 +127,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (registrationError != null)
+                  if (state.registrationError != null)
                     Container(
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 12),
@@ -148,7 +144,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              registrationError!,
+                              state.registrationError!,
                               style: TextStyle(
                                 color: AppTheme.errorRed.withValues(alpha: 0.9),
                                 fontSize: 12,
@@ -164,7 +160,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     label: 'Account Label (e.g. Work)',
                     hint: 'My Office Number',
                     icon: Icons.label_outline,
-                    enabled: !isRegistering,
+                    enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
                   _buildField(
@@ -172,7 +168,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     label: 'Display Name (Optional)',
                     hint: 'John Doe',
                     icon: Icons.person_outline,
-                    enabled: !isRegistering,
+                    enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 24),
                   _sectionLabel('Server'),
@@ -181,7 +177,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     label: 'SIP Server / Registrar',
                     hint: 'sip.provider.com',
                     icon: Icons.dns_outlined,
-                    enabled: !isRegistering,
+                    enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
                   _buildField(
@@ -189,7 +185,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     label: 'Username',
                     hint: '1000',
                     icon: Icons.account_circle_outlined,
-                    enabled: !isRegistering,
+                    enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
                   _buildField(
@@ -197,14 +193,14 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     label: 'Domain',
                     hint: 'sip.provider.com:8090',
                     icon: Icons.domain_outlined,
-                    enabled: !isRegistering,
+                    enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
                   _buildField(
                     controller: passCtrl,
                     label: 'Password',
                     icon: Icons.lock_outline,
-                    enabled: !isRegistering,
+                    enabled: !state.isRegistering,
                     obscure: true,
                   ),
                   const SizedBox(height: 24),
@@ -213,6 +209,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                         style: TextStyle(
                             fontSize: 13, color: AppTheme.textSecondary)),
                     tilePadding: EdgeInsets.zero,
+                    shape: const Border(),
+                    collapsedShape: const Border(),
                     iconColor: AppTheme.textTertiary,
                     collapsedIconColor: AppTheme.textTertiary,
                     textColor: AppTheme.textSecondary,
@@ -220,18 +218,18 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                       _buildField(
                         controller: authUserCtrl,
                         label: 'Auth Username (Optional)',
-                        enabled: !isRegistering,
+                        enabled: !state.isRegistering,
                       ),
                       const SizedBox(height: 18),
                       _buildField(
                         controller: proxyCtrl,
                         label: 'SIP Proxy (Optional)',
                         hint: 'Outbound proxy address if required.',
-                        enabled: !isRegistering,
+                        enabled: !state.isRegistering,
                       ),
                       const SizedBox(height: 18),
                       DropdownButtonFormField<String>(
-                        initialValue: transport,
+                        initialValue: state.transport,
                         decoration: InputDecoration(
                           labelText: 'Transport',
                           contentPadding: const EdgeInsets.symmetric(
@@ -256,20 +254,34 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                           DropdownMenuItem(value: 'tcp', child: Text('TCP')),
                           DropdownMenuItem(value: 'tls', child: Text('TLS')),
                         ],
-                        onChanged: isRegistering
+                        onChanged: state.isRegistering
                             ? null
-                            : (v) => setState(() => transport = v ?? 'udp'),
+                            : (v) => notifier.setTransport(v ?? 'udp'),
                       ),
                       const SizedBox(height: 18),
                       _buildField(
                         controller: stunCtrl,
                         label: 'STUN Server (Optional)',
                         hint: 'For NAT traversal (e.g. stun.l.google.com)',
-                        enabled: !isRegistering,
+                        enabled: !state.isRegistering,
                       ),
+                      const SizedBox(height: 24),
+                      SwitchListTile(
+                        title: const Text('Enable SRTP',
+                            style: TextStyle(color: AppTheme.textPrimary)),
+                        subtitle: const Text('Secure RTP for media encryption',
+                            style: TextStyle(color: AppTheme.textTertiary)),
+                        value: state.srtpEnabled,
+                        onChanged: state.isRegistering
+                            ? null
+                            : (v) => notifier.setSrtpEnabled(v),
+                        activeColor: AppTheme.primary,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  if (isRegistering) ...[
+                  if (state.isRegistering) ...[
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -317,20 +329,21 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
           // Fixed bottom action bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppTheme.surfaceVariant,
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: isRegistering ? null : _cancel,
+                  onPressed: state.isRegistering ? null : _cancel,
                   child: const Text('Cancel',
                       style: TextStyle(color: AppTheme.textTertiary)),
                 ),
                 const SizedBox(width: 12),
                 FilledButton(
-                  onPressed: isRegistering ? null : _saveAccount,
+                  onPressed:
+                      state.isRegistering ? null : () => _saveAccount(notifier),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     padding: const EdgeInsets.symmetric(
@@ -414,89 +427,23 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
     Navigator.of(context).pop(false);
   }
 
-  Future<void> _saveAccount() async {
-    final name = nameCtrl.text.trim();
-    final server = serverCtrl.text.trim();
-    final user = userCtrl.text.trim();
-    final pass = passCtrl.text;
+  Future<void> _saveAccount(AccountSetupNotifier notifier) async {
+    final success = await notifier.saveAccount(
+      existing: widget.existing,
+      name: nameCtrl.text.trim(),
+      displayName: displayCtrl.text.trim(),
+      server: serverCtrl.text.trim(),
+      username: userCtrl.text.trim(),
+      password: passCtrl.text,
+      authUsername: authUserCtrl.text.trim(),
+      domain: domainCtrl.text.trim(),
+      proxy: proxyCtrl.text.trim(),
+      stunServer: stunCtrl.text.trim(),
+      turnServer: turnCtrl.text.trim(),
+    );
 
-    if (name.isEmpty || server.isEmpty || user.isEmpty || pass.isEmpty) {
-      setState(() {
-        registrationError = 'Please fill in all required fields.';
-      });
-      return;
-    }
-
-    setState(() {
-      isRegistering = true;
-      registrationError = null;
-    });
-
-    try {
-      final service = ref.read(accountServiceProvider);
-
-      // Try registering first
-      final result = await service.tryRegister(
-        username: user,
-        password: pass,
-        server: server,
-        transport: transport,
-        domain: domainCtrl.text.trim(),
-        proxy: proxyCtrl.text.trim(),
-        stunServer: stunCtrl.text.trim(),
-        authUsername: authUserCtrl.text.trim(),
-      );
-
-      if (!result.success) {
-        if (!mounted) return;
-        setState(() {
-          isRegistering = false;
-          registrationError = result.errorReason ??
-              'Registration failed. Check your credentials.';
-        });
-        return;
-      }
-
-      // Registration succeeded, save the account
-      final schema = AccountSchema()
-        ..id = widget.existing?.id
-        ..uuid = widget.existing?.uuid ?? ''
-        ..accountName = name
-        ..displayName = displayCtrl.text.trim()
-        ..server = server
-        ..sipProxy = proxyCtrl.text.trim()
-        ..username = user
-        ..authUsername = authUserCtrl.text.trim()
-        ..domain = domainCtrl.text.trim()
-        ..password = pass
-        ..transport = transport
-        ..stunServer = stunCtrl.text.trim()
-        ..turnServer = turnCtrl.text.trim()
-        ..tlsEnabled = transport == 'tls'
-        ..srtpEnabled = srtpEnabled
-        ..autoRegister = true
-        ..isSelected = widget.existing?.isSelected ?? false;
-
-      await service.saveAccount(schema);
-      final rc = service.register(schema);
-      if (rc != 0) {
-        if (!mounted) return;
-        setState(() {
-          isRegistering = false;
-          registrationError =
-              'Account saved but registration command failed (rc=$rc).';
-        });
-        return;
-      }
-
-      if (!mounted) return;
+    if (success && mounted) {
       Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        isRegistering = false;
-        registrationError = 'Failed to save account: $e';
-      });
     }
   }
 }

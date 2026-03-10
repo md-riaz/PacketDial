@@ -12,6 +12,11 @@ final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
   return ref.watch(accountServiceProvider).getAllAccounts();
 });
 
+final accountRegisteringProvider =
+    StateProvider.family<bool, String>((ref, id) {
+  return false;
+});
+
 class AccountsScreen extends ConsumerStatefulWidget {
   const AccountsScreen({super.key});
 
@@ -135,8 +140,6 @@ class _AccountCard extends ConsumerStatefulWidget {
 }
 
 class _AccountCardState extends ConsumerState<_AccountCard> {
-  bool _isRegistering = false;
-
   void _showActionsMenu() {
     final renderBox = context.findRenderObject() as RenderBox;
     final offset = renderBox.localToGlobal(Offset.zero);
@@ -181,8 +184,11 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
   }
 
   Future<void> _toggleRegistration(bool? value) async {
-    if (_isRegistering || value == null) return;
-    setState(() => _isRegistering = true);
+    final isRegistering =
+        ref.read(accountRegisteringProvider(widget.account.uuid));
+    if (isRegistering || value == null) return;
+    ref.read(accountRegisteringProvider(widget.account.uuid).notifier).state =
+        true;
 
     try {
       final service = ref.read(accountServiceProvider);
@@ -226,10 +232,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
               ],
             ),
           );
-          // Reset switch to off state
-          if (mounted) {
-            setState(() {});
-          }
+          // Reset switch to off state happens in finally
           return;
         }
 
@@ -320,12 +323,11 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
           ],
         ),
       );
-      if (mounted) {
-        setState(() {});
-      }
     } finally {
       if (mounted) {
-        setState(() => _isRegistering = false);
+        ref
+            .read(accountRegisteringProvider(widget.account.uuid).notifier)
+            .state = false;
       }
     }
   }
@@ -462,7 +464,8 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                   scale: 0.8,
                   child: Switch(
                     value: isEnabled,
-                    onChanged: (_isRegistering ||
+                    onChanged: (ref.watch(accountRegisteringProvider(
+                                widget.account.uuid)) ||
                             registrationState == RegistrationState.registering)
                         ? null
                         : _toggleRegistration,

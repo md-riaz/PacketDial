@@ -10,6 +10,7 @@ import '../core/contacts_service.dart';
 import 'diagnostics_screen.dart';
 import 'integration_settings_page.dart';
 import '../core/engine_channel.dart';
+import '../providers/app_settings_provider.dart';
 
 /// Unified app-wide settings page.
 class AppSettingsPage extends ConsumerStatefulWidget {
@@ -22,57 +23,17 @@ class AppSettingsPage extends ConsumerStatefulWidget {
 class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _isLoading = true;
-
-  // Settings state
-  List<Map<String, dynamic>> _codecPriorities = [];
-  int _dtmfMethod = 1;
-  bool _autoAnswerEnabled = false;
-  bool _dndEnabled = false;
-  bool _blfEnabled = true;
-
-  // Integration state (loaded but UI not yet implemented)
-  // String _ringWebhookUrl = '';
-  // String _endWebhookUrl = '';
-  // bool _clipboardMonitoringEnabled = false;
-  // String _recordingUploadUrl = '';
-  // String _recordingFileFieldName = 'recording';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
-    _loadSettings();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadSettings() async {
-    setState(() => _isLoading = true);
-
-    // Load from app settings service
-    await AppSettingsService.instance.loadSettings();
-
-    setState(() {
-      _codecPriorities = AppSettingsService.instance.codecPriorities;
-      _dtmfMethod = AppSettingsService.instance.dtmfMethod;
-      _autoAnswerEnabled = AppSettingsService.instance.autoAnswerEnabled;
-      _dndEnabled = AppSettingsService.instance.dndEnabled;
-      _blfEnabled = AppSettingsService.instance.blfEnabled;
-      // Integration settings (UI not yet implemented)
-      // _ringWebhookUrl = AppSettingsService.instance.ringWebhookUrl;
-      // _endWebhookUrl = AppSettingsService.instance.endWebhookUrl;
-      // _clipboardMonitoringEnabled =
-      //     AppSettingsService.instance.clipboardMonitoringEnabled;
-      // _recordingUploadUrl = AppSettingsService.instance.recordingUploadUrl;
-      // _recordingFileFieldName =
-      //     AppSettingsService.instance.recordingFileFieldName;
-      _isLoading = false;
-    });
   }
 
   @override
@@ -146,23 +107,17 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             ],
           ),
         ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(AppTheme.primary),
-                ),
-              )
-            : TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildGeneralTab(),
-                  _buildAudioTab(),
-                  _buildCodecsTab(),
-                  _buildCallsTab(),
-                  _buildContactsTab(),
-                  _buildIntegrationsTab(),
-                ],
-              ),
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildGeneralTab(),
+            _buildAudioTab(),
+            _buildCodecsTab(),
+            _buildCallsTab(),
+            _buildContactsTab(),
+            _buildIntegrationsTab(),
+          ],
+        ),
       ),
     );
   }
@@ -228,10 +183,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             title: 'BLF / Presence',
             subtitle: 'Show contact presence status',
             trailing: Switch(
-              value: _blfEnabled,
+              value: ref.watch(appSettingsProvider).blfEnabled,
               onChanged: (value) async {
-                setState(() => _blfEnabled = value);
-                await AppSettingsService.instance.setBlfEnabled(value);
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setBlfEnabled(value);
               },
               activeThumbColor: AppTheme.primary,
             ),
@@ -293,6 +249,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   }
 
   Widget _buildCodecsTab() {
+    final stateCodecs = ref.watch(appSettingsProvider).codecPriorities;
+
     final availableCodecs = [
       {'id': 'PCMU', 'name': 'G.711 μ-law (PCMU)'},
       {'id': 'PCMA', 'name': 'G.711 A-law (PCMA)'},
@@ -302,6 +260,17 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       {'id': 'GSM', 'name': 'GSM'},
       {'id': 'iLBC', 'name': 'iLBC'},
     ];
+
+    // Sort available codecs based on saved priorities
+    availableCodecs.sort((a, b) {
+      final aSaved = stateCodecs.firstWhere((c) => c['codec'] == a['id'],
+          orElse: () => {'priority': 0});
+      final bSaved = stateCodecs.firstWhere((c) => c['codec'] == b['id'],
+          orElse: () => {'priority': 0});
+      final aPriority = aSaved['priority'] as int;
+      final bPriority = bSaved['priority'] as int;
+      return bPriority.compareTo(aPriority); // Higher priority first
+    });
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -320,16 +289,31 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             physics: const NeverScrollableScrollPhysics(),
             itemCount: availableCodecs.length,
             onReorder: (oldIndex, newIndex) {
-              setState(() {
-                if (newIndex > oldIndex) newIndex--;
-                final item = availableCodecs.removeAt(oldIndex);
-                availableCodecs.insert(newIndex, item);
-                _updateCodecPriorities(availableCodecs);
-              });
+              if (newIndex > oldIndex) newIndex--;
+              final item = availableCodecs.removeAt(oldIndex);
+              availableCodecs.insert(newIndex, item);
+
+              final updated = <Map<String, dynamic>>[];
+              for (var i = 0; i < availableCodecs.length; i++) {
+                final codecId = availableCodecs[i]['id'] as String;
+                final existing = stateCodecs.firstWhere(
+                  (c) => c['codec'] == codecId,
+                  orElse: () =>
+                      {'codec': codecId, 'enabled': false, 'priority': 0},
+                );
+                updated.add({
+                  'codec': codecId,
+                  'enabled': existing['enabled'] ?? false,
+                  'priority': availableCodecs.length - i,
+                });
+              }
+              ref
+                  .read(appSettingsProvider.notifier)
+                  .setCodecPriorities(updated);
             },
             itemBuilder: (context, index) {
               final codec = availableCodecs[index];
-              final isEnabled = _codecPriorities.any(
+              final isEnabled = stateCodecs.any(
                 (c) => c['codec'] == codec['id'] && c['enabled'] == true,
               );
 
@@ -358,21 +342,23 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   trailing: Switch(
                     value: isEnabled,
                     onChanged: (value) {
-                      setState(() {
-                        if (value) {
-                          _codecPriorities.add({
-                            'codec': codec['id'],
-                            'enabled': true,
-                            'priority': 10 - index,
-                          });
-                        } else {
-                          _codecPriorities.removeWhere(
-                            (c) => c['codec'] == codec['id'],
-                          );
-                        }
-                        AppSettingsService.instance
-                            .setCodecPriorities(_codecPriorities);
-                      });
+                      final updated =
+                          List<Map<String, dynamic>>.from(stateCodecs);
+                      final idx =
+                          updated.indexWhere((c) => c['codec'] == codec['id']);
+                      if (idx >= 0) {
+                        updated[idx] = Map<String, dynamic>.from(updated[idx]);
+                        updated[idx]['enabled'] = value;
+                      } else {
+                        updated.add({
+                          'codec': codec['id'],
+                          'enabled': value,
+                          'priority': availableCodecs.length - index,
+                        });
+                      }
+                      ref
+                          .read(appSettingsProvider.notifier)
+                          .setCodecPriorities(updated);
                     },
                     activeThumbColor: AppTheme.primary,
                   ),
@@ -398,14 +384,15 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           _buildSettingCard(
             icon: Icons.do_not_disturb,
             title: 'Do Not Disturb',
-            subtitle: _dndEnabled
+            subtitle: ref.watch(appSettingsProvider).dndEnabled
                 ? 'Enabled - All incoming calls rejected'
                 : 'Disabled - Calls ring normally',
             trailing: Switch(
-              value: _dndEnabled,
+              value: ref.watch(appSettingsProvider).dndEnabled,
               onChanged: (value) async {
-                setState(() => _dndEnabled = value);
-                await AppSettingsService.instance.setDndEnabled(value);
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setDndEnabled(value);
               },
               activeThumbColor: AppTheme.errorRed,
             ),
@@ -417,14 +404,15 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           _buildSettingCard(
             icon: Icons.phone_callback,
             title: 'Auto Answer',
-            subtitle: _autoAnswerEnabled
+            subtitle: ref.watch(appSettingsProvider).autoAnswerEnabled
                 ? 'Enabled - All calls answered automatically'
                 : 'Disabled - Calls ring normally',
             trailing: Switch(
-              value: _autoAnswerEnabled,
+              value: ref.watch(appSettingsProvider).autoAnswerEnabled,
               onChanged: (value) async {
-                setState(() => _autoAnswerEnabled = value);
-                await AppSettingsService.instance.setAutoAnswer(value);
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setAutoAnswer(value);
               },
               activeThumbColor: AppTheme.callGreen,
             ),
@@ -436,12 +424,14 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           _buildSettingCard(
             icon: Icons.dialpad,
             title: 'DTMF Method',
-            subtitle: _getDtmfMethodName(_dtmfMethod),
+            subtitle:
+                _getDtmfMethodName(ref.watch(appSettingsProvider).dtmfMethod),
             trailing: PopupMenuButton<int>(
-              initialValue: _dtmfMethod,
+              initialValue: ref.watch(appSettingsProvider).dtmfMethod,
               onSelected: (value) async {
-                setState(() => _dtmfMethod = value);
-                await AppSettingsService.instance.setDtmfMethod(value);
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setDtmfMethod(value);
               },
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 0, child: Text('In-band')),
@@ -650,24 +640,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
     }
   }
 
-  void _updateCodecPriorities(List<Map<String, dynamic>> availableCodecs) {
-    final updated = <Map<String, dynamic>>[];
-    for (var i = 0; i < availableCodecs.length; i++) {
-      final codec = availableCodecs[i];
-      final existing = _codecPriorities.firstWhere(
-        (c) => c['codec'] == codec['id'],
-        orElse: () => {'codec': codec['id'], 'enabled': false, 'priority': 0},
-      );
-      updated.add({
-        'codec': codec['id'],
-        'enabled': existing['enabled'] ?? false,
-        'priority': availableCodecs.length - i,
-      });
-    }
-    _codecPriorities = updated;
-    AppSettingsService.instance.setCodecPriorities(updated);
-  }
-
   Future<void> _exportSettings() async {
     try {
       final result = await FilePicker.platform.saveFile(
@@ -718,7 +690,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         final success = await AppSettingsService.instance.importSettings(file);
 
         if (success) {
-          await _loadSettings();
+          await ref.read(appSettingsProvider.notifier).reloadSettings();
         }
 
         if (mounted) {
@@ -765,16 +737,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           FilledButton(
             onPressed: () async {
               Navigator.pop(context);
-              // Reset to defaults
-              await AppSettingsService.instance.setCodecPriorities([
-                {'codec': 'PCMU', 'priority': 10, 'enabled': true},
-                {'codec': 'PCMA', 'priority': 9, 'enabled': true},
-                {'codec': 'G729', 'priority': 8, 'enabled': true},
-              ]);
-              await AppSettingsService.instance.setDtmfMethod(1);
-              await AppSettingsService.instance.setAutoAnswer(false);
-              await AppSettingsService.instance.setBlfEnabled(true);
-              await _loadSettings();
+              await ref.read(appSettingsProvider.notifier).resetToDefaults();
 
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(

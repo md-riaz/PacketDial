@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
 import '../core/contacts_service.dart';
 import '../core/engine_channel.dart';
+import '../providers/contacts_provider.dart';
 
 /// Contacts tab for main navigation - shows BLF contacts with presence.
 class ContactsScreen extends ConsumerStatefulWidget {
@@ -19,6 +20,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final allContacts = ref.watch(contactsProvider);
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -117,8 +120,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   _buildStatChip(
                     Icons.circle,
                     AppTheme.callGreen,
-                    ContactsService.instance
-                        .getByPresence('Available')
+                    allContacts
+                        .where((c) => c.presenceState == 'Available')
                         .length
                         .toString(),
                     'Available',
@@ -127,8 +130,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   _buildStatChip(
                     Icons.circle,
                     AppTheme.errorRed,
-                    ContactsService.instance
-                        .getByPresence('Busy')
+                    allContacts
+                        .where((c) => c.presenceState == 'Busy')
                         .length
                         .toString(),
                     'Busy',
@@ -137,8 +140,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   _buildStatChip(
                     Icons.circle,
                     AppTheme.textTertiary,
-                    ContactsService.instance
-                        .getByPresence('Unknown')
+                    allContacts
+                        .where((c) => c.presenceState == 'Unknown')
                         .length
                         .toString(),
                     'Unknown',
@@ -151,7 +154,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
             // Contacts list
             Expanded(
-              child: _buildContactsList(),
+              child: _buildContactsList(allContacts),
             ),
           ],
         ),
@@ -215,8 +218,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     );
   }
 
-  Widget _buildContactsList() {
-    var contacts = ContactsService.instance.contacts.where((c) {
+  Widget _buildContactsList(List<BlfContact> allContacts) {
+    var contacts = allContacts.where((c) {
       if (_searchQuery.isEmpty) return true;
       final query = _searchQuery.toLowerCase();
       return c.name.toLowerCase().contains(query) ||
@@ -347,14 +350,13 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           FilledButton(
             onPressed: () {
               if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
-                ContactsService.instance.addContact(BlfContact(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameCtrl.text,
-                  sipUri: phoneCtrl.text,
-                  extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
-                ));
+                ref.read(contactsProvider.notifier).addContact(BlfContact(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      name: nameCtrl.text,
+                      sipUri: phoneCtrl.text,
+                      extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
+                    ));
                 Navigator.pop(context);
-                setState(() {});
               }
             },
             child: const Text('Add'),
@@ -365,7 +367,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 
   void _refreshContacts() {
-    setState(() {});
+    ref.read(contactsProvider.notifier).loadContacts();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Contacts refreshed'),
