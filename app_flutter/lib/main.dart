@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'dart:ui' as ui;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
@@ -557,11 +558,17 @@ class _AppState extends ConsumerState<App>
             child: IncomingCallBanner(
               callInfo: incomingCallInfo,
               onAnswer: () {
-                EngineChannel.instance.engine.answerCall();
+                // Schedule answer on next frame to avoid blocking UI
+                SchedulerBinding.instance.addPostFrameCallback((_) {
+                  EngineChannel.instance.engine.answerCall();
+                });
               },
               onReject: () {
-                EngineChannel.instance.engine.hangup();
-                ref.read(incomingCallProvider.notifier).clear();
+                // Schedule reject on next frame to avoid blocking UI
+                SchedulerBinding.instance.addPostFrameCallback((_) {
+                  EngineChannel.instance.engine.hangup();
+                  ref.read(incomingCallProvider.notifier).clear();
+                });
               },
             ),
           ),

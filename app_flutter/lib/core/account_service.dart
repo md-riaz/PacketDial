@@ -233,6 +233,18 @@ class AccountService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setAccountEnabled(String uuid, bool enabled) async {
+    await isar!.writeTxn(() async {
+      final account =
+          await isar!.accountSchemas.filter().uuidEqualTo(uuid).findFirst();
+      if (account != null) {
+        account.isEnabled = enabled;
+        await isar!.accountSchemas.put(account);
+      }
+    });
+    notifyListeners();
+  }
+
   // Registration bridge
   int register(AccountSchema schema) {
     final engine = _ref.read(engineProvider);
@@ -291,9 +303,9 @@ class AccountService extends ChangeNotifier {
 
     bool didRegister = false;
 
-    // Register all accounts that have autoRegister enabled
+    // Register all accounts that have isEnabled enabled
     for (final acct in all) {
-      if (acct.autoRegister) {
+      if (acct.isEnabled) {
         final rc = register(acct);
         if (rc == 0) {
           didRegister = true;
@@ -304,7 +316,7 @@ class AccountService extends ChangeNotifier {
       }
     }
 
-    // Fallback: if no account had autoRegister, register the selected one
+    // Fallback: if no account had isEnabled, register the selected one
     // or the first account
     if (!didRegister) {
       final selected = all.where((a) => a.isSelected).firstOrNull ?? all.first;

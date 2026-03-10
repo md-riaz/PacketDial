@@ -186,6 +186,10 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
 
     try {
       final service = ref.read(accountServiceProvider);
+
+      // First persist the enabled state
+      await service.setAccountEnabled(widget.account.uuid, value);
+
       if (value == true) {
         // Try to register this account
         debugPrint(
@@ -365,11 +369,10 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
   @override
   Widget build(BuildContext context) {
     final isSelected = widget.account.isSelected;
+    final isEnabled = widget.account.isEnabled;
     final registrationState = EngineChannel
             .instance.accounts[widget.account.uuid]?.registrationState ??
         RegistrationState.unregistered;
-    final isRegistered = registrationState == RegistrationState.registered ||
-        registrationState == RegistrationState.registering;
 
     return GestureDetector(
       onTap: () => widget.parent._showAccountSetup(widget.account),
@@ -458,7 +461,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                 Transform.scale(
                   scale: 0.8,
                   child: Switch(
-                    value: isRegistered,
+                    value: isEnabled,
                     onChanged: (_isRegistering ||
                             registrationState == RegistrationState.registering)
                         ? null

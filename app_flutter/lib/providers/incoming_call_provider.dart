@@ -1,67 +1,54 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_settings_service.dart';
-import '../core/engine_channel.dart';
+import '../core/call_event_service.dart';
 
 class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
   IncomingCallNotifier() : super(null) {
-    _sub = EngineChannel.instance.eventStream.listen(_onEvent);
+    debugPrint('[IncomingCallNotifier] Initializing, subscribing to events');
+    // Subscribe to call events from the event bus
+    _sub = CallEventService.instance.eventStream.listen(_onCallEvent);
   }
 
-  StreamSubscription<Map<String, dynamic>>? _sub;
+  StreamSubscription<CallEvent>? _sub;
 
-  void _onEvent(Map<String, dynamic> event) {
-    final type = event['type'] as String?;
-    if (type != 'CallStateChanged') return;
-
-    final payload = (event['payload'] as Map<String, dynamic>?) ?? {};
-    final direction = (payload['direction'] as String? ?? '').toLowerCase();
-    final callState = (payload['state'] as String? ?? '').toLowerCase();
+  void _onCallEvent(CallEvent event) {
+    debugPrint('[IncomingCallNotifier] Received event: ${event.state} ${event.direction}');
+    final callState = event.state.toLowerCase();
+    final direction = event.direction.toLowerCase();
     final dndEnabled = AppSettingsService.instance.dndEnabled;
 
-    if (direction == 'incoming' && callState == 'ringing' && !dndEnabled) {
-      final accountId = payload['account_id'] as String? ?? '';
-      final account = EngineChannel.instance.accounts[accountId];
-      final payloadAccountName = payload['account_name'] as String? ?? '';
-      final payloadAccountUser = payload['account_user'] as String? ?? '';
-      final resolvedAccountName = payloadAccountName.isNotEmpty
-          ? payloadAccountName
-          : (account?.accountName.isNotEmpty == true
-              ? account!.accountName
-              : (account?.displayName.isNotEmpty == true
-                  ? account!.displayName
-                  : (account?.username.isNotEmpty == true
-                      ? account!.username
-                      : 'SIP Account')));
-      final resolvedAccountUser = payloadAccountUser.isNotEmpty
-          ? payloadAccountUser
-          : (account?.username ?? '');
-
+    if (direction == 'incoming' && callState == 'callstate.ringing' && !dndEnabled) {
+      debugPrint('[IncomingCallNotifier] Setting incoming call state');
       state = {
-        'uri': payload['uri'] as String? ?? '',
+        'uri': event.uri,
         'direction': 'Incoming',
-        'account_name': resolvedAccountName,
-        'account_user': resolvedAccountUser,
-        'extid': payload['extid'] as String? ?? '',
-        'customer_data':
-            payload['customer_data'] as Map<String, dynamic>? ?? {},
+        'account_name': event.accountName ?? 'SIP Account',
+        'account_user': event.accountUser ?? '',
+        'extid': event.extid ?? '',
+        'customer_data': event.customerData ?? {},
       };
+      debugPrint('[IncomingCallNotifier] State updated: $state');
       return;
     }
 
-    if (callState == 'incall' || callState == 'ended') {
+    if (callState == 'callstate.incall' || callState == 'callstate.ended') {
+      debugPrint('[IncomingCallNotifier] Clearing incoming call state');
       state = null;
     }
   }
 
   void clear() {
+    debugPrint('[IncomingCallNotifier] Clear called');
     state = null;
   }
 
   @override
   void dispose() {
+    debugPrint('[IncomingCallNotifier] Disposing');
     _sub?.cancel();
     super.dispose();
   }
@@ -69,6 +56,7 @@ class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
 
 final incomingCallProvider =
     StateNotifierProvider<IncomingCallNotifier, Map<String, dynamic>?>((ref) {
+  debugPrint('[IncomingCallProvider] Creating notifier');
   final notifier = IncomingCallNotifier();
   ref.onDispose(notifier.dispose);
   return notifier;

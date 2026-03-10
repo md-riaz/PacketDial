@@ -15,8 +15,8 @@ import '../models/sip_message.dart';
 import '../models/media_stats.dart';
 import '../models/call_history_schema.dart';
 import 'package:isar/isar.dart';
-import 'app_settings_service.dart';
 import 'audio_service.dart';
+import 'call_event_service.dart';
 import 'integration_service.dart';
 import 'recording_service.dart';
 
@@ -352,19 +352,6 @@ class EngineChannel {
     return _engine?.mergeConference(callAId, callBId) ?? -1;
   }
 
-  Future<void> _startRecordingDeferred(int callId) async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    final current = activeCall;
-    if (current == null || current.callId != callId) return;
-    if (current.state != CallState.inCall) return;
-    if (RecordingService.instance.isRecording) return;
-
-    try {
-      await RecordingService.instance.startRecording();
-    } catch (e) {
-      debugPrint('[EngineChannel] Deferred recording start failed: $e');
-    }
-  }
 
   Future<void> _stopRecordingDeferred() async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -443,7 +430,6 @@ class EngineChannel {
       case 'CallStateChanged':
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
         final state = CallState.fromString(payload['state'] as String? ?? '');
-        final previousState = activeCall?.state;
         final eventCall = ActiveCall(
           callId: callId,
           accountId: payload['account_id'] as String? ?? '',
@@ -463,30 +449,22 @@ class EngineChannel {
         );
         activeCall = eventCall;
 
-        // Handle Audio Feedback
-        if (state == CallState.ringing) {
-          final direction =
-              (payload['direction'] as String? ?? '').toLowerCase();
-          if (direction == 'incoming') {
-            AudioService.instance.startRingtone();
-            IntegrationService.instance.onIncomingCall(eventCall);
-          } else {
-            AudioService.instance.startRingback();
-          }
-        } else if (state == CallState.inCall || state == CallState.ended) {
-          AudioService.instance.stopAll();
+        debugPrint('[EngineChannel] Emitting CallEvent for call $callId, state $state');
 
-          // Auto-start local recording for every call when enabled.
-          if (state == CallState.inCall &&
-              previousState != CallState.inCall &&
-              AppSettingsService.instance.localCallRecordingEnabled &&
-              !RecordingService.instance.isRecording) {
-            unawaited(_startRecordingDeferred(callId));
-          }
-          if (state == CallState.inCall && previousState != CallState.inCall) {
-            IntegrationService.instance.onCallAnswered(eventCall);
-          }
-        }
+        // Emit call event to all listeners (thread-safe, no platform calls)
+        CallEventService.instance.addEvent(CallEvent(
+          callId: callId,
+          accountId: payload['account_id'] as String? ?? '',
+          state: state.toString(),
+          direction: payload['direction'] as String? ?? '',
+          uri: payload['uri'] as String? ?? '',
+          accountName: payload['account_name'] as String?,
+          accountUser: payload['account_user'] as String?,
+          extid: payload['extid'] as String?,
+          customerData:
+              payload['customer_data'] as Map<String, dynamic>?,
+          timestamp: DateTime.now(),
+        ));
 
         if (state == CallState.ended) {
           final endedRecordingPath = (payload['recording_path'] as String?) ??

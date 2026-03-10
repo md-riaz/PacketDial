@@ -42,58 +42,63 @@ const AccountSchemaSchema = CollectionSchema(
       name: r'domain',
       type: IsarType.string,
     ),
-    r'isSelected': PropertySchema(
+    r'isEnabled': PropertySchema(
       id: 5,
+      name: r'isEnabled',
+      type: IsarType.bool,
+    ),
+    r'isSelected': PropertySchema(
+      id: 6,
       name: r'isSelected',
       type: IsarType.bool,
     ),
     r'password': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'password',
       type: IsarType.string,
     ),
     r'server': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'server',
       type: IsarType.string,
     ),
     r'sipProxy': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'sipProxy',
       type: IsarType.string,
     ),
     r'srtpEnabled': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'srtpEnabled',
       type: IsarType.bool,
     ),
     r'stunServer': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'stunServer',
       type: IsarType.string,
     ),
     r'tlsEnabled': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'tlsEnabled',
       type: IsarType.bool,
     ),
     r'transport': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'transport',
       type: IsarType.string,
     ),
     r'turnServer': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'turnServer',
       type: IsarType.string,
     ),
     r'username': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'username',
       type: IsarType.string,
     ),
     r'uuid': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'uuid',
       type: IsarType.string,
     )
@@ -158,17 +163,18 @@ void _accountSchemaSerialize(
   writer.writeBool(offsets[2], object.autoRegister);
   writer.writeString(offsets[3], object.displayName);
   writer.writeString(offsets[4], object.domain);
-  writer.writeBool(offsets[5], object.isSelected);
-  writer.writeString(offsets[6], object.password);
-  writer.writeString(offsets[7], object.server);
-  writer.writeString(offsets[8], object.sipProxy);
-  writer.writeBool(offsets[9], object.srtpEnabled);
-  writer.writeString(offsets[10], object.stunServer);
-  writer.writeBool(offsets[11], object.tlsEnabled);
-  writer.writeString(offsets[12], object.transport);
-  writer.writeString(offsets[13], object.turnServer);
-  writer.writeString(offsets[14], object.username);
-  writer.writeString(offsets[15], object.uuid);
+  writer.writeBool(offsets[5], object.isEnabled);
+  writer.writeBool(offsets[6], object.isSelected);
+  writer.writeString(offsets[7], object.password);
+  writer.writeString(offsets[8], object.server);
+  writer.writeString(offsets[9], object.sipProxy);
+  writer.writeBool(offsets[10], object.srtpEnabled);
+  writer.writeString(offsets[11], object.stunServer);
+  writer.writeBool(offsets[12], object.tlsEnabled);
+  writer.writeString(offsets[13], object.transport);
+  writer.writeString(offsets[14], object.turnServer);
+  writer.writeString(offsets[15], object.username);
+  writer.writeString(offsets[16], object.uuid);
 }
 
 AccountSchema _accountSchemaDeserialize(
@@ -184,17 +190,18 @@ AccountSchema _accountSchemaDeserialize(
   object.displayName = reader.readString(offsets[3]);
   object.domain = reader.readString(offsets[4]);
   object.id = id;
-  object.isSelected = reader.readBool(offsets[5]);
-  object.password = reader.readString(offsets[6]);
-  object.server = reader.readString(offsets[7]);
-  object.sipProxy = reader.readString(offsets[8]);
-  object.srtpEnabled = reader.readBool(offsets[9]);
-  object.stunServer = reader.readString(offsets[10]);
-  object.tlsEnabled = reader.readBool(offsets[11]);
-  object.transport = reader.readString(offsets[12]);
-  object.turnServer = reader.readString(offsets[13]);
-  object.username = reader.readString(offsets[14]);
-  object.uuid = reader.readString(offsets[15]);
+  object.isEnabled = reader.readBool(offsets[5]);
+  object.isSelected = reader.readBool(offsets[6]);
+  object.password = reader.readString(offsets[7]);
+  object.server = reader.readString(offsets[8]);
+  object.sipProxy = reader.readString(offsets[9]);
+  object.srtpEnabled = reader.readBool(offsets[10]);
+  object.stunServer = reader.readString(offsets[11]);
+  object.tlsEnabled = reader.readBool(offsets[12]);
+  object.transport = reader.readString(offsets[13]);
+  object.turnServer = reader.readString(offsets[14]);
+  object.username = reader.readString(offsets[15]);
+  object.uuid = reader.readString(offsets[16]);
   return object;
 }
 
@@ -218,24 +225,26 @@ P _accountSchemaDeserializeProp<P>(
     case 5:
       return (reader.readBool(offset)) as P;
     case 6:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
-      return (reader.readBool(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 10:
-      return (reader.readString(offset)) as P;
-    case 11:
       return (reader.readBool(offset)) as P;
-    case 12:
+    case 11:
       return (reader.readString(offset)) as P;
+    case 12:
+      return (reader.readBool(offset)) as P;
     case 13:
       return (reader.readString(offset)) as P;
     case 14:
       return (reader.readString(offset)) as P;
     case 15:
+      return (reader.readString(offset)) as P;
+    case 16:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1059,6 +1068,16 @@ extension AccountSchemaQueryFilter
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<AccountSchema, AccountSchema, QAfterFilterCondition>
+      isEnabledEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isEnabled',
+        value: value,
       ));
     });
   }
@@ -2255,6 +2274,19 @@ extension AccountSchemaQuerySortBy
     });
   }
 
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> sortByIsEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy>
+      sortByIsEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isEnabled', Sort.desc);
+    });
+  }
+
   QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> sortByIsSelected() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isSelected', Sort.asc);
@@ -2477,6 +2509,19 @@ extension AccountSchemaQuerySortThenBy
     });
   }
 
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> thenByIsEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isEnabled', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy>
+      thenByIsEnabledDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isEnabled', Sort.desc);
+    });
+  }
+
   QueryBuilder<AccountSchema, AccountSchema, QAfterSortBy> thenByIsSelected() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isSelected', Sort.asc);
@@ -2656,6 +2701,12 @@ extension AccountSchemaQueryWhereDistinct
     });
   }
 
+  QueryBuilder<AccountSchema, AccountSchema, QDistinct> distinctByIsEnabled() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isEnabled');
+    });
+  }
+
   QueryBuilder<AccountSchema, AccountSchema, QDistinct> distinctByIsSelected() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'isSelected');
@@ -2767,6 +2818,12 @@ extension AccountSchemaQueryProperty
   QueryBuilder<AccountSchema, String, QQueryOperations> domainProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'domain');
+    });
+  }
+
+  QueryBuilder<AccountSchema, bool, QQueryOperations> isEnabledProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isEnabled');
     });
   }
 

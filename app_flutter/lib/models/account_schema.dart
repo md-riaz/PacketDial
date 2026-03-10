@@ -25,6 +25,7 @@ class AccountSchema {
   late bool srtpEnabled;
   late bool autoRegister;
   late bool isSelected;
+  late bool isEnabled;
 
   // We don't persist registrationState as it's runtime-only
 
@@ -47,6 +48,7 @@ class AccountSchema {
       'srtpEnabled': srtpEnabled,
       'autoRegister': autoRegister,
       'isSelected': isSelected,
+      'isEnabled': isEnabled,
     };
   }
 
@@ -68,6 +70,7 @@ class AccountSchema {
       ..tlsEnabled = json['tlsEnabled'] as bool? ?? false
       ..srtpEnabled = json['srtpEnabled'] as bool? ?? false
       ..autoRegister = json['autoRegister'] as bool? ?? true
-      ..isSelected = json['isSelected'] as bool? ?? false;
+      ..isSelected = json['isSelected'] as bool? ?? false
+      ..isEnabled = json['isEnabled'] as bool? ?? true;
   }
 }

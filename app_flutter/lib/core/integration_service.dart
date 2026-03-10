@@ -5,17 +5,99 @@ import 'customer_lookup_service.dart';
 import 'screen_pop_service.dart';
 import 'dialing_rules_service.dart';
 import 'sip_uri_utils.dart';
+import 'call_event_service.dart';
 import '../models/call.dart';
 import '../models/customer_data.dart';
 
 class IntegrationService {
-  IntegrationService._();
+  IntegrationService._() {
+    // Subscribe to call events from the event bus
+    CallEventService.instance.eventStream.listen(_onCallEvent);
+  }
+
   static final IntegrationService instance = IntegrationService._();
 
   final _client = http.Client();
   CustomerData? _lastCustomerData;
   String? _lastExtId;
   String? _lastDidNumber;
+
+  // Track active calls to prevent duplicate event handling
+  final Set<int> _ringingCalls = {};
+  final Set<int> _answeredCalls = {};
+  final Set<int> _endedCalls = {};
+
+  /// Handle call events from the event stream.
+  void _onCallEvent(CallEvent event) {
+    // FlutterEventBus guarantees this is called on the platform thread,
+    // so it's safe to call platform channels (HTTP, screen pop, etc.)
+    final state = event.state.toLowerCase();
+    final direction = event.direction.toLowerCase();
+
+    if (direction == 'incoming' && state == 'callstate.ringing') {
+      // Guard: Prevent duplicate ring events for same call
+      if (_ringingCalls.contains(event.callId)) return;
+      _ringingCalls.add(event.callId);
+
+      // Create a minimal ActiveCall for integration
+      final call = ActiveCall(
+        callId: event.callId,
+        accountId: event.accountId,
+        uri: event.uri,
+        direction: CallDirection.incoming,
+        state: CallState.ringing,
+        muted: false,
+        onHold: false,
+      );
+
+      // Fire and forget - don't block the event stream
+      onIncomingCall(
+        call,
+        extid: event.extid,
+        didNumber: null,
+      );
+    } else if (state == 'callstate.incall') {
+      // Guard: Prevent duplicate answer events for same call
+      if (_answeredCalls.contains(event.callId)) return;
+      _answeredCalls.add(event.callId);
+      _ringingCalls.remove(event.callId);
+
+      final call = ActiveCall(
+        callId: event.callId,
+        accountId: event.accountId,
+        uri: event.uri,
+        direction: direction == 'incoming' ? CallDirection.incoming : CallDirection.outgoing,
+        state: CallState.inCall,
+        muted: false,
+        onHold: false,
+      );
+
+      onCallAnswered(call);
+    } else if (state == 'callstate.ended') {
+      // Guard: Prevent duplicate end events for same call
+      if (_endedCalls.contains(event.callId)) return;
+      _endedCalls.add(event.callId);
+      _ringingCalls.remove(event.callId);
+      _answeredCalls.remove(event.callId);
+
+      final call = ActiveCall(
+        callId: event.callId,
+        accountId: event.accountId,
+        uri: event.uri,
+        direction: direction == 'incoming' ? CallDirection.incoming : CallDirection.outgoing,
+        state: CallState.ended,
+        muted: false,
+        onHold: false,
+      );
+
+      onCallEnd(call, recordingPath: null);
+
+      // Cleanup: Remove from tracking after a delay
+      Future.delayed(const Duration(seconds: 5), () {
+        _endedCalls.remove(event.callId);
+      });
+    }
+  }
 
   /// Called when an incoming call starts ringing.
   Future<void> onIncomingCall(
