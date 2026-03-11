@@ -9,7 +9,7 @@ import '../providers/engine_provider.dart';
 import '../widgets/empty_state.dart';
 import 'account_setup_page.dart';
 
-final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
+final accountsListProvider = Provider<List<AccountSchema>>((ref) {
   return ref.watch(accountServiceProvider).getAllAccounts();
 });
 
@@ -43,7 +43,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final accountsAsync = ref.watch(accountsListProvider);
+    final accounts = ref.watch(accountsListProvider);
 
     // Simple way to listen to global reg updates and refresh local UI list
     ref.listen(engineEventsProvider, (prev, next) {
@@ -63,27 +63,14 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
           ),
         ],
       ),
-      body: accountsAsync.when(
-        data: (accounts) => accounts.isEmpty
-            ? _buildEmptyState()
-            : ListView.builder(
-                padding: const EdgeInsets.all(10),
-                itemCount: accounts.length,
-                itemBuilder: (_, i) =>
-                    _AccountCard(account: accounts[i], parent: this),
-              ),
-        loading: () => Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor:
-                AlwaysStoppedAnimation(AppTheme.primary.withValues(alpha: 0.6)),
-          ),
-        ),
-        error: (e, _) => Center(
-          child: Text('Error: $e',
-              style: const TextStyle(color: AppTheme.errorRed)),
-        ),
-      ),
+      body: accounts.isEmpty
+          ? _buildEmptyState()
+          : ListView.builder(
+              padding: const EdgeInsets.all(10),
+              itemCount: accounts.length,
+              itemBuilder: (_, i) =>
+                  _AccountCard(account: accounts[i], parent: this),
+            ),
     );
   }
 
@@ -233,7 +220,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
         }
 
         // Keep a default account selected for UI fallback if none exists yet.
-        final selected = await service.getSelectedAccount();
+        final selected = service.getSelectedAccount();
         if (selected == null) {
           await service.setSelectedAccount(widget.account.uuid);
         }

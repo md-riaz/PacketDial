@@ -435,21 +435,16 @@ int pd_get_global_auto_answer(int *enabled_out, int *delay_ms_out);
  * ----------------------------------------------------------------------- */
 
 /**
- * Return the number of available audio devices.
+ * Get info for all audio devices in one call.
+ * @param max_count     Maximum number of devices to fetch (size of allocated arrays).
+ * @param ids_out       Array to receive pjmedia device ids.
+ * @param names_out     Flat char array to receive NUL-terminated device names.
+ * @param name_max_len  Length of each string slot in names_out.
+ * @param kinds_out     Array to receive device kinds (0=input, 1=output, 2=both).
+ * @return Number of devices successfully enumerated, or -1 on error.
  */
-unsigned pd_aud_dev_count(void);
-
-/**
- * Get info for one audio device.
- * @param idx        Device index (0 .. pd_aud_dev_count()-1).
- * @param id_out     Receives the pjmedia device id.
- * @param name_buf   Caller-allocated buffer to receive device name.
- * @param name_len   Size of name_buf in bytes.
- * @param kind_out   Receives 0=input, 1=output, 2=both.
- * @return 0 on success, non-zero if idx is out of range.
- */
-int pd_aud_dev_info(unsigned idx, int *id_out,
-                    char *name_buf, int name_len, int *kind_out);
+int pd_aud_dev_list(int max_count, int *ids_out, char *names_out, 
+                    int name_max_len, int *kinds_out);
 
 /**
  * Set the active capture and playback devices.

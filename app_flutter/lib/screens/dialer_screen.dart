@@ -17,7 +17,7 @@ import '../providers/engine_provider.dart';
 import '../providers/dialer_ui_provider.dart';
 import '../widgets/gradient_action_button.dart';
 
-final selectedAccountProvider = FutureProvider<AccountSchema?>((ref) {
+final selectedAccountProvider = Provider<AccountSchema?>((ref) {
   return ref.watch(accountServiceProvider).getSelectedAccount();
 });
 
@@ -162,30 +162,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   void _executeCall(Account activeAccount, String raw) {
     final accountId = activeAccount.uuid;
-    final server = activeAccount.server;
 
-    final originalTarget = raw.trim();
-    String uri = originalTarget;
+    final uri = raw.trim();
     if (uri.isEmpty) {
       debugPrint('[Dialer] _executeCall aborted: empty dial target');
       return;
     }
 
-    if (!uri.contains(':')) {
-      // No scheme, add sip: and domain if available
-      uri = server.isNotEmpty ? 'sip:$uri@$server' : 'sip:$uri';
-    } else if (uri.startsWith('sip:') || uri.startsWith('sips:')) {
-      // Has scheme but might be missing domain (e.g. sip:123)
-      if (!uri.contains('@') && server.isNotEmpty) {
-        uri = '$uri@$server';
-      }
-    } else {
-      // Other scheme (e.g. tel:), just prepend sip: if it looks like a number
-      uri = 'sip:$uri';
-    }
-
-    debugPrint(
-        '[Dialer] makeCall account=$accountId normalized_target="$uri" (raw="$originalTarget")');
+    debugPrint('[Dialer] makeCall account=$accountId target="$uri"');
     final rc = EngineChannel.instance.engine.makeCall(accountId, uri);
     debugPrint('[Dialer] makeCall rc=$rc');
     if (rc != 0) {
@@ -531,8 +515,6 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                transferCtrl.dispose();
-                transferFocusNode.dispose();
                 Navigator.pop(context);
               },
               child: const Text('Cancel',
@@ -1022,7 +1004,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeAccountAsync = ref.watch(selectedAccountProvider);
+    final activeAccount = ref.watch(selectedAccountProvider);
     final activeCall = ref.watch(activeCallProvider);
     final stats = ref.watch(activeCallMediaStatsProvider);
     final dialerUi = ref.watch(dialerUiProvider);
@@ -1040,7 +1022,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             onInvoke: (_) {
               final audioDevices = ref.read(audioDevicesProvider);
               final activeAccountState = ref.read(activeAccountProvider);
-              _call(activeAccountAsync.value, activeAccountState, audioDevices);
+              _call(activeAccount, activeAccountState, audioDevices);
               return null;
             },
           ),
@@ -1053,8 +1035,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         },
         child: Focus(
           autofocus: true,
-          child: activeAccountAsync.when(
-            data: (activeAccount) {
+          child: Builder(
+            builder: (context) {
               final audioDevices = ref.watch(audioDevicesProvider);
               final activeAccountState = ref.watch(activeAccountProvider);
               return Padding(
@@ -1103,18 +1085,6 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 ),
               );
             },
-            loading: () => Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation(
-                  AppTheme.primary.withValues(alpha: 0.6),
-                ),
-              ),
-            ),
-            error: (e, _) => Center(
-              child: Text('Error: $e',
-                  style: const TextStyle(color: AppTheme.errorRed)),
-            ),
           ),
         ),
       ),

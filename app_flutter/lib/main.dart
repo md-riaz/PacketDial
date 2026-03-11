@@ -327,8 +327,8 @@ class _AppState extends ConsumerState<App>
 
   void _onRegistrationFailed(String accountId) async {
     if (!mounted) return;
-    // Look up account from Isar
-    final account = await widget.accountService.getAccountByUuid(accountId);
+    // Look up account
+    final account = widget.accountService.getAccountByUuid(accountId);
     if (account == null || !mounted) return;
 
     // Switch to Accounts tab

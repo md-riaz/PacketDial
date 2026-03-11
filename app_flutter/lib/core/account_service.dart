@@ -220,11 +220,11 @@ class AccountService extends ChangeNotifier {
     }
   }
 
-  Future<List<AccountSchema>> getAllAccounts() async {
+  List<AccountSchema> getAllAccounts() {
     return _accounts;
   }
 
-  Future<AccountSchema?> getSelectedAccount() async {
+  AccountSchema? getSelectedAccount() {
     try {
       return _accounts.firstWhere((a) => a.isSelected);
     } catch (_) {
@@ -232,7 +232,7 @@ class AccountService extends ChangeNotifier {
     }
   }
 
-  Future<AccountSchema?> getAccountByUuid(String uuid) async {
+  AccountSchema? getAccountByUuid(String uuid) {
     try {
       return _accounts.firstWhere((a) => a.uuid == uuid);
     } catch (_) {
@@ -285,19 +285,11 @@ class AccountService extends ChangeNotifier {
   }
 
   Future<void> setAccountEnabled(String uuid, bool enabled) async {
-    final account = getAccountByUuidSync(uuid);
+    final account = getAccountByUuid(uuid);
     if (account != null) {
       account.isEnabled = enabled;
       await _saveAccounts();
       notifyListeners();
-    }
-  }
-
-  AccountSchema? getAccountByUuidSync(String uuid) {
-    try {
-      return _accounts.firstWhere((a) => a.uuid == uuid);
-    } catch (_) {
-      return null;
     }
   }
 

@@ -1277,38 +1277,32 @@ int pd_call_merge_conference(int call_a, int call_b)
  * Audio device management
  * ----------------------------------------------------------------------- */
 
-unsigned pd_aud_dev_count(void)
+int pd_aud_dev_list(int max_count, int *ids_out, char *names_out, 
+                    int name_max_len, int *kinds_out)
 {
     pd_ensure_thread();
+    
     pjmedia_aud_dev_info infos[64];
     unsigned count = 64;
     pj_status_t st = pjsua_enum_aud_devs(infos, &count);
-    if (st != PJ_SUCCESS) return 0;
-    return count;
-}
-
-int pd_aud_dev_info(unsigned idx, int *id_out,
-                    char *name_buf, int name_len, int *kind_out)
-{
-    pjmedia_aud_dev_info infos[64];
-    unsigned count = 64;
-    if (pjsua_enum_aud_devs(infos, &count) != PJ_SUCCESS) return -1;
-    if (idx >= count) return -1;
-
-    if (id_out)   *id_out = (int)idx;
-    if (name_buf) safe_copy(name_buf, name_len, infos[idx].name);
-
-    if (kind_out) {
-        int has_input  = (infos[idx].input_count > 0);
-        int has_output = (infos[idx].output_count > 0);
-        if (has_input && has_output)
-            *kind_out = 2; /* both */
-        else if (has_input)
-            *kind_out = 0; /* input */
-        else
-            *kind_out = 1; /* output */
+    if (st != PJ_SUCCESS) return -1;
+    
+    int limit = (int)count < max_count ? (int)count : max_count;
+    for (int i = 0; i < limit; i++) {
+        if (ids_out) ids_out[i] = i;
+        if (names_out) safe_copy(names_out + (i * name_max_len), name_max_len, infos[i].name);
+        if (kinds_out) {
+            int has_input  = (infos[i].input_count > 0);
+            int has_output = (infos[i].output_count > 0);
+            if (has_input && has_output)
+                kinds_out[i] = 2; /* both */
+            else if (has_input)
+                kinds_out[i] = 0; /* input */
+            else
+                kinds_out[i] = 1; /* output */
+        }
     }
-    return 0;
+    return limit;
 }
 
 int pd_aud_set_devs(int capture_id, int playback_id)
@@ -1353,6 +1347,7 @@ int pd_aud_set_devs(int capture_id, int playback_id)
 
 int pd_aud_get_devs(int *capture_id_out, int *playback_id_out)
 {
+    pd_ensure_thread();
     int cap = -1, play = -1;
     pj_status_t st = pjsua_get_snd_dev(&cap, &play);
     if (capture_id_out)  *capture_id_out  = cap;
@@ -1371,6 +1366,8 @@ int pd_call_get_stream_stat(int call_id,
                              int    codec_buf_len,
                              int   *bitrate_kbps_out)
 {
+    pd_ensure_thread();
+    
     pjsua_call_info ci;
     pj_bzero(&ci, sizeof(ci));
     if (pjsua_call_get_info((pjsua_call_id)call_id, &ci) != PJ_SUCCESS)

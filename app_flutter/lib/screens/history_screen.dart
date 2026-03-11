@@ -121,7 +121,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     // Refresh when engine events indicate a change
     ref.listen(engineEventsProvider, (prev, next) {
       final type = next.value?['type'];
-      if (type == 'CallHistoryResult' || type == 'CallStateChanged') {
+      if (type == 'CallStateChanged') {
         ref.invalidate(historyListProvider);
         ref.invalidate(callStatsProvider);
       }

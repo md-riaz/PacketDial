@@ -20,7 +20,6 @@ typedef _EngineSetMuteC = ffi.Int32 Function(ffi.Int32);
 typedef _EngineSetHoldC = ffi.Int32 Function(ffi.Int32);
 typedef _EngineListAudioDevicesC = ffi.Int32 Function();
 typedef _EngineSetAudioDevicesC = ffi.Int32 Function(ffi.Int32, ffi.Int32);
-typedef _EngineQueryCallHistoryC = ffi.Int32 Function();
 typedef _EngineSetLogLevelC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineGetLogBufferC = ffi.Int32 Function();
 typedef _EngineSendDtmfC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
@@ -65,6 +64,30 @@ abstract class EngineEventId {
   static const int callTransferStatus = 18;
   static const int callTransferCompleted = 19;
   static const int conferenceMerged = 20;
+  static const int forwardingUpdated = 21;
+  static const int forwardingResult = 22;
+  static const int dndUpdated = 23;
+  static const int blfSubscribed = 24;
+  static const int blfUnsubscribed = 25;
+  static const int blfStatus = 26;
+  static const int lookupUrlUpdated = 27;
+  static const int lookupUrlResult = 28;
+  static const int codecPriorityUpdated = 29;
+  static const int codecPriorityResult = 30;
+  static const int codecUpdated = 31;
+  static const int autoAnswerUpdated = 32;
+  static const int autoAnswerResult = 33;
+  static const int dtmfMethodUpdated = 34;
+  static const int dtmfMethodResult = 35;
+  static const int accountConfigExported = 36;
+  static const int accountConfigImported = 37;
+  static const int accountProfileDeleted = 38;
+  static const int globalCodecPriorityUpdated = 39;
+  static const int globalCodecPriorityResult = 40;
+  static const int globalDtmfMethodUpdated = 41;
+  static const int globalDtmfMethodResult = 42;
+  static const int globalAutoAnswerUpdated = 43;
+  static const int globalAutoAnswerResult = 44;
 }
 
 class VoipEngine {
@@ -114,9 +137,6 @@ class VoipEngine {
   late final int Function(int, int) _setAudioDevices =
       _lib.lookupFunction<_EngineSetAudioDevicesC, int Function(int, int)>(
           'engine_set_audio_devices');
-  late final int Function() _queryCallHistory =
-      _lib.lookupFunction<_EngineQueryCallHistoryC, int Function()>(
-          'engine_query_call_history');
   late final int Function(ffi.Pointer<ffi.Int8>) _setLogLevel = _lib
       .lookupFunction<_EngineSetLogLevelC, int Function(ffi.Pointer<ffi.Int8>)>(
           'engine_set_log_level');
@@ -306,11 +326,6 @@ class VoipEngine {
   /// Returns 0 on success, non-zero on error.
   int setAudioDevices(int inputId, int outputId) =>
       _setAudioDevices(inputId, outputId);
-
-  /// Request call history.
-  /// This will trigger a CallHistoryResult event via the callback.
-  /// Returns 0 on success, non-zero on error.
-  int queryCallHistory() => _queryCallHistory();
 
   /// Set the active log level filter.
   int setLogLevel(String level) {

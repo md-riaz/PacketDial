@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:convert';
+import 'dart:collection';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 
@@ -72,13 +73,13 @@ class EngineChannel {
   int selectedOutputId = 1;
 
   /// Raw event JSON strings for the Diagnostics screen (event log tab).
-  final List<String> eventLog = [];
+  final Queue<String> eventLog = Queue();
 
   /// Structured log entries emitted by the engine (log tab).
-  final List<LogEntry> logBuffer = [];
+  final Queue<LogEntry> logBuffer = Queue();
 
   /// Captured SIP messages (REGISTER, INVITE, responses, etc.).
-  final List<SipMessage> sipMessages = [];
+  final Queue<SipMessage> sipMessages = Queue();
 
   // --- Lifecycle --------------------------------------------------------------
 
@@ -228,9 +229,9 @@ class EngineChannel {
           ..['raw_len'] = raw.length;
       }
     }
-    eventLog.add(jsonEncode({'type': eventType, 'payload': payloadForLog}));
-    if (eventLog.length > _kEventLogMax) {
-      eventLog.removeAt(0);
+    eventLog.addLast(jsonEncode({'type': eventType, 'payload': payloadForLog}));
+    while (eventLog.length > _kEventLogMax) {
+      eventLog.removeFirst();
     }
   }
 
@@ -249,8 +250,6 @@ class EngineChannel {
         return 'AudioDeviceList';
       case EngineEventId.audioDevicesSet:
         return 'AudioDevicesSet';
-      case EngineEventId.callHistoryResult:
-        return 'CallHistoryResult';
       case EngineEventId.sipMessageCaptured:
         return 'SipMessageCaptured';
       case EngineEventId.diagBundleReady:
@@ -277,6 +276,54 @@ class EngineChannel {
         return 'CallTransferCompleted';
       case EngineEventId.conferenceMerged:
         return 'ConferenceMerged';
+      case EngineEventId.forwardingUpdated:
+        return 'ForwardingUpdated';
+      case EngineEventId.forwardingResult:
+        return 'ForwardingResult';
+      case EngineEventId.dndUpdated:
+        return 'DndUpdated';
+      case EngineEventId.blfSubscribed:
+        return 'BlfSubscribed';
+      case EngineEventId.blfUnsubscribed:
+        return 'BlfUnsubscribed';
+      case EngineEventId.blfStatus:
+        return 'BlfStatusChanged';
+      case EngineEventId.lookupUrlUpdated:
+        return 'LookupUrlUpdated';
+      case EngineEventId.lookupUrlResult:
+        return 'LookupUrlResult';
+      case EngineEventId.codecPriorityUpdated:
+        return 'CodecPriorityUpdated';
+      case EngineEventId.codecPriorityResult:
+        return 'CodecPriorityResult';
+      case EngineEventId.codecUpdated:
+        return 'CodecUpdated';
+      case EngineEventId.autoAnswerUpdated:
+        return 'AutoAnswerUpdated';
+      case EngineEventId.autoAnswerResult:
+        return 'AutoAnswerResult';
+      case EngineEventId.dtmfMethodUpdated:
+        return 'DtmfMethodUpdated';
+      case EngineEventId.dtmfMethodResult:
+        return 'DtmfMethodResult';
+      case EngineEventId.accountConfigExported:
+        return 'AccountConfigExported';
+      case EngineEventId.accountConfigImported:
+        return 'AccountConfigImported';
+      case EngineEventId.accountProfileDeleted:
+        return 'AccountProfileDeleted';
+      case EngineEventId.globalCodecPriorityUpdated:
+        return 'GlobalCodecPriorityUpdated';
+      case EngineEventId.globalCodecPriorityResult:
+        return 'GlobalCodecPriorityResult';
+      case EngineEventId.globalDtmfMethodUpdated:
+        return 'GlobalDtmfMethodUpdated';
+      case EngineEventId.globalDtmfMethodResult:
+        return 'GlobalDtmfMethodResult';
+      case EngineEventId.globalAutoAnswerUpdated:
+        return 'GlobalAutoAnswerUpdated';
+      case EngineEventId.globalAutoAnswerResult:
+        return 'GlobalAutoAnswerResult';
       default:
         return 'Unknown';
     }
@@ -536,8 +583,6 @@ class EngineChannel {
             activeCall = null;
           }
           mediaStats.remove(callId);
-          // Refresh call history
-          _engine?.queryCallHistory();
         }
 
       case 'MediaStatsUpdated':
@@ -557,32 +602,25 @@ class EngineChannel {
         selectedInputId = (payload['input_id'] as num?)?.toInt() ?? 0;
         selectedOutputId = (payload['output_id'] as num?)?.toInt() ?? 1;
 
-      case 'CallHistoryResult':
-        callHistory.clear();
-        final entries = payload['entries'] as List<dynamic>? ?? [];
-        for (final e in entries) {
-          callHistory.add(CallHistoryEntry.fromMap(e as Map<String, dynamic>));
-        }
-
       case 'EngineLog':
         final entry = LogEntry.fromMap(payload);
-        logBuffer.add(entry);
-        if (logBuffer.length > _kLogBufferMax) {
-          logBuffer.removeAt(0);
+        logBuffer.addLast(entry);
+        while (logBuffer.length > _kLogBufferMax) {
+          logBuffer.removeFirst();
         }
 
       case 'LogBufferResult':
         logBuffer.clear();
         final entries = payload['entries'] as List<dynamic>? ?? [];
         for (final e in entries) {
-          logBuffer.add(LogEntry.fromMap(e as Map<String, dynamic>));
+          logBuffer.addLast(LogEntry.fromMap(e as Map<String, dynamic>));
         }
 
       case 'SipMessageCaptured':
         final msg = SipMessage.fromMap(payload);
-        sipMessages.add(msg);
-        if (sipMessages.length > _kSipMessageMax) {
-          sipMessages.removeAt(0);
+        sipMessages.addLast(msg);
+        while (sipMessages.length > _kSipMessageMax) {
+          sipMessages.removeFirst();
         }
 
       case 'CallTransferInitiated':

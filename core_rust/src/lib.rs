@@ -21,9 +21,8 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 static VERSION: OnceCell<CString> = OnceCell::new();
 static NEXT_CALL_ID: AtomicU32 = AtomicU32::new(1);
 
-static ACCOUNTS: Lazy<Mutex<Vec<Account>>> = Lazy::new(|| Mutex::new(Vec::new()));
-static CALLS: Lazy<Mutex<Vec<Call>>> = Lazy::new(|| Mutex::new(Vec::new()));
-static CALL_HISTORY: Lazy<Mutex<Vec<CallHistoryEntry>>> = Lazy::new(|| Mutex::new(Vec::new()));
+static ACCOUNTS: Lazy<Mutex<HashMap<String, Account>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static CALLS: Lazy<Mutex<HashMap<u32, Call>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static MEDIA_STATS: Lazy<Mutex<HashMap<u32, MediaStats>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static AUDIO_DEVICES: Lazy<Mutex<Vec<AudioDevice>>> = Lazy::new(|| {
@@ -190,7 +189,6 @@ struct Call {
     state: CallState,
     muted: bool,
     on_hold: bool,
-    started_at: u64,
     /// Accumulated active duration (talk time) in seconds.
     accumulated_active_secs: u64,
     /// Timestamp of the last time the call was resumed/started.
@@ -235,18 +233,6 @@ impl CallState {
             Self::Ended => "Ended",
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct CallHistoryEntry {
-    call_id: u32,
-    account_id: String,
-    uri: String,
-    direction: String,
-    started_at: u64,
-    ended_at: u64,
-    duration_secs: u64,
-    end_state: String,
 }
 
 #[derive(Debug, Clone)]
@@ -326,13 +312,12 @@ extern "C" {
     fn pd_call_hangup(call_id: i32) -> i32;
     fn pd_call_hold(call_id: i32, hold: i32) -> i32;
     fn pd_call_set_mute(call_id: i32, mute: i32) -> i32;
-    fn pd_aud_dev_count() -> u32;
-    fn pd_aud_dev_info(
-        idx: u32,
-        id_out: *mut i32,
-        name_buf: *mut c_char,
-        name_len: i32,
-        kind_out: *mut i32,
+    fn pd_aud_dev_list(
+        max_count: i32,
+        ids_out: *mut i32,
+        names_out: *mut c_char,
+        name_max_len: i32,
+        kinds_out: *mut i32,
     ) -> i32;
     fn pd_aud_set_devs(capture_id: i32, playback_id: i32) -> i32;
     fn pd_aud_get_devs(capture_id_out: *mut i32, playback_id_out: *mut i32) -> i32;
@@ -463,7 +448,7 @@ extern "C" fn pjsip_on_reg_state(
 
     {
         let mut accts = ACCOUNTS.lock().unwrap();
-        if let Some(a) = accts.iter_mut().find(|a| a.uuid == account_id) {
+        if let Some(a) = accts.get_mut(&account_id) {
             a.reg_state = new_state.clone();
         }
     }
@@ -515,7 +500,6 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
         state: CallState::Ringing,
         muted: false,
         on_hold: false,
-        started_at: now_secs(),
         accumulated_active_secs: 0,
         last_resumed_at: None,
         pjsip_call_id: Some(pj_call_id),
@@ -523,7 +507,8 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
     };
 
     push_call_state(&call);
-    CALLS.lock().unwrap().push(call);
+    let call_id = call.id;
+    CALLS.lock().unwrap().insert(call_id, call);
     PJSIP_CALL_MAP
         .lock()
         .unwrap()
@@ -567,7 +552,7 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
 
     {
         let mut calls = CALLS.lock().unwrap();
-        if let Some(call) = calls.iter_mut().find(|c| c.id == our_call_id) {
+        if let Some(call) = calls.get_mut(&our_call_id) {
             let old_state = call.state.clone();
             call.state = new_state.clone();
 
@@ -585,18 +570,6 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
             push_call_state(call);
 
             if should_record_history {
-                let ended_at = now_secs();
-                let entry = CallHistoryEntry {
-                    call_id: call.id,
-                    account_id: call.account_id.clone(),
-                    uri: call.uri.clone(),
-                    direction: call.direction.variant_name().to_owned(),
-                    started_at: call.started_at,
-                    ended_at,
-                    duration_secs: call.accumulated_active_secs,
-                    end_state: "Ended".to_owned(),
-                };
-                CALL_HISTORY.lock().unwrap().push(entry);
                 MEDIA_STATS.lock().unwrap().remove(&our_call_id);
             }
         }
@@ -619,7 +592,7 @@ extern "C" fn pjsip_on_call_media(pj_call_id: i32, active: i32) {
 
     if let Some(cid) = our_call_id {
         let mut calls = CALLS.lock().unwrap();
-        if let Some(call) = calls.iter_mut().find(|c| c.id == cid) {
+        if let Some(call) = calls.get_mut(&cid) {
             let old_on_hold = call.on_hold;
 
             if active != 0 {
@@ -681,7 +654,10 @@ extern "C" fn pjsip_on_sip_msg(pj_call_id: i32, is_tx: i32, msg_ptr: *const c_ch
             "raw": masked,
         }
     });
-    push_event(event.to_string());
+    push_event(
+        event["type"].as_str().unwrap_or("UnknownEvent"),
+        event["payload"].clone(),
+    );
 }
 
 /// PJSIP call transfer status callback.
@@ -727,7 +703,10 @@ extern "C" fn pjsip_on_transfer_status(
             "final": is_final != 0,
         }
     });
-    push_event(event.to_string());
+    push_event(
+        event["type"].as_str().unwrap_or("UnknownEvent"),
+        event["payload"].clone(),
+    );
 
     log_engine(
         LogLevel::Info,
@@ -790,7 +769,10 @@ extern "C" fn pjsip_on_blf_status(uri_ptr: *const c_char, state: i32, activity_p
             "activity": activity,
         }
     });
-    push_event(event.to_string());
+    push_event(
+        event["type"].as_str().unwrap_or("UnknownEvent"),
+        event["payload"].clone(),
+    );
 }
 
 /// Poll real-time media statistics for a PJSIP call and push a MediaStatsUpdated event.
@@ -866,15 +848,14 @@ fn log_engine(level: LogLevel, message: &str) {
 
     // Only emit the event if the level meets the active filter.
     if level <= active {
-        let msg_escaped = message
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r");
-        push_event(format!(
-            r#"{{"type":"EngineLog","payload":{{"level":"{}","message":"{msg_escaped}","ts":{ts}}}}}"#,
-            level.as_str()
-        ));
+        push_event(
+            "EngineLog",
+            serde_json::json!({
+                "level": level.as_str(),
+                "message": message,
+                "ts": ts,
+            }),
+        );
     }
 }
 
@@ -959,42 +940,67 @@ fn mask_single_uri(uri: &str) -> String {
 
 /// Parse event JSON and invoke the structured event callback.
 /// The JSON format is: {"type":"EventType","payload":{...}}
-fn push_event(json: String) {
-    // Parse the event type and forward to callback
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
-        if let Some(event_type) = v["type"].as_str() {
-            let event_id = match event_type {
-                "EngineReady" => EngineEventId::EngineReady,
-                "RegistrationStateChanged" => EngineEventId::RegistrationStateChanged,
-                "CallStateChanged" => EngineEventId::CallStateChanged,
-                "MediaStatsUpdated" => EngineEventId::MediaStatsUpdated,
-                "AudioDeviceList" => EngineEventId::AudioDeviceList,
-                "AudioDevicesSet" => EngineEventId::AudioDevicesSet,
-                "CallHistoryResult" => EngineEventId::CallHistoryResult,
-                "SipMessageCaptured" => EngineEventId::SipMessageCaptured,
-                "DiagBundleReady" => EngineEventId::DiagBundleReady,
-                "AccountSecurityUpdated" => EngineEventId::AccountSecurityUpdated,
-                "CredStored" => EngineEventId::CredStored,
-                "CredRetrieved" => EngineEventId::CredRetrieved,
-                "EnginePong" => EngineEventId::EnginePong,
-                "LogLevelSet" => EngineEventId::LogLevelSet,
-                "LogBufferResult" => EngineEventId::LogBufferResult,
-                "EngineLog" => EngineEventId::EngineLog,
-                _ => {
-                    // Even if unknown to the internal enum, we still broadcast to IPC
-                    broadcast_ipc(json);
-                    return;
-                }
-            };
-            // Extract payload and pass as JSON string
-            if let Some(payload) = v.get("payload") {
-                if let Ok(payload_json) = serde_json::to_string(payload) {
-                    invoke_event_callback(event_id, &payload_json);
-                }
-            }
+fn push_event(event_type: &str, payload: serde_json::Value) {
+    let event_id = match event_type {
+        "EngineReady" => Some(EngineEventId::EngineReady),
+        "RegistrationStateChanged" => Some(EngineEventId::RegistrationStateChanged),
+        "CallStateChanged" => Some(EngineEventId::CallStateChanged),
+        "MediaStatsUpdated" => Some(EngineEventId::MediaStatsUpdated),
+        "AudioDeviceList" => Some(EngineEventId::AudioDeviceList),
+        "AudioDevicesSet" => Some(EngineEventId::AudioDevicesSet),
+        "CallHistoryResult" => Some(EngineEventId::CallHistoryResult),
+        "SipMessageCaptured" => Some(EngineEventId::SipMessageCaptured),
+        "DiagBundleReady" => Some(EngineEventId::DiagBundleReady),
+        "AccountSecurityUpdated" => Some(EngineEventId::AccountSecurityUpdated),
+        "CredStored" => Some(EngineEventId::CredStored),
+        "CredRetrieved" => Some(EngineEventId::CredRetrieved),
+        "EnginePong" => Some(EngineEventId::EnginePong),
+        "LogLevelSet" => Some(EngineEventId::LogLevelSet),
+        "LogBufferResult" => Some(EngineEventId::LogBufferResult),
+        "EngineLog" => Some(EngineEventId::EngineLog),
+        "CallTransferInitiated" => Some(EngineEventId::CallTransferInitiated),
+        "CallTransferStatus" => Some(EngineEventId::CallTransferStatus),
+        "CallTransferCompleted" => Some(EngineEventId::CallTransferCompleted),
+        "ConferenceMerged" => Some(EngineEventId::ConferenceMerged),
+        "ForwardingUpdated" => Some(EngineEventId::ForwardingUpdated),
+        "ForwardingResult" => Some(EngineEventId::ForwardingResult),
+        "DndUpdated" => Some(EngineEventId::DndUpdated),
+        "BlfSubscribed" => Some(EngineEventId::BlfSubscribed),
+        "BlfUnsubscribed" => Some(EngineEventId::BlfUnsubscribed),
+        "BlfStatusChanged" => Some(EngineEventId::BlfStatus),
+        "LookupUrlUpdated" => Some(EngineEventId::LookupUrlUpdated),
+        "LookupUrlResult" => Some(EngineEventId::LookupUrlResult),
+        "CodecPriorityUpdated" => Some(EngineEventId::CodecPriorityUpdated),
+        "CodecPriorityResult" => Some(EngineEventId::CodecPriorityResult),
+        "CodecUpdated" => Some(EngineEventId::CodecUpdated),
+        "AutoAnswerUpdated" => Some(EngineEventId::AutoAnswerUpdated),
+        "AutoAnswerResult" => Some(EngineEventId::AutoAnswerResult),
+        "DtmfMethodUpdated" => Some(EngineEventId::DtmfMethodUpdated),
+        "DtmfMethodResult" => Some(EngineEventId::DtmfMethodResult),
+        "AccountConfigExported" => Some(EngineEventId::AccountConfigExported),
+        "AccountConfigImported" => Some(EngineEventId::AccountConfigImported),
+        "AccountProfileDeleted" => Some(EngineEventId::AccountProfileDeleted),
+        "GlobalCodecPriorityUpdated" => Some(EngineEventId::GlobalCodecPriorityUpdated),
+        "GlobalCodecPriorityResult" => Some(EngineEventId::GlobalCodecPriorityResult),
+        "GlobalDtmfMethodUpdated" => Some(EngineEventId::GlobalDtmfMethodUpdated),
+        "GlobalDtmfMethodResult" => Some(EngineEventId::GlobalDtmfMethodResult),
+        "GlobalAutoAnswerUpdated" => Some(EngineEventId::GlobalAutoAnswerUpdated),
+        "GlobalAutoAnswerResult" => Some(EngineEventId::GlobalAutoAnswerResult),
+        _ => None,
+    };
+
+    if let Some(id) = event_id {
+        if let Ok(payload_json) = serde_json::to_string(&payload) {
+            invoke_event_callback(id, &payload_json);
         }
     }
-    // Broadcast original JSON to all IPC listeners (CLI, PD, etc)
+
+    let json = serde_json::json!({
+        "type": event_type,
+        "payload": payload
+    })
+    .to_string();
+
     broadcast_ipc(json);
 }
 
@@ -1005,7 +1011,7 @@ fn broadcast_ipc(json: String) {
 
 fn push_reg_state(account_id: &str, state: &RegistrationState) {
     let (account_name, display_name, server, username) = if let Ok(accts) = ACCOUNTS.lock() {
-        if let Some(a) = accts.iter().find(|a| a.uuid == account_id) {
+        if let Some(a) = accts.get(account_id) {
             (
                 a.account_name.clone(),
                 a.display_name.clone(),
@@ -1023,10 +1029,18 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
         RegistrationState::Failed(r) => r.as_str(),
         _ => "",
     };
-    push_event(format!(
-        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{account_id}","account_name":"{account_name}","display_name":"{display_name}","server":"{server}","username":"{username}","state":"{}","reason":"{reason}"}}}}"#,
-        state.variant_name()
-    ));
+    push_event(
+        "RegistrationStateChanged",
+        serde_json::json!({
+            "account_id": account_id,
+            "account_name": account_name,
+            "display_name": display_name,
+            "server": server,
+            "username": username,
+            "state": state.variant_name(),
+            "reason": reason,
+        }),
+    );
 }
 
 fn push_call_state(call: &Call) {
@@ -1067,20 +1081,20 @@ fn push_call_state(call: &Call) {
         );
     }
 
-    push_event(
-        serde_json::json!({
-            "type": "CallStateChanged",
-            "payload": payload,
-        })
-        .to_string(),
-    );
+    push_event("CallStateChanged", serde_json::json!(payload));
 }
 
 fn push_media_stats(stats: &MediaStats) {
-    push_event(format!(
-        r#"{{"type":"MediaStatsUpdated","payload":{{"call_id":{},"jitter_ms":{:.1},"packet_loss_pct":{:.1},"codec":"{}","bitrate_kbps":{}}}}}"#,
-        stats.call_id, stats.jitter_ms, stats.packet_loss_pct, stats.codec, stats.bitrate_kbps
-    ));
+    push_event(
+        "MediaStatsUpdated",
+        serde_json::json!({
+            "call_id": stats.call_id,
+            "jitter_ms": (stats.jitter_ms * 10.0).round() / 10.0,
+            "packet_loss_pct": (stats.packet_loss_pct * 10.0).round() / 10.0,
+            "codec": stats.codec,
+            "bitrate_kbps": stats.bitrate_kbps,
+        }),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1125,7 +1139,6 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "BlfUnsubscribe" => cmd_blf_unsubscribe(payload),
         "AudioListDevices" => cmd_audio_list_devices(payload),
         "AudioSetDevices" => cmd_audio_set_devices(payload),
-        "CallHistoryQuery" => cmd_call_history_query(payload),
         "SipCaptureMessage" => cmd_sip_capture(payload),
         "DiagExportBundle" => cmd_diag_export(payload),
         "CredStore" => cmd_cred_store(payload),
@@ -1143,7 +1156,7 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     let mut accts = ACCOUNTS.lock().unwrap();
-    if let Some(existing) = accts.iter_mut().find(|a| a.uuid == uuid) {
+    if let Some(existing) = accts.get_mut(&uuid) {
         existing.account_name = p["account_name"].as_str().unwrap_or("").to_owned();
         existing.display_name = p["display_name"].as_str().unwrap_or("").to_owned();
         existing.server = p["server"].as_str().unwrap_or("").to_owned();
@@ -1176,7 +1189,7 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
             reg_state: RegistrationState::Unregistered,
             pjsip_acc_id: None,
         };
-        accts.push(acct);
+        accts.insert(uuid.clone(), acct);
         drop(accts);
         push_reg_state(&uuid, &RegistrationState::Unregistered);
     }
@@ -1192,7 +1205,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     // Snapshot account config for PJSIP (need it outside the lock)
     let acct_snapshot = {
         let accts = ACCOUNTS.lock().unwrap();
-        match accts.iter().find(|a| a.uuid == id) {
+        match accts.get(&id) {
             None => {
                 log_engine(
                     LogLevel::Error,
@@ -1209,7 +1222,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             RegistrationState::Failed("TLS transport is not enabled in this build".to_owned());
         {
             let mut accts = ACCOUNTS.lock().unwrap();
-            if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
+            if let Some(a) = accts.get_mut(&id) {
                 a.reg_state = fail.clone();
             }
         }
@@ -1224,7 +1237,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     // Transition to Registering state and remove any existing PJSIP account
     let old_pj_id = {
         let mut accts = ACCOUNTS.lock().unwrap();
-        if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
+        if let Some(a) = accts.get_mut(&id) {
             let old_id = a.pjsip_acc_id.take();
             a.reg_state = RegistrationState::Registering;
             old_id
@@ -1237,10 +1250,16 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         unsafe { pd_acc_remove(old_id) };
         PJSIP_ACC_MAP.lock().unwrap().remove(&old_id);
     }
-    push_event(format!(
-        r#"{{"type":"RegistrationStateChanged","payload":{{"account_id":"{id}","account_name":"{}","display_name":"{}","state":"Registering","reason":""}}}}"#,
-        acct_snapshot.account_name, acct_snapshot.display_name
-    ));
+    push_event(
+        "RegistrationStateChanged",
+        serde_json::json!({
+            "account_id": id,
+            "account_name": acct_snapshot.account_name,
+            "display_name": acct_snapshot.display_name,
+            "state": "Registering",
+            "reason": "",
+        }),
+    );
 
     // --- PJSIP registration ---
     {
@@ -1353,7 +1372,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         if pj_acc_id < 0 {
             let fail = RegistrationState::Failed("pd_acc_add failed".to_owned());
             let mut accts = ACCOUNTS.lock().unwrap();
-            if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
+            if let Some(a) = accts.get_mut(&id) {
                 a.reg_state = fail.clone();
             }
             push_reg_state(&id, &fail);
@@ -1367,7 +1386,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         // Store the PJSIP account id for future operations
         {
             let mut accts = ACCOUNTS.lock().unwrap();
-            if let Some(a) = accts.iter_mut().find(|a| a.uuid == id) {
+            if let Some(a) = accts.get_mut(&id) {
                 a.pjsip_acc_id = Some(pj_acc_id);
             }
         }
@@ -1389,7 +1408,7 @@ fn cmd_account_unregister(p: &serde_json::Value) -> EngineErrorCode {
 
     let pjsip_id = {
         let mut accts = ACCOUNTS.lock().unwrap();
-        if let Some(acct) = accts.iter_mut().find(|a| a.uuid == id) {
+        if let Some(acct) = accts.get_mut(&id) {
             let pj_id = acct.pjsip_acc_id.take();
             acct.reg_state = RegistrationState::Unregistered;
             pj_id
@@ -1441,7 +1460,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
         None => {
             // Pick first registered account if none specified
             let accts = ACCOUNTS.lock().unwrap();
-            match accts.iter().find(|a| a.pjsip_acc_id.is_some()) {
+            match accts.values().find(|a| a.pjsip_acc_id.is_some()) {
                 Some(a) => a.uuid.clone(),
                 None => {
                     log_engine(
@@ -1464,7 +1483,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
 
     let (pj_acc_id, domain_hint) = {
         let accts = ACCOUNTS.lock().unwrap();
-        match accts.iter().find(|a| a.uuid == account_id) {
+        match accts.get(&account_id) {
             Some(a) => {
                 let domain = if !a.domain.trim().is_empty() {
                     Some(a.domain.trim().to_owned())
@@ -1639,14 +1658,13 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             state: CallState::Ringing,
             muted: false,
             on_hold: false,
-            started_at: now_secs(),
             accumulated_active_secs: 0,
             last_resumed_at: None,
             pjsip_call_id: Some(pj_call_id),
             recording_path: None,
         };
         push_call_state(&call);
-        CALLS.lock().unwrap().push(call);
+        CALLS.lock().unwrap().insert(call_id, call);
         PJSIP_CALL_MAP.lock().unwrap().insert(pj_call_id, call_id);
         log_engine(
             LogLevel::Info,
@@ -1669,18 +1687,22 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
             None => {
                 // Find first ringing incoming call
                 calls_guard
-                    .iter()
+                    .values()
                     .find(|c| {
-                        c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming)
+                        c.state == CallState::Ringing
+                            && matches!(c.direction, CallDirection::Incoming)
                     })
                     .map(|c| c.id)
             }
         };
         let call_id = match call_id {
             Some(id) => {
-                log_engine(LogLevel::Debug, &format!("cmd_call_answer: Found call_id={}", id));
+                log_engine(
+                    LogLevel::Debug,
+                    &format!("cmd_call_answer: Found call_id={}", id),
+                );
                 id
-            },
+            }
             None => {
                 log_engine(LogLevel::Error, "cmd_call_answer: No ringing call found");
                 return EngineErrorCode::NotFound;
@@ -1688,13 +1710,19 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
         };
 
         // Get the PJSIP call ID while holding the lock
-        match calls_guard.iter().find(|c| c.id == call_id) {
+        match calls_guard.values().find(|c| c.id == call_id) {
             None => {
                 log_engine(LogLevel::Error, "cmd_call_answer: Call not found in guard");
                 return EngineErrorCode::NotFound;
-            },
+            }
             Some(call) => {
-                log_engine(LogLevel::Debug, &format!("cmd_call_answer: call.pjsip_call_id={:?}", call.pjsip_call_id));
+                log_engine(
+                    LogLevel::Debug,
+                    &format!(
+                        "cmd_call_answer: call.pjsip_call_id={:?}",
+                        call.pjsip_call_id
+                    ),
+                );
                 call.pjsip_call_id
             }
         }
@@ -1703,9 +1731,15 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
     // Now call PJSIP WITHOUT holding the lock to avoid deadlock
     match pj_id_result {
         Some(pj_id) => {
-            log_engine(LogLevel::Info, &format!("cmd_call_answer: Calling pd_call_answer({pj_id})..."));
+            log_engine(
+                LogLevel::Info,
+                &format!("cmd_call_answer: Calling pd_call_answer({pj_id})..."),
+            );
             let rc = unsafe { pd_call_answer(pj_id) };
-            log_engine(LogLevel::Info, &format!("cmd_call_answer: pd_call_answer({pj_id}) returned rc={rc}"));
+            log_engine(
+                LogLevel::Info,
+                &format!("cmd_call_answer: pd_call_answer({pj_id}) returned rc={rc}"),
+            );
             if rc != 0 {
                 log_engine(
                     LogLevel::Warn,
@@ -1717,10 +1751,7 @@ fn cmd_call_answer(p: &serde_json::Value) -> EngineErrorCode {
             EngineErrorCode::Ok
         }
         None => {
-            log_engine(
-                LogLevel::Error,
-                "CallAnswer: call has no PJSIP call id",
-            );
+            log_engine(LogLevel::Error, "CallAnswer: call has no PJSIP call id");
             EngineErrorCode::NotFound
         }
     }
@@ -1732,13 +1763,13 @@ fn cmd_call_hangup(p: &serde_json::Value) -> EngineErrorCode {
         let call_id = match p["call_id"].as_u64() {
             Some(n) => Some(n as u32),
             None => calls_guard
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id),
         };
         match call_id {
             Some(id) => calls_guard
-                .iter()
+                .values()
                 .find(|c| c.id == id)
                 .and_then(|c| c.pjsip_call_id),
             None => return EngineErrorCode::NotFound,
@@ -1771,13 +1802,13 @@ fn cmd_call_mute(p: &serde_json::Value) -> EngineErrorCode {
         let call_id = match p["call_id"].as_u64() {
             Some(n) => Some(n as u32),
             None => calls_guard
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id),
         }
         .unwrap_or(0); // fallback or error
 
-        match calls_guard.iter_mut().find(|c| c.id == call_id) {
+        match calls_guard.get_mut(&call_id) {
             None => return EngineErrorCode::NotFound,
             Some(call) => {
                 call.muted = muted;
@@ -1802,13 +1833,13 @@ fn cmd_call_hold(p: &serde_json::Value) -> EngineErrorCode {
         let call_id = match p["call_id"].as_u64() {
             Some(n) => Some(n as u32),
             None => calls_guard
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id),
         }
         .unwrap_or(0);
 
-        match calls_guard.iter_mut().find(|c| c.id == call_id) {
+        match calls_guard.get_mut(&call_id) {
             None => return EngineErrorCode::NotFound,
             Some(call) => {
                 call.on_hold = hold;
@@ -1854,59 +1885,62 @@ fn cmd_media_stats_update(p: &serde_json::Value) -> EngineErrorCode {
 }
 
 fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
-    // Enumerate real audio devices via PJSIP
+    // Enumerate real audio devices via PJSIP using the batch API
     {
-        let count = unsafe { pd_aud_dev_count() };
-        log_engine(
-            LogLevel::Info,
-            &format!("Audio enumeration: PJSIP reported {} devices", count),
-        );
-
         let mut real_devices: Vec<AudioDevice> = Vec::new();
-        for idx in 0..count {
-            let mut id: i32 = 0;
-            let mut name_buf = [0u8; 128];
-            let mut kind: i32 = 0;
-            let rc = unsafe {
-                pd_aud_dev_info(
-                    idx,
-                    &mut id,
-                    name_buf.as_mut_ptr() as *mut c_char,
-                    name_buf.len() as i32,
-                    &mut kind,
-                )
-            };
-            if rc != 0 {
+        let max_count = 64;
+        let mut ids = vec![0i32; max_count];
+        let mut names = vec![0u8; max_count * 128];
+        let mut kinds = vec![0i32; max_count];
+
+        let count = unsafe {
+            pd_aud_dev_list(
+                max_count as i32,
+                ids.as_mut_ptr(),
+                names.as_mut_ptr() as *mut c_char,
+                128,
+                kinds.as_mut_ptr(),
+            )
+        };
+
+        if count < 0 {
+            log_engine(LogLevel::Error, "Audio enumeration: pd_aud_dev_list failed");
+        } else {
+            log_engine(
+                LogLevel::Info,
+                &format!("Audio enumeration: PJSIP reported {} devices", count),
+            );
+
+            for i in 0..count as usize {
+                let id = ids[i];
+                let kind = kinds[i];
+                let name = unsafe {
+                    CStr::from_ptr(names[i * 128..].as_ptr() as *const c_char)
+                        .to_str()
+                        .unwrap_or("Unknown")
+                        .to_owned()
+                };
+
                 log_engine(
                     LogLevel::Debug,
-                    &format!("Audio device {} enumeration failed with rc={}", idx, rc),
+                    &format!("Found audio device: {} (id={}, kind={})", name, id, kind),
                 );
-                continue;
-            }
-            let name = unsafe {
-                CStr::from_ptr(name_buf.as_ptr() as *const c_char)
-                    .to_str()
-                    .unwrap_or("Unknown")
-                    .to_owned()
-            };
-            log_engine(
-                LogLevel::Debug,
-                &format!("Found audio device: {} (id={}, kind={})", name, id, kind),
-            );
-            // kind: 0=input, 1=output, 2=both → emit two entries for "both"
-            if kind == 0 || kind == 2 {
-                real_devices.push(AudioDevice {
-                    id: id as u32,
-                    name: name.clone(),
-                    kind: AudioDeviceKind::Input,
-                });
-            }
-            if kind == 1 || kind == 2 {
-                real_devices.push(AudioDevice {
-                    id: id as u32,
-                    name: name.clone(),
-                    kind: AudioDeviceKind::Output,
-                });
+
+                // kind: 0=input, 1=output, 2=both → emit two entries for "both"
+                if kind == 0 || kind == 2 {
+                    real_devices.push(AudioDevice {
+                        id: id as u32,
+                        name: name.clone(),
+                        kind: AudioDeviceKind::Input,
+                    });
+                }
+                if kind == 1 || kind == 2 {
+                    real_devices.push(AudioDevice {
+                        id: id as u32,
+                        name: name.clone(),
+                        kind: AudioDeviceKind::Output,
+                    });
+                }
             }
         }
         // Get current selection from PJSIP
@@ -1961,23 +1995,27 @@ fn cmd_audio_list_devices(_p: &serde_json::Value) -> EngineErrorCode {
 
     // Build and push the event (shared by both paths)
     let devices = AUDIO_DEVICES.lock().unwrap();
-    let mut items = String::new();
-    for (i, d) in devices.iter().enumerate() {
-        if i > 0 {
-            items.push(',');
-        }
-        items.push_str(&format!(
-            r#"{{"id":{},"name":"{}","kind":"{}"}}"#,
-            d.id,
-            d.name,
-            d.kind.as_str()
-        ));
-    }
+    let entries: Vec<_> = devices
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "id": d.id,
+                "name": d.name,
+                "kind": d.kind.as_str(),
+            })
+        })
+        .collect();
+    drop(devices);
     let selected_in = SELECTED_INPUT.load(Ordering::Relaxed);
     let selected_out = SELECTED_OUTPUT.load(Ordering::Relaxed);
-    push_event(format!(
-        r#"{{"type":"AudioDeviceList","payload":{{"devices":[{items}],"selected_input":{selected_in},"selected_output":{selected_out}}}}}"#
-    ));
+    push_event(
+        "AudioDeviceList",
+        serde_json::json!({
+            "devices": entries,
+            "selected_input": selected_in,
+            "selected_output": selected_out,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
@@ -2045,9 +2083,13 @@ fn cmd_audio_set_devices(p: &serde_json::Value) -> EngineErrorCode {
     }
     SELECTED_INPUT.store(input_id, Ordering::Relaxed);
     SELECTED_OUTPUT.store(output_id, Ordering::Relaxed);
-    push_event(format!(
-        r#"{{"type":"AudioDevicesSet","payload":{{"input_id":{input_id},"output_id":{output_id}}}}}"#
-    ));
+    push_event(
+        "AudioDevicesSet",
+        serde_json::json!({
+            "input_id": input_id,
+            "output_id": output_id,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
@@ -2065,7 +2107,7 @@ fn cmd_call_send_dtmf(p: &serde_json::Value) -> EngineErrorCode {
 
     {
         let calls = CALLS.lock().unwrap();
-        if let Some(call) = calls.iter().find(|c| c.id == call_id) {
+        if let Some(call) = calls.get(&call_id) {
             if let Some(pj_id) = call.pjsip_call_id {
                 if let Ok(digits_cstr) = CString::new(digits) {
                     unsafe { pd_call_send_dtmf(pj_id, digits_cstr.as_ptr()) };
@@ -2077,36 +2119,6 @@ fn cmd_call_send_dtmf(p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
-fn cmd_call_history_query(_p: &serde_json::Value) -> EngineErrorCode {
-    let history = CALL_HISTORY.lock().unwrap();
-    let mut items = String::new();
-    for (i, e) in history.iter().enumerate() {
-        if i > 0 {
-            items.push(',');
-        }
-        items.push_str(&format!(
-            r#"{{"call_id":{},"account_id":"{}","uri":"{}","direction":"{}","started_at":{},"ended_at":{},"duration_secs":{},"end_state":"{}"}}"#,
-            e.call_id,
-            e.account_id,
-            e.uri,
-            e.direction,
-            e.started_at,
-            e.ended_at,
-            e.duration_secs,
-            e.end_state
-        ));
-    }
-    push_event(format!(
-        r#"{{"type":"CallHistoryResult","payload":{{"entries":[{items}]}}}}"#
-    ));
-    EngineErrorCode::Ok
-}
-
-// ---------------------------------------------------------------------------
-// Call Forwarding, DND, BLF Commands
-// ---------------------------------------------------------------------------
-
-/// Set call forwarding for an account.
 fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2131,10 +2143,7 @@ fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2149,58 +2158,63 @@ fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"ForwardingUpdated","payload":{{"account_id":"{}","fwd_uri":"{}","fwd_flags":{}}}}}"#,
-        account_id, fwd_uri, fwd_flags
-    ));
+    push_event(
+        "ForwardingUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+            "fwd_uri": fwd_uri,
+            "fwd_flags": fwd_flags,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get call forwarding settings for an account.
 fn cmd_account_get_forwarding(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let (fwd_uri, fwd_flags) = {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let mut uri_buf = vec![0u8; 256];
-                let mut flags: i32 = 0;
-                let rc = unsafe {
-                    pd_acc_get_forward(
-                        pj_acc_id,
-                        uri_buf.as_mut_ptr() as *mut c_char,
-                        uri_buf.len() as i32,
-                        &mut flags,
-                    )
-                };
-                if rc == 0 {
-                    let uri = String::from_utf8_lossy(&uri_buf)
-                        .trim_end_matches('\0')
-                        .to_string();
-                    (uri, flags)
-                } else {
-                    (String::new(), 0)
-                }
-            } else {
-                (String::new(), 0)
-            }
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
+    };
+    let (fwd_uri, fwd_flags) = if let Some(pj_acc_id) = pj_acc_id {
+        let mut uri_buf = vec![0u8; 256];
+        let mut flags: i32 = 0;
+        let rc = unsafe {
+            pd_acc_get_forward(
+                pj_acc_id,
+                uri_buf.as_mut_ptr() as *mut c_char,
+                uri_buf.len() as i32,
+                &mut flags,
+            )
+        };
+        if rc == 0 {
+            (
+                String::from_utf8_lossy(&uri_buf)
+                    .trim_end_matches('\0')
+                    .to_string(),
+                flags,
+            )
         } else {
             (String::new(), 0)
         }
+    } else {
+        (String::new(), 0)
     };
 
-    push_event(format!(
-        r#"{{"type":"ForwardingResult","payload":{{"account_id":"{}","fwd_uri":"{}","fwd_flags":{}}}}}"#,
-        account_id, fwd_uri, fwd_flags
-    ));
+    push_event(
+        "ForwardingResult",
+        serde_json::json!({
+            "account_id": account_id,
+            "fwd_uri": fwd_uri,
+            "fwd_flags": fwd_flags,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Set DND (Do Not Disturb) for an account.
 fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2222,10 +2236,7 @@ fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2236,14 +2247,16 @@ fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"DndUpdated","payload":{{"account_id":"{}","enabled":{}}}}}"#,
-        account_id, enabled
-    ));
+    push_event(
+        "DndUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+            "enabled": enabled,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Subscribe to BLF/Presence for a list of URIs.
 fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2272,10 +2285,7 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2293,15 +2303,16 @@ fn cmd_blf_subscribe(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"BlfSubscribed","payload":{{"account_id":"{}","uris":{}}}}}"#,
-        account_id,
-        serde_json::to_string(&uris).unwrap_or("[]".to_string())
-    ));
+    push_event(
+        "BlfSubscribed",
+        serde_json::json!({
+            "account_id": account_id,
+            "uris": uris,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Unsubscribe from all BLF/Presence.
 fn cmd_blf_unsubscribe(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2315,10 +2326,7 @@ fn cmd_blf_unsubscribe(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2329,14 +2337,15 @@ fn cmd_blf_unsubscribe(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"BlfUnsubscribed","payload":{{"account_id":"{}"}}}}"#,
-        account_id
-    ));
+    push_event(
+        "BlfUnsubscribed",
+        serde_json::json!({
+            "account_id": account_id,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Set caller lookup URL for an account.
 fn cmd_account_set_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2354,10 +2363,7 @@ fn cmd_account_set_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2372,59 +2378,56 @@ fn cmd_account_set_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"LookupUrlUpdated","payload":{{"account_id":"{}","lookup_url":"{}"}}}}"#,
-        account_id, lookup_url
-    ));
+    push_event(
+        "LookupUrlUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+            "lookup_url": lookup_url,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get caller lookup URL for an account.
 fn cmd_account_get_lookup_url(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let lookup_url = {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let mut url_buf = vec![0u8; 512];
-                let rc = unsafe {
-                    pd_acc_get_lookup_url(
-                        pj_acc_id,
-                        url_buf.as_mut_ptr() as *mut c_char,
-                        url_buf.len() as i32,
-                    )
-                };
-                if rc == 0 {
-                    String::from_utf8_lossy(&url_buf)
-                        .trim_end_matches('\0')
-                        .to_string()
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            }
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
+    };
+    let lookup_url = if let Some(pj_acc_id) = pj_acc_id {
+        let mut url_buf = vec![0u8; 512];
+        let rc = unsafe {
+            pd_acc_get_lookup_url(
+                pj_acc_id,
+                url_buf.as_mut_ptr() as *mut c_char,
+                url_buf.len() as i32,
+            )
+        };
+        if rc == 0 {
+            String::from_utf8_lossy(&url_buf)
+                .trim_end_matches('\0')
+                .to_string()
         } else {
             String::new()
         }
+    } else {
+        String::new()
     };
 
-    push_event(format!(
-        r#"{{"type":"LookupUrlResult","payload":{{"account_id":"{}","lookup_url":"{}"}}}}"#,
-        account_id, lookup_url
-    ));
+    push_event(
+        "LookupUrlResult",
+        serde_json::json!({
+            "account_id": account_id,
+            "lookup_url": lookup_url,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-// ---------------------------------------------------------------------------
-// Codec, Auto Answer, DTMF, Profile Commands
-// ---------------------------------------------------------------------------
-
-/// Set codec priority for an account.
 fn cmd_account_set_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2437,10 +2440,7 @@ fn cmd_account_set_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2454,60 +2454,57 @@ fn cmd_account_set_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"CodecPriorityUpdated","payload":{{"account_id":"{}"}}}}"#,
-        account_id
-    ));
+    push_event(
+        "CodecPriorityUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get codec priority for an account.
 fn cmd_account_get_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let codec_priorities = {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let mut json_buf = vec![0u8; 1024];
-                let rc = unsafe {
-                    pd_acc_get_codec_priority(
-                        pj_acc_id,
-                        json_buf.as_mut_ptr() as *mut c_char,
-                        json_buf.len() as i32,
-                    )
-                };
-                if rc == 0 {
-                    String::from_utf8_lossy(&json_buf)
-                        .trim_end_matches('\0')
-                        .to_string()
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            }
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
+    };
+    let codec_priorities = if let Some(pj_acc_id) = pj_acc_id {
+        let mut json_buf = vec![0u8; 1024];
+        let rc = unsafe {
+            pd_acc_get_codec_priority(
+                pj_acc_id,
+                json_buf.as_mut_ptr() as *mut c_char,
+                json_buf.len() as i32,
+            )
+        };
+        if rc == 0 {
+            String::from_utf8_lossy(&json_buf)
+                .trim_end_matches('\0')
+                .to_string()
         } else {
             String::new()
         }
+    } else {
+        String::new()
     };
+    let codec_priorities_json =
+        serde_json::from_str::<serde_json::Value>(&codec_priorities).unwrap_or_else(|_| serde_json::json!([]));
 
-    push_event(format!(
-        r#"{{"type":"CodecPriorityResult","payload":{{"account_id":"{}","codec_priorities":{}}}}}"#,
-        account_id,
-        if codec_priorities.is_empty() {
-            "[]"
-        } else {
-            &codec_priorities
-        }
-    ));
+    push_event(
+        "CodecPriorityResult",
+        serde_json::json!({
+            "account_id": account_id,
+            "codec_priorities": codec_priorities_json,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Enable/disable a specific codec.
 fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2524,10 +2521,7 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2542,16 +2536,17 @@ fn cmd_account_set_codec(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"CodecUpdated","payload":{{"account_id":"{}","codec_id":"{}","enabled":{}}}}}"#,
-        account_id,
-        codec_id,
-        if enabled { "true" } else { "false" }
-    ));
+    push_event(
+        "CodecUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+            "codec_id": codec_id,
+            "enabled": enabled,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Set auto-answer for an account.
 fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2568,10 +2563,7 @@ fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2581,53 +2573,51 @@ fn cmd_account_set_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"AutoAnswerUpdated","payload":{{"account_id":"{}","enabled":{},"delay_ms":{}}}}}"#,
-        account_id,
-        if enabled { "true" } else { "false" },
-        delay_ms
-    ));
+    push_event(
+        "AutoAnswerUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+            "enabled": enabled,
+            "delay_ms": delay_ms,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get auto-answer for an account.
 fn cmd_account_get_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let (enabled, delay_ms) = {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let mut enabled_out: i32 = 0;
-                let mut delay_out: i32 = 0;
-                let rc =
-                    unsafe { pd_acc_get_auto_answer(pj_acc_id, &mut enabled_out, &mut delay_out) };
-                if rc == 0 {
-                    (enabled_out != 0, delay_out)
-                } else {
-                    (false, 0)
-                }
-            } else {
-                (false, 0)
-            }
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
+    };
+    let (enabled, delay_ms) = if let Some(pj_acc_id) = pj_acc_id {
+        let mut enabled_out: i32 = 0;
+        let mut delay_out: i32 = 0;
+        let rc = unsafe { pd_acc_get_auto_answer(pj_acc_id, &mut enabled_out, &mut delay_out) };
+        if rc == 0 {
+            (enabled_out != 0, delay_out)
         } else {
             (false, 0)
         }
+    } else {
+        (false, 0)
     };
 
-    push_event(format!(
-        r#"{{"type":"AutoAnswerResult","payload":{{"account_id":"{}","enabled":{},"delay_ms":{}}}}}"#,
-        account_id,
-        if enabled { "true" } else { "false" },
-        delay_ms
-    ));
+    push_event(
+        "AutoAnswerResult",
+        serde_json::json!({
+            "account_id": account_id,
+            "enabled": enabled,
+            "delay_ms": delay_ms,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Set DTMF method for an account.
 fn cmd_account_set_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2640,10 +2630,7 @@ fn cmd_account_set_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     if let Some(pj_id) = pj_acc_id {
@@ -2653,47 +2640,48 @@ fn cmd_account_set_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
         }
     }
 
-    push_event(format!(
-        r#"{{"type":"DtmfMethodUpdated","payload":{{"account_id":"{}","dtmf_method":{}}}}}"#,
-        account_id, dtmf_method
-    ));
+    push_event(
+        "DtmfMethodUpdated",
+        serde_json::json!({
+            "account_id": account_id,
+            "dtmf_method": dtmf_method,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get DTMF method for an account.
 fn cmd_account_get_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
 
-    let dtmf_method = {
+    let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        if let Some(acc) = accounts.iter().find(|a| a.uuid == account_id) {
-            if let Some(pj_acc_id) = acc.pjsip_acc_id {
-                let mut method_out: i32 = 0;
-                let rc = unsafe { pd_acc_get_dtmf_method(pj_acc_id, &mut method_out) };
-                if rc == 0 {
-                    method_out
-                } else {
-                    1 /* Default RFC2833 */
-                }
-            } else {
-                1
-            }
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
+    };
+    let dtmf_method = if let Some(pj_acc_id) = pj_acc_id {
+        let mut method_out: i32 = 0;
+        let rc = unsafe { pd_acc_get_dtmf_method(pj_acc_id, &mut method_out) };
+        if rc == 0 {
+            method_out
         } else {
             1
         }
+    } else {
+        1
     };
 
-    push_event(format!(
-        r#"{{"type":"DtmfMethodResult","payload":{{"account_id":"{}","dtmf_method":{}}}}}"#,
-        account_id, dtmf_method
-    ));
+    push_event(
+        "DtmfMethodResult",
+        serde_json::json!({
+            "account_id": account_id,
+            "dtmf_method": dtmf_method,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Export account configuration.
 fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2702,10 +2690,7 @@ fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
 
     let pj_acc_id = {
         let accounts = ACCOUNTS.lock().unwrap();
-        accounts
-            .iter()
-            .find(|a| a.uuid == account_id)
-            .and_then(|a| a.pjsip_acc_id)
+        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
     };
 
     let config_json = if let Some(pj_id) = pj_acc_id {
@@ -2728,19 +2713,18 @@ fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
         String::new()
     };
 
-    push_event(format!(
-        r#"{{"type":"AccountConfigExported","payload":{{"account_id":"{}","config":{}}}}}"#,
-        account_id,
-        if config_json.is_empty() {
-            "{}"
-        } else {
-            &config_json
-        }
-    ));
+    let config_value =
+        serde_json::from_str::<serde_json::Value>(&config_json).unwrap_or_else(|_| serde_json::json!({}));
+    push_event(
+        "AccountConfigExported",
+        serde_json::json!({
+            "account_id": account_id,
+            "config": config_value,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Import account configuration.
 fn cmd_account_import_config(p: &serde_json::Value) -> EngineErrorCode {
     let config = match p["config"].as_str() {
         Some(s) => s,
@@ -2756,20 +2740,26 @@ fn cmd_account_import_config(p: &serde_json::Value) -> EngineErrorCode {
     let rc = unsafe { pd_acc_import_config(config_cstr.as_ptr(), &mut new_acc_id) };
 
     if rc != 0 {
-        push_event(format!(
-            r#"{{"type":"AccountConfigImported","payload":{{"success":false,"error":"Import failed with code {}"}}}}"#,
-            rc
-        ));
+        push_event(
+            "AccountConfigImported",
+            serde_json::json!({
+                "success": false,
+                "error": format!("Import failed with code {}", rc),
+            }),
+        );
         return EngineErrorCode::InternalError;
     }
 
     push_event(
-        r#"{"type":"AccountConfigImported","payload":{"success":true,"error":null}}"#.to_string(),
+        "AccountConfigImported",
+        serde_json::json!({
+            "success": true,
+            "error": serde_json::Value::Null,
+        }),
     );
     EngineErrorCode::Ok
 }
 
-/// Delete account profile.
 fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
     let uuid = match p["uuid"].as_str() {
         Some(s) => s.to_owned(),
@@ -2778,12 +2768,9 @@ fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
 
     let pjsip_id = {
         let mut accts = ACCOUNTS.lock().unwrap();
-        let pos = accts.iter().position(|a| a.uuid == uuid);
-        if let Some(idx) = pos {
-            let mut acct = accts.remove(idx);
-            acct.pjsip_acc_id.take()
-        } else {
-            return EngineErrorCode::NotFound;
+        match accts.remove(&uuid) {
+            Some(acct) => acct.pjsip_acc_id,
+            None => return EngineErrorCode::NotFound,
         }
     };
 
@@ -2809,16 +2796,15 @@ fn cmd_account_delete_profile(p: &serde_json::Value) -> EngineErrorCode {
 
     push_reg_state(&uuid, &RegistrationState::Unregistered);
     push_event(
-        r#"{"type":"AccountProfileDeleted","payload":{"success":true,"error":null}}"#.to_string(),
+        "AccountProfileDeleted",
+        serde_json::json!({
+            "success": true,
+            "error": serde_json::Value::Null,
+        }),
     );
     EngineErrorCode::Ok
 }
 
-// ---------------------------------------------------------------------------
-// Global (App-Wide) Settings Commands
-// ---------------------------------------------------------------------------
-
-/// Set global codec priority.
 fn cmd_set_global_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
     let codec_priorities = match p["codec_priorities"].as_str() {
         Some(s) => s.to_owned(),
@@ -2835,11 +2821,10 @@ fn cmd_set_global_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
         return EngineErrorCode::InternalError;
     }
 
-    push_event(r#"{"type":"GlobalCodecPriorityUpdated","payload":{}}"#.to_string());
+    push_event("GlobalCodecPriorityUpdated", serde_json::json!({}));
     EngineErrorCode::Ok
 }
 
-/// Get global codec priority.
 fn cmd_get_global_codec_priority(_p: &serde_json::Value) -> EngineErrorCode {
     let mut json_buf = vec![0u8; 1024];
     let rc = unsafe {
@@ -2854,18 +2839,17 @@ fn cmd_get_global_codec_priority(_p: &serde_json::Value) -> EngineErrorCode {
         String::new()
     };
 
-    push_event(format!(
-        r#"{{"type":"GlobalCodecPriorityResult","payload":{{"codec_priorities":{}}}}}"#,
-        if codec_priorities.is_empty() {
-            "[]"
-        } else {
-            &codec_priorities
-        }
-    ));
+    let codec_priorities_json =
+        serde_json::from_str::<serde_json::Value>(&codec_priorities).unwrap_or_else(|_| serde_json::json!([]));
+    push_event(
+        "GlobalCodecPriorityResult",
+        serde_json::json!({
+            "codec_priorities": codec_priorities_json,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Set global DTMF method.
 fn cmd_set_global_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
     let dtmf_method = match p["dtmf_method"].as_i64() {
         Some(v) => v as i32,
@@ -2877,14 +2861,15 @@ fn cmd_set_global_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
         return EngineErrorCode::InternalError;
     }
 
-    push_event(format!(
-        r#"{{"type":"GlobalDtmfMethodUpdated","payload":{{"dtmf_method":{}}}}}"#,
-        dtmf_method
-    ));
+    push_event(
+        "GlobalDtmfMethodUpdated",
+        serde_json::json!({
+            "dtmf_method": dtmf_method,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get global DTMF method.
 fn cmd_get_global_dtmf_method(_p: &serde_json::Value) -> EngineErrorCode {
     let mut method_out: i32 = 1; /* Default RFC2833 */
     let rc = unsafe { pd_get_global_dtmf_method(&mut method_out) };
@@ -2893,14 +2878,15 @@ fn cmd_get_global_dtmf_method(_p: &serde_json::Value) -> EngineErrorCode {
         method_out = 1;
     }
 
-    push_event(format!(
-        r#"{{"type":"GlobalDtmfMethodResult","payload":{{"dtmf_method":{}}}}}"#,
-        method_out
-    ));
+    push_event(
+        "GlobalDtmfMethodResult",
+        serde_json::json!({
+            "dtmf_method": method_out,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Set global auto-answer.
 fn cmd_set_global_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
     let enabled = match p["enabled"].as_bool() {
         Some(v) => v,
@@ -2916,15 +2902,16 @@ fn cmd_set_global_auto_answer(p: &serde_json::Value) -> EngineErrorCode {
         return EngineErrorCode::InternalError;
     }
 
-    push_event(format!(
-        r#"{{"type":"GlobalAutoAnswerUpdated","payload":{{"enabled":{},"delay_ms":{}}}}}"#,
-        if enabled { "true" } else { "false" },
-        delay_ms
-    ));
+    push_event(
+        "GlobalAutoAnswerUpdated",
+        serde_json::json!({
+            "enabled": enabled,
+            "delay_ms": delay_ms,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Get global auto-answer.
 fn cmd_get_global_auto_answer(_p: &serde_json::Value) -> EngineErrorCode {
     let mut enabled_out: i32 = 0;
     let mut delay_out: i32 = 0;
@@ -2934,11 +2921,13 @@ fn cmd_get_global_auto_answer(_p: &serde_json::Value) -> EngineErrorCode {
     let enabled = if rc == 0 { enabled_out != 0 } else { false };
     let delay = if rc == 0 { delay_out } else { 0 };
 
-    push_event(format!(
-        r#"{{"type":"GlobalAutoAnswerResult","payload":{{"enabled":{},"delay_ms":{}}}}}"#,
-        if enabled { "true" } else { "false" },
-        delay
-    ));
+    push_event(
+        "GlobalAutoAnswerResult",
+        serde_json::json!({
+            "enabled": enabled,
+            "delay_ms": delay,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
@@ -2946,37 +2935,38 @@ fn cmd_sip_capture(p: &serde_json::Value) -> EngineErrorCode {
     let direction = p["direction"].as_str().unwrap_or("?");
     let raw = p["raw"].as_str().unwrap_or("");
     let masked = mask_sip_log(raw);
-    // Escape the masked string for JSON embedding
-    let escaped = masked
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r");
-    push_event(format!(
-        r#"{{"type":"SipMessageCaptured","payload":{{"direction":"{direction}","raw":"{escaped}"}}}}"#
-    ));
+    push_event(
+        "SipMessageCaptured",
+        serde_json::json!({
+            "direction": direction,
+            "raw": masked,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
 fn cmd_diag_export(p: &serde_json::Value) -> EngineErrorCode {
     let anonymize = p["anonymize"].as_bool().unwrap_or(true);
-    let history_count = CALL_HISTORY.lock().unwrap().len();
     let account_count = ACCOUNTS.lock().unwrap().len();
-    push_event(format!(
-        r#"{{"type":"DiagBundleReady","payload":{{"anonymize":{anonymize},"call_history_count":{history_count},"account_count":{account_count},"note":"TODO: real export"}}}}"#
-    ));
+    push_event(
+        "DiagBundleReady",
+        serde_json::json!({
+            "anonymize": anonymize,
+            "call_history_count": 0,
+            "account_count": account_count,
+            "note": "TODO: real export",
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Update TLS/SRTP security flags on an existing account.
-/// `{"type":"AccountSetSecurity","payload":{"id":"...", "tls_enabled":true, "srtp_enabled":true}}`
 fn cmd_account_set_security(p: &serde_json::Value) -> EngineErrorCode {
     let id = match p["id"].as_str() {
         Some(s) => s.to_owned(),
         None => return EngineErrorCode::InvalidJson,
     };
     let mut accts = ACCOUNTS.lock().unwrap();
-    match accts.iter_mut().find(|a| a.uuid == id) {
+    match accts.get_mut(&id) {
         None => EngineErrorCode::NotFound,
         Some(acct) => {
             if let Some(tls) = p["tls_enabled"].as_bool() {
@@ -2988,11 +2978,14 @@ fn cmd_account_set_security(p: &serde_json::Value) -> EngineErrorCode {
             let tls = acct.tls_enabled;
             let srtp = acct.srtp_enabled;
             drop(accts);
-            // Use serde_json for safe JSON encoding of the account_id.
-            let id_json = serde_json::to_string(&id).unwrap_or_default();
-            push_event(format!(
-                r#"{{"type":"AccountSecurityUpdated","payload":{{"account_id":{id_json},"tls_enabled":{tls},"srtp_enabled":{srtp}}}}}"#
-            ));
+            push_event(
+                "AccountSecurityUpdated",
+                serde_json::json!({
+                    "account_id": id,
+                    "tls_enabled": tls,
+                    "srtp_enabled": srtp,
+                }),
+            );
             // TLS/SRTP changes take effect on the next AccountRegister call.
             // Re-registration with the updated settings is the user's responsibility.
             EngineErrorCode::Ok
@@ -3000,9 +2993,6 @@ fn cmd_account_set_security(p: &serde_json::Value) -> EngineErrorCode {
     }
 }
 
-/// Store a named credential in the in-memory credential store.
-/// `{"type":"CredStore","payload":{"key":"my_key","value":"secret"}}`
-/// Persisting to the OS keychain (Windows Credential Manager) is a future milestone.
 fn cmd_cred_store(p: &serde_json::Value) -> EngineErrorCode {
     let key = match p["key"].as_str() {
         Some(s) => s.to_owned(),
@@ -3013,17 +3003,15 @@ fn cmd_cred_store(p: &serde_json::Value) -> EngineErrorCode {
         None => return EngineErrorCode::InvalidJson,
     };
     CRED_STORE.lock().unwrap().insert(key.clone(), value);
-    // Use serde_json for safe JSON encoding of the key.
-    let key_json = serde_json::to_string(&key).unwrap_or_default();
-    push_event(format!(
-        r#"{{"type":"CredStored","payload":{{"key":{key_json}}}}}"#
-    ));
+    push_event(
+        "CredStored",
+        serde_json::json!({
+            "key": key,
+        }),
+    );
     EngineErrorCode::Ok
 }
 
-/// Retrieve a named credential from the in-memory credential store.
-/// `{"type":"CredRetrieve","payload":{"key":"my_key"}}`
-/// Returns `EngineErrorCode::NotFound` if the key does not exist.
 fn cmd_cred_retrieve(p: &serde_json::Value) -> EngineErrorCode {
     let key = match p["key"].as_str() {
         Some(s) => s.to_owned(),
@@ -3033,28 +3021,23 @@ fn cmd_cred_retrieve(p: &serde_json::Value) -> EngineErrorCode {
     match store.get(&key) {
         None => EngineErrorCode::NotFound,
         Some(value) => {
-            // Use serde_json for correct JSON encoding of key and value.
-            let key_json = serde_json::to_string(&key).unwrap_or_default();
-            let value_json = serde_json::to_string(value).unwrap_or_default();
-            push_event(format!(
-                r#"{{"type":"CredRetrieved","payload":{{"key":{key_json},"value":{value_json}}}}}"#
-            ));
+            push_event(
+                "CredRetrieved",
+                serde_json::json!({
+                    "key": key,
+                    "value": value,
+                }),
+            );
             EngineErrorCode::Ok
         }
     }
 }
 
-/// Liveness / health-check ping.
-/// `{"type":"EnginePing","payload":{}}` → event `{"type":"EnginePong","payload":{}}`
 fn cmd_engine_ping(_p: &serde_json::Value) -> EngineErrorCode {
-    push_event(r#"{"type":"EnginePong","payload":{}}"#.to_owned());
+    push_event("EnginePong", serde_json::json!({}));
     EngineErrorCode::Ok
 }
 
-/// Set the active log level filter.
-/// `{"type":"SetLogLevel","payload":{"level":"Debug"}}`
-/// Valid levels: "Error", "Warn", "Info", "Debug".
-/// Messages with level ≤ active filter are emitted as EngineLog events.
 fn cmd_set_log_level(p: &serde_json::Value) -> EngineErrorCode {
     let level_str = match p["level"].as_str() {
         Some(s) => s,
@@ -3064,40 +3047,31 @@ fn cmd_set_log_level(p: &serde_json::Value) -> EngineErrorCode {
         None => EngineErrorCode::InvalidJson,
         Some(level) => {
             ACTIVE_LOG_LEVEL.store(level as u8, Ordering::Relaxed);
-            push_event(format!(
-                r#"{{"type":"LogLevelSet","payload":{{"level":"{}"}}}}"#,
-                level.as_str()
-            ));
+            push_event(
+                "LogLevelSet",
+                serde_json::json!({
+                    "level": level.as_str(),
+                }),
+            );
             EngineErrorCode::Ok
         }
     }
 }
 
-/// Return all buffered log entries as a `LogBufferResult` event.
-/// `{"type":"GetLogBuffer","payload":{}}` → `{"type":"LogBufferResult","payload":{"entries":[...]}}`
 fn cmd_get_log_buffer(_p: &serde_json::Value) -> EngineErrorCode {
     let buf = LOG_BUFFER.lock().unwrap();
-    let mut items = String::new();
-    for (i, e) in buf.iter().enumerate() {
-        if i > 0 {
-            items.push(',');
-        }
-        let msg_escaped = e
-            .message
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r");
-        items.push_str(&format!(
-            r#"{{"level":"{}","message":"{msg_escaped}","ts":{}}}"#,
-            e.level.as_str(),
-            e.ts
-        ));
-    }
+    let items: Vec<_> = buf
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "level": e.level.as_str(),
+                "message": e.message,
+                "ts": e.ts,
+            })
+        })
+        .collect();
     drop(buf);
-    push_event(format!(
-        r#"{{"type":"LogBufferResult","payload":{{"entries":[{items}]}}}}"#
-    ));
+    push_event("LogBufferResult", serde_json::json!({ "entries": items }));
     EngineErrorCode::Ok
 }
 
@@ -3148,7 +3122,7 @@ pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
             );
             return rc; // Return the actual PJSIP / Shim error code
         }
-        push_event(r#"{"type":"EngineReady","payload":{}}"#.to_owned());
+        push_event("EngineReady", serde_json::json!({}));
         log_engine(LogLevel::Info, "Engine initialized (PJSIP active)");
 
         // Start IPC API Server for external integrations (pd.exe, local scripts)
@@ -3541,7 +3515,7 @@ pub extern "C" fn engine_hangup() -> i32 {
         let call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id)
         };
@@ -3599,7 +3573,7 @@ pub extern "C" fn engine_answer_call() -> i32 {
         let call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| {
                     c.state == CallState::Ringing && matches!(c.direction, CallDirection::Incoming)
                 })
@@ -3607,19 +3581,31 @@ pub extern "C" fn engine_answer_call() -> i32 {
         };
         let call_id = match call_id {
             Some(id) => {
-                log_engine(LogLevel::Info, &format!("engine_answer_call: Found call_id={}", id));
+                log_engine(
+                    LogLevel::Info,
+                    &format!("engine_answer_call: Found call_id={}", id),
+                );
                 id
-            },
+            }
             None => {
                 log_engine(LogLevel::Error, "engine_answer_call: No ringing call found");
                 return EngineErrorCode::NotFound as i32;
             }
         };
 
-        log_engine(LogLevel::Info, &format!("engine_answer_call: Dispatching CallAnswer for call_id={}", call_id));
+        log_engine(
+            LogLevel::Info,
+            &format!(
+                "engine_answer_call: Dispatching CallAnswer for call_id={}",
+                call_id
+            ),
+        );
         let answer_json = serde_json::json!({ "call_id": call_id });
         let rc = dispatch_command("CallAnswer", &answer_json);
-        log_engine(LogLevel::Info, &format!("engine_answer_call: CallAnswer completed rc={:?}", rc));
+        log_engine(
+            LogLevel::Info,
+            &format!("engine_answer_call: CallAnswer completed rc={:?}", rc),
+        );
         rc as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
@@ -3640,7 +3626,7 @@ pub extern "C" fn engine_set_mute(muted: i32) -> i32 {
         let call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id)
         };
@@ -3670,7 +3656,7 @@ pub extern "C" fn engine_set_hold(on_hold: i32) -> i32 {
         let call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id)
         };
@@ -3709,7 +3695,7 @@ pub extern "C" fn engine_send_dtmf(digits: *const c_char) -> i32 {
         let call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id)
         };
@@ -3767,7 +3753,7 @@ pub extern "C" fn engine_start_recording(file_path: *const c_char) -> i32 {
         // Find the first active call
         let (call_id, pjsip_call_id) = {
             let calls = CALLS.lock().unwrap();
-            let call = calls.iter().find(|c| c.state != CallState::Ended);
+            let call = calls.values().find(|c| c.state != CallState::Ended);
             match call {
                 Some(c) => (c.id, c.pjsip_call_id),
                 None => return EngineErrorCode::NotFound as i32,
@@ -3794,7 +3780,7 @@ pub extern "C" fn engine_start_recording(file_path: *const c_char) -> i32 {
         // Store recording path in the call struct
         {
             let mut calls = CALLS.lock().unwrap();
-            if let Some(call) = calls.iter_mut().find(|c| c.state != CallState::Ended) {
+            if let Some(call) = calls.values_mut().find(|c| c.state != CallState::Ended) {
                 call.recording_path = Some(file_path_s.clone());
             }
         }
@@ -3807,7 +3793,10 @@ pub extern "C" fn engine_start_recording(file_path: *const c_char) -> i32 {
                 "file_path": file_path_s,
             }
         });
-        push_event(event.to_string());
+        push_event(
+            event["type"].as_str().unwrap_or("UnknownEvent"),
+            event["payload"].clone(),
+        );
 
         0
     }));
@@ -3828,7 +3817,7 @@ pub extern "C" fn engine_stop_recording() -> i32 {
         // Find the first active call
         let (_call_id, pjsip_call_id) = {
             let calls = CALLS.lock().unwrap();
-            let call = calls.iter().find(|c| c.state != CallState::Ended);
+            let call = calls.values().find(|c| c.state != CallState::Ended);
             match call {
                 Some(c) => (c.id, c.pjsip_call_id),
                 None => return EngineErrorCode::NotFound as i32,
@@ -3855,7 +3844,7 @@ pub extern "C" fn engine_stop_recording() -> i32 {
         let call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| c.state != CallState::Ended)
                 .map(|c| c.id)
                 .unwrap_or(0)
@@ -3868,7 +3857,10 @@ pub extern "C" fn engine_stop_recording() -> i32 {
                 "call_id": call_id,
             }
         });
-        push_event(event.to_string());
+        push_event(
+            event["type"].as_str().unwrap_or("UnknownEvent"),
+            event["payload"].clone(),
+        );
 
         0
     }));
@@ -3888,7 +3880,7 @@ pub extern "C" fn engine_is_recording() -> i32 {
 
         let pjsip_call_id = {
             let calls = CALLS.lock().unwrap();
-            let call = calls.iter().find(|c| c.state != CallState::Ended);
+            let call = calls.values().find(|c| c.state != CallState::Ended);
             match call {
                 Some(c) => c.pjsip_call_id,
                 None => return 0,
@@ -3931,7 +3923,7 @@ pub extern "C" fn engine_transfer_call(call_id: i32, dest_uri: *const c_char) ->
         let pj_call_id = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
+                .values()
                 .find(|c| c.id == call_id as u32)
                 .and_then(|c| c.pjsip_call_id)
         };
@@ -3969,8 +3961,8 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
         let (pj_call_id, acc_id) = {
             let calls = CALLS.lock().unwrap();
             calls
-                .iter()
-                .find(|c| c.id == call_id as u32)
+                .values()
+                    .find(|c| c.id == call_id as u32)
                 .map(|c| (c.pjsip_call_id, c.account_id.clone()))
                 .unwrap_or((None, String::new()))
         };
@@ -4002,7 +3994,6 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
             state: CallState::Ringing,
             muted: false,
             on_hold: false,
-            started_at: now_secs(),
             accumulated_active_secs: 0,
             last_resumed_at: None,
             pjsip_call_id: Some(new_pj_id),
@@ -4010,8 +4001,8 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
         };
 
         push_call_state(&call);
-        CALLS.lock().unwrap().push(call);
-        PJSIP_CALL_MAP.lock().unwrap().insert(new_pj_id, consultation_call_id);
+        CALLS.lock().unwrap().insert(consultation_call_id as u32, call);
+        PJSIP_CALL_MAP.lock().unwrap().insert(new_pj_id, consultation_call_id as u32);
 
         log_engine(
             LogLevel::Info,
@@ -4034,8 +4025,8 @@ pub extern "C" fn engine_complete_xfer(call_a_id: i32, call_b_id: i32) -> i32 {
 
         let (pj_a, pj_b) = {
             let calls = CALLS.lock().unwrap();
-            let call_a = calls.iter().find(|c| c.id == call_a_id as u32);
-            let call_b = calls.iter().find(|c| c.id == call_b_id as u32);
+            let call_a = calls.values().find(|c| c.id == call_a_id as u32);
+            let call_b = calls.values().find(|c| c.id == call_b_id as u32);
             (
                 call_a.and_then(|c| c.pjsip_call_id),
                 call_b.and_then(|c| c.pjsip_call_id),
@@ -4061,8 +4052,8 @@ pub extern "C" fn engine_merge_conference(call_a_id: i32, call_b_id: i32) -> i32
 
         let (pj_a, pj_b) = {
             let calls = CALLS.lock().unwrap();
-            let call_a = calls.iter().find(|c| c.id == call_a_id as u32);
-            let call_b = calls.iter().find(|c| c.id == call_b_id as u32);
+            let call_a = calls.values().find(|c| c.id == call_a_id as u32);
+            let call_b = calls.values().find(|c| c.id == call_b_id as u32);
             (
                 call_a.and_then(|c| c.pjsip_call_id),
                 call_b.and_then(|c| c.pjsip_call_id),
@@ -4107,23 +4098,6 @@ pub extern "C" fn engine_set_audio_devices(input_id: i32, output_id: i32) -> i32
 
         let devices_json = serde_json::json!({ "input_id": input_id, "output_id": output_id });
         dispatch_command("AudioSetDevices", &devices_json) as i32
-    }));
-    result.unwrap_or(EngineErrorCode::InternalError as i32)
-}
-
-/// Request call history.
-///
-/// This will trigger a CallHistoryResult event via the callback.
-/// Returns 0 on success, non-zero on error.
-#[no_mangle]
-pub extern "C" fn engine_query_call_history() -> i32 {
-    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
-        if !INITIALIZED.load(Ordering::SeqCst) {
-            return EngineErrorCode::NotInitialized as i32;
-        }
-
-        let empty = serde_json::json!({});
-        dispatch_command("CallHistoryQuery", &empty) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
@@ -4188,10 +4162,6 @@ mod tests {
         // Use unwrap_or_else to recover from poisoned mutexes caused by prior test panics
         ACCOUNTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
         CALLS.lock().unwrap_or_else(|e| e.into_inner()).clear();
-        CALL_HISTORY
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
         MEDIA_STATS
             .lock()
             .unwrap_or_else(|e| e.into_inner())

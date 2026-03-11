@@ -99,7 +99,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
   }
 
   List<LogEntry> get _filteredLogs {
-    if (_filterLevel == 'All') return _channel.logBuffer;
+    if (_filterLevel == 'All') return _channel.logBuffer.toList();
     final target = LogLevel.fromString(_filterLevel);
     return _channel.logBuffer.where((e) => e.level == target).toList();
   }
@@ -200,7 +200,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: SelectableText(
-                      log[i],
+                      log.elementAt(i),
                       style: const TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 11,
@@ -383,7 +383,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   itemCount: messages.length,
                   itemBuilder: (_, i) {
-                    final m = messages[i];
+                    final m = messages.elementAt(i);
                     final isSend = m.isSend;
                     final accentColor =
                         isSend ? AppTheme.primary : AppTheme.callGreen;
