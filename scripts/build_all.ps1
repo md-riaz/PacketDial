@@ -46,7 +46,10 @@ Write-Host ""
 # Step 1: Build PJSIP (if needed)
 Write-Host "--------------------------------------" -ForegroundColor Gray
 Write-Host "[1/5] Checking PJSIP..." -ForegroundColor Cyan
-if (!(Test-Path "engine_pjsip\pjproject\libpjproject.lib")) {
+$PjsipOutLibDir = "engine_pjsip\build\out\lib"
+$HasPjsipBuild = (Test-Path $PjsipOutLibDir) -and
+    ((Get-ChildItem -Path $PjsipOutLibDir -Filter "libpjproject-*.lib" -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0)
+if (!$HasPjsipBuild) {
     Write-Host "PJSIP not built. Building now..." -ForegroundColor Yellow
     .\scripts\build_pjsip.ps1
     if ($LASTEXITCODE -ne 0) {
@@ -139,7 +142,11 @@ if (Test-Path "dist") {
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  - Portable: Extract ZIP and run PacketDial.exe" -ForegroundColor White
-Write-Host "  - Installer: Run PacketDial-Setup-$Version.exe" -ForegroundColor White
+if (Test-Path "dist\PacketDial-Setup-$Version.exe") {
+    Write-Host "  - Installer: Run PacketDial-Setup-$Version.exe" -ForegroundColor White
+} else {
+    Write-Host "  - Installer fallback: Use dist\PacketDial-$Version.zip or install Inno Setup to generate the .exe installer" -ForegroundColor White
+}
 Write-Host ""
 
 # Cleanup

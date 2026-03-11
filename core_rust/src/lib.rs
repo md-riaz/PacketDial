@@ -2309,7 +2309,11 @@ fn stop_recording_for_call(call_id: u32) -> EngineErrorCode {
             LogLevel::Error,
             &format!("Failed to stop recording for call {}: {}", call_id, rc),
         );
-        emit_recording_error(call_id, "RecorderFinalizeFailed", "Failed to stop recording");
+        emit_recording_error(
+            call_id,
+            "RecorderFinalizeFailed",
+            "Failed to stop recording",
+        );
         return EngineErrorCode::InternalError;
     }
 
@@ -2715,8 +2719,8 @@ fn cmd_account_get_codec_priority(p: &serde_json::Value) -> EngineErrorCode {
     } else {
         String::new()
     };
-    let codec_priorities_json =
-        serde_json::from_str::<serde_json::Value>(&codec_priorities).unwrap_or_else(|_| serde_json::json!([]));
+    let codec_priorities_json = serde_json::from_str::<serde_json::Value>(&codec_priorities)
+        .unwrap_or_else(|_| serde_json::json!([]));
 
     push_event(
         "CodecPriorityResult",
@@ -2984,8 +2988,8 @@ fn cmd_get_global_codec_priority(_p: &serde_json::Value) -> EngineErrorCode {
         String::new()
     };
 
-    let codec_priorities_json =
-        serde_json::from_str::<serde_json::Value>(&codec_priorities).unwrap_or_else(|_| serde_json::json!([]));
+    let codec_priorities_json = serde_json::from_str::<serde_json::Value>(&codec_priorities)
+        .unwrap_or_else(|_| serde_json::json!([]));
     push_event(
         "GlobalCodecPriorityResult",
         serde_json::json!({
