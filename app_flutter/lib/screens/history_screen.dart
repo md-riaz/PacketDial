@@ -6,6 +6,7 @@ import '../core/sip_uri_utils.dart';
 import '../core/account_service.dart';
 import '../models/call_history_schema.dart';
 import '../providers/engine_provider.dart';
+import '../widgets/empty_state.dart';
 
 final historyListProvider = Provider<List<CallHistorySchema>>((ref) {
   final history = ref.watch(accountServiceProvider).getHistory();
@@ -246,32 +247,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppTheme.primary.withValues(alpha: 0.06),
-            ),
-            child: Icon(Icons.history_outlined,
-                size: 48, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
-          ),
-          const SizedBox(height: 16),
-          const Text('No Call History',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary)),
-          const SizedBox(height: 6),
-          Text('Your call history will appear here',
-              style: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textTertiary.withValues(alpha: 0.7))),
-        ],
-      ),
+    return const EmptyState(
+      icon: Icons.history_outlined,
+      title: 'No Call History',
+      subtitle: 'Your call history will appear here',
     );
   }
 }

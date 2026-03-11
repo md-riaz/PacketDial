@@ -6,6 +6,7 @@ import '../core/engine_channel.dart';
 import '../models/account.dart';
 import '../models/account_schema.dart';
 import '../providers/engine_provider.dart';
+import '../widgets/empty_state.dart';
 import 'account_setup_page.dart';
 
 final accountsListProvider = FutureProvider<List<AccountSchema>>((ref) {
@@ -87,44 +88,12 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppTheme.primary.withValues(alpha: 0.08),
-            ),
-            child: Icon(Icons.person_add_outlined,
-                size: 48, color: AppTheme.primary.withValues(alpha: 0.5)),
-          ),
-          const SizedBox(height: 16),
-          const Text('No SIP Accounts',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary)),
-          const SizedBox(height: 6),
-          Text('Tap + to add your first SIP account',
-              style: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textTertiary.withValues(alpha: 0.7))),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: () => _showAccountSetup(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Account'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ],
-      ),
+    return EmptyState(
+      icon: Icons.person_add_outlined,
+      title: 'No SIP Accounts',
+      subtitle: 'Tap + to add your first SIP account',
+      actionLabel: 'Add Account',
+      onAction: () => _showAccountSetup(),
     );
   }
 }

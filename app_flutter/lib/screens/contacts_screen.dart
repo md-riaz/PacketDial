@@ -5,6 +5,8 @@ import '../core/app_theme.dart';
 import '../core/contacts_service.dart';
 import '../core/engine_channel.dart';
 import '../providers/contacts_provider.dart';
+import '../widgets/app_search_bar.dart';
+import '../widgets/stat_badge.dart';
 
 /// Contacts tab for main navigation - shows BLF contacts with presence.
 class ContactsScreen extends ConsumerStatefulWidget {
@@ -23,13 +25,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     final allContacts = ref.watch(contactsProvider);
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0D0D1A), Color(0xFF1A1040)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      decoration: const BoxDecoration(gradient: AppTheme.pageGradient),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -63,28 +59,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
             // Search bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search contacts...',
-                  hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                  filled: true,
-                  fillColor: AppTheme.inputFill,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon:
-                      const Icon(Icons.search, color: AppTheme.textTertiary),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear,
-                              color: AppTheme.textTertiary),
-                          onPressed: () {
-                            setState(() => _searchQuery = '');
-                          },
-                        )
-                      : null,
-                ),
+              child: AppSearchBar(
+                hintText: 'Search contacts...',
+                value: _searchQuery,
                 onChanged: (value) => setState(() => _searchQuery = value),
               ),
             ),
@@ -117,34 +94,34 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  _buildStatChip(
-                    Icons.circle,
-                    AppTheme.callGreen,
-                    allContacts
+                  StatBadge.pill(
+                    icon: Icons.circle,
+                    color: AppTheme.callGreen,
+                    count: allContacts
                         .where((c) => c.presenceState == 'Available')
                         .length
                         .toString(),
-                    'Available',
+                    label: 'Available',
                   ),
                   const SizedBox(width: 8),
-                  _buildStatChip(
-                    Icons.circle,
-                    AppTheme.errorRed,
-                    allContacts
+                  StatBadge.pill(
+                    icon: Icons.circle,
+                    color: AppTheme.errorRed,
+                    count: allContacts
                         .where((c) => c.presenceState == 'Busy')
                         .length
                         .toString(),
-                    'Busy',
+                    label: 'Busy',
                   ),
                   const SizedBox(width: 8),
-                  _buildStatChip(
-                    Icons.circle,
-                    AppTheme.textTertiary,
-                    allContacts
+                  StatBadge.pill(
+                    icon: Icons.circle,
+                    color: AppTheme.textTertiary,
+                    count: allContacts
                         .where((c) => c.presenceState == 'Unknown')
                         .length
                         .toString(),
-                    'Unknown',
+                    label: 'Unknown',
                   ),
                 ],
               ),
@@ -180,41 +157,6 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       onSelected: (selected) {
         setState(() => _filterPresence = selected ? label : 'All');
       },
-    );
-  }
-
-  Widget _buildStatChip(
-      IconData icon, Color color, String count, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 12),
-          const SizedBox(width: 6),
-          Text(
-            count,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color.withValues(alpha: 0.8),
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -471,7 +413,7 @@ class _ContactTile extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: _presenceColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                 border: Border.all(
                   color: _presenceColor.withValues(alpha: 0.4),
                 ),

@@ -275,7 +275,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                         onChanged: state.isRegistering
                             ? null
                             : (v) => notifier.setSrtpEnabled(v),
-                        activeColor: AppTheme.primary,
+                        activeThumbColor: AppTheme.primary,
                         contentPadding: EdgeInsets.zero,
                       ),
                       const SizedBox(height: 24),

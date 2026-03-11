@@ -4,6 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../core/app_theme.dart';
+import '../widgets/page_scaffold.dart';
+import '../widgets/section_title.dart';
+import '../widgets/setting_card.dart';
+import '../widgets/stat_badge.dart';
+import '../widgets/info_banner.dart';
 import '../core/app_settings_service.dart';
 import '../core/clipboard_service.dart';
 import '../core/contacts_service.dart';
@@ -38,86 +43,63 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0D0D1A), Color(0xFF1A1040)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return PageScaffold(
+      title: 'Settings',
+      actions: [
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
+          onSelected: (value) {
+            if (value == 'export') _exportSettings();
+            if (value == 'import') _importSettings();
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'export',
+              child: Row(
+                children: [
+                  Icon(Icons.file_download, size: 20),
+                  SizedBox(width: 12),
+                  Text('Export Settings'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'import',
+              child: Row(
+                children: [
+                  Icon(Icons.file_upload, size: 20),
+                  SizedBox(width: 12),
+                  Text('Import Settings'),
+                ],
+              ),
+            ),
+          ],
         ),
+      ],
+      bottom: TabBar(
+        controller: _tabController,
+        labelColor: AppTheme.primary,
+        unselectedLabelColor: AppTheme.textTertiary,
+        indicatorColor: AppTheme.primary,
+        tabs: const [
+          Tab(icon: Icon(Icons.tune), text: 'General'),
+          Tab(icon: Icon(Icons.volume_up), text: 'Audio'),
+          Tab(icon: Icon(Icons.audio_file), text: 'Codecs'),
+          Tab(icon: Icon(Icons.phone_in_talk), text: 'Calls'),
+          Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
+          Tab(icon: Icon(Icons.integration_instructions), text: 'Integrations'),
+        ],
       ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          title: const Text(
-            'Settings',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 20,
-            ),
-          ),
-          actions: [
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
-              onSelected: (value) {
-                if (value == 'export') _exportSettings();
-                if (value == 'import') _importSettings();
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'export',
-                  child: Row(
-                    children: [
-                      Icon(Icons.file_download, size: 20),
-                      SizedBox(width: 12),
-                      Text('Export Settings'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'import',
-                  child: Row(
-                    children: [
-                      Icon(Icons.file_upload, size: 20),
-                      SizedBox(width: 12),
-                      Text('Import Settings'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-          bottom: TabBar(
-            controller: _tabController,
-            labelColor: AppTheme.primary,
-            unselectedLabelColor: AppTheme.textTertiary,
-            indicatorColor: AppTheme.primary,
-            tabs: const [
-              Tab(icon: Icon(Icons.tune), text: 'General'),
-              Tab(icon: Icon(Icons.volume_up), text: 'Audio'),
-              Tab(icon: Icon(Icons.audio_file), text: 'Codecs'),
-              Tab(icon: Icon(Icons.phone_in_talk), text: 'Calls'),
-              Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
-              Tab(
-                  icon: Icon(Icons.integration_instructions),
-                  text: 'Integrations'),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildGeneralTab(),
-            _buildAudioTab(),
-            _buildCodecsTab(),
-            _buildCallsTab(),
-            _buildContactsTab(),
-            _buildIntegrationsTab(),
-          ],
-        ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildGeneralTab(),
+          _buildAudioTab(),
+          _buildCodecsTab(),
+          _buildCallsTab(),
+          _buildContactsTab(),
+          _buildIntegrationsTab(),
+        ],
       ),
     );
   }
@@ -128,20 +110,14 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Application Settings'),
+          const SectionTitle('Application Settings'),
           const SizedBox(height: 16),
 
           // App Info Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.primary.withValues(alpha: 0.3),
-              ),
-            ),
-            child: const Column(
+          const InfoBanner(
+            icon: Icons.info_outline,
+            text: '',
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -174,11 +150,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
 
           const SizedBox(height: 32),
 
-          _buildSectionTitle('Preferences'),
+          const SectionTitle('Preferences'),
           const SizedBox(height: 16),
 
           // BLF Toggle
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.visibility,
             title: 'BLF / Presence',
             subtitle: 'Show contact presence status',
@@ -277,7 +253,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Codec Priority'),
+          const SectionTitle('Codec Priority'),
           const SizedBox(height: 8),
           const Text(
             'Drag to reorder. Higher priority codecs are preferred during call negotiation.',
@@ -377,11 +353,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Call Settings'),
+          const SectionTitle('Call Settings'),
           const SizedBox(height: 16),
 
           // DND Toggle
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.do_not_disturb,
             title: 'Do Not Disturb',
             subtitle: ref.watch(appSettingsProvider).dndEnabled
@@ -401,7 +377,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 16),
 
           // Auto Answer
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.phone_callback,
             title: 'Auto Answer',
             subtitle: ref.watch(appSettingsProvider).autoAnswerEnabled
@@ -421,7 +397,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 16),
 
           // DTMF Method
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.dialpad,
             title: 'DTMF Method',
             subtitle:
@@ -444,28 +420,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 24),
 
           // Info card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.primary.withValues(alpha: 0.3),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, color: AppTheme.primary, size: 24),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'These settings apply to all accounts. Changes take effect immediately.',
-                    style:
-                        TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+          const InfoBanner(
+            icon: Icons.info_outline,
+            text:
+                'These settings apply to all accounts. Changes take effect immediately.',
           ),
         ],
       ),
@@ -478,7 +436,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('BLF Contacts'),
+          const SectionTitle('BLF Contacts'),
           const SizedBox(height: 8),
           Text(
             '${ContactsService.instance.contacts.length} contacts loaded',
@@ -491,38 +449,38 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           Row(
             children: [
               Expanded(
-                child: _buildStatCard(
-                  Icons.circle,
-                  AppTheme.callGreen,
-                  ContactsService.instance
+                child: StatBadge.card(
+                  icon: Icons.circle,
+                  color: AppTheme.callGreen,
+                  count: ContactsService.instance
                       .getByPresence('Available')
                       .length
                       .toString(),
-                  'Available',
+                  label: 'Available',
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildStatCard(
-                  Icons.circle,
-                  AppTheme.errorRed,
-                  ContactsService.instance
+                child: StatBadge.card(
+                  icon: Icons.circle,
+                  color: AppTheme.errorRed,
+                  count: ContactsService.instance
                       .getByPresence('Busy')
                       .length
                       .toString(),
-                  'Busy',
+                  label: 'Busy',
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildStatCard(
-                  Icons.circle,
-                  AppTheme.textTertiary,
-                  ContactsService.instance
+                child: StatBadge.card(
+                  icon: Icons.circle,
+                  color: AppTheme.textTertiary,
+                  count: ContactsService.instance
                       .getByPresence('Unknown')
                       .length
                       .toString(),
-                  'Unknown',
+                  label: 'Unknown',
                 ),
               ),
             ],
@@ -547,79 +505,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: AppTheme.textPrimary,
-        fontWeight: FontWeight.w700,
-        fontSize: 16,
-      ),
-    );
-  }
-
-  Widget _buildSettingCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Widget trailing,
-  }) {
-    return Card(
-      color: AppTheme.surfaceCard,
-      child: ListTile(
-        leading: Icon(icon, color: AppTheme.primary, size: 28),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(
-            color: AppTheme.textTertiary,
-            fontSize: 12,
-          ),
-        ),
-        trailing: trailing,
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-      IconData icon, Color color, String count, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            count,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              color: color.withValues(alpha: 0.8),
-              fontSize: 11,
             ),
           ),
         ],
@@ -768,7 +653,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Audio Devices'),
+          const SectionTitle('Audio Devices'),
           const SizedBox(height: 8),
           const Text(
             'Select your preferred microphone and speaker. If your device isn\'t listed, try refreshing.',
@@ -777,7 +662,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 24),
 
           // Input Device
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.mic,
             title: 'Microphone (Input)',
             subtitle: inputDevices.isEmpty
@@ -813,7 +698,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 16),
 
           // Output Device
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.speaker,
             title: 'Speaker (Output)',
             subtitle: outputDevices.isEmpty
@@ -873,29 +758,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 24),
 
           // Tip card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.primary.withValues(alpha: 0.3),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.lightbulb_outline,
-                    color: AppTheme.primary, size: 24),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'If you experience no sound, ensure your earphones are connected and selected as the default communication device in Windows Sound Settings.',
-                    style:
-                        TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+          const InfoBanner(
+            icon: Icons.lightbulb_outline,
+            text:
+                'If you experience no sound, ensure your earphones are connected and selected as the default communication device in Windows Sound Settings.',
           ),
         ],
       ),
@@ -908,7 +774,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Integration Features'),
+          const SectionTitle('Integration Features'),
           const SizedBox(height: 8),
           const Text(
             'Configure webhooks, CRM lookup, screen pop, and more.',
@@ -970,11 +836,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 24),
 
           // Quick toggles
-          _buildSectionTitle('Quick Toggles'),
+          const SectionTitle('Quick Toggles'),
           const SizedBox(height: 16),
 
           // Clipboard monitoring quick toggle
-          _buildSettingCard(
+          SettingCard(
             icon: Icons.content_paste_search,
             title: 'Clipboard Monitoring',
             subtitle: 'Detect phone numbers in clipboard and offer to dial.',

@@ -15,6 +15,7 @@ import '../models/call.dart';
 import '../models/media_stats.dart';
 import '../providers/engine_provider.dart';
 import '../providers/dialer_ui_provider.dart';
+import '../widgets/gradient_action_button.dart';
 
 final selectedAccountProvider = FutureProvider<AccountSchema?>((ref) {
   return ref.watch(accountServiceProvider).getSelectedAccount();
@@ -1281,49 +1282,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       ActiveCall? call,
       List<AudioDevice> audioDevices) {
     bool isCall = call != null;
-    return Container(
-      width: double.infinity,
-      height: 48,
-      decoration: BoxDecoration(
-        gradient: isCall
-            ? AppTheme.hangupButtonGradient
-            : AppTheme.callButtonGradient,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: (isCall ? AppTheme.hangupRed : AppTheme.callGreen)
-                .withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isCall
-              ? _hangup
-              : () => _call(account, activeAccountState, audioDevices),
-          borderRadius: BorderRadius.circular(12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(isCall ? Icons.call_end : Icons.call,
-                  size: 20, color: Colors.white),
-              const SizedBox(width: 10),
-              Text(
-                isCall ? 'HANG UP (Esc)' : 'DIAL (Enter)',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  fontSize: 14,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return GradientActionButton(
+      icon: isCall ? Icons.call_end : Icons.call,
+      label: isCall ? 'HANG UP (Esc)' : 'DIAL (Enter)',
+      gradient:
+          isCall ? AppTheme.hangupButtonGradient : AppTheme.callButtonGradient,
+      glowColor: isCall ? AppTheme.hangupRed : AppTheme.callGreen,
+      onTap: isCall
+          ? _hangup
+          : () => _call(account, activeAccountState, audioDevices),
     );
   }
 }

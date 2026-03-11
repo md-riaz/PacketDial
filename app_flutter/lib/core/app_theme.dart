@@ -30,6 +30,23 @@ class AppTheme {
   static const Color textTertiary = Color(0xFF6B6B88);
   static const Color inputFill = Color(0xFF14142B); // Same as surfaceVariant
 
+  // ── Spacing Scale ─────────────────────────────────────────────────────────
+  static const double spacingXs = 4;
+  static const double spacingSm = 8;
+  static const double spacingMd = 16;
+  static const double spacingLg = 24;
+  static const double spacingXl = 32;
+
+  // ── Radius Scale ──────────────────────────────────────────────────────────
+  static const double radiusSm = 6;
+  static const double radiusMd = 10;
+  static const double radiusLg = 16;
+
+  // ── Animation Durations ───────────────────────────────────────────────────
+  static const Duration durationFast = Duration(milliseconds: 150);
+  static const Duration durationNormal = Duration(milliseconds: 250);
+  static const Duration durationSlow = Duration(milliseconds: 400);
+
   // ── Window Geometry ────────────────────────────────────────────────────────
   static const Size defaultWindowSize = Size(450, 850);
   static const Size minWindowSize = Size(400, 750);
@@ -64,6 +81,22 @@ class AppTheme {
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
+
+  static const LinearGradient pageGradient = LinearGradient(
+    colors: [Color(0xFF0D0D1A), Color(0xFF1A1040)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  /// Tinted info / tip card decoration.
+  static BoxDecoration infoCard({Color? color}) {
+    final c = color ?? primary;
+    return BoxDecoration(
+      color: c.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(radiusMd + 2),
+      border: Border.all(color: c.withValues(alpha: 0.3)),
+    );
+  }
 
   // ── Shadows & Glows ────────────────────────────────────────────────────────
   static List<BoxShadow> get cardShadow => [
