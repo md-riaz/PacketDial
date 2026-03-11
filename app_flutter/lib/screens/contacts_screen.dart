@@ -1,9 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_theme.dart';
+import '../core/app_settings_service.dart';
+import '../core/account_service.dart';
 import '../core/contacts_service.dart';
 import '../core/engine_channel.dart';
+import '../models/account.dart';
+import '../models/account_schema.dart';
 import '../providers/contacts_provider.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/stat_badge.dart';
@@ -19,6 +26,32 @@ class ContactsScreen extends ConsumerStatefulWidget {
 class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   String _searchQuery = '';
   String _filterPresence = 'All';
+  StreamSubscription<Map<String, dynamic>>? _blfSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _blfSub = EngineChannel.instance.eventStream.listen((event) {
+      if (event['type'] != 'BlfStatusChanged') return;
+      final payload = event['payload'] as Map<String, dynamic>? ?? const {};
+      final uri = payload['uri'] as String? ?? '';
+      final state = payload['state'] as String? ?? 'Unknown';
+      final activity = payload['activity'] as String?;
+      debugPrint(
+        '[ContactsScreen] BLF event uri="$uri" state="$state" activity="${activity ?? ""}"',
+      );
+      ref.read(contactsProvider.notifier).updatePresence(uri, state, activity);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_syncBlfSubscriptions());
+    });
+  }
+
+  @override
+  void dispose() {
+    _blfSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,15 +74,25 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.add, color: AppTheme.primary),
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.primary.withValues(alpha: 0.14),
+                foregroundColor: AppTheme.primary,
+              ),
+              icon: const Icon(Icons.person_add_alt_1),
               onPressed: () => _showAddContactDialog(),
               tooltip: 'Add Contact',
             ),
+            const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.refresh, color: AppTheme.textPrimary),
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.accent.withValues(alpha: 0.14),
+                foregroundColor: AppTheme.accentBright,
+              ),
+              icon: const Icon(Icons.refresh),
               onPressed: () => _refreshContacts(),
               tooltip: 'Refresh',
             ),
+            const SizedBox(width: 10),
           ],
         ),
         body: Column(
@@ -75,11 +118,11 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildFilterChip('All', Colors.grey),
+                    _buildFilterChip('All', AppTheme.primary),
                     const SizedBox(width: 8),
                     _buildFilterChip('Available', AppTheme.callGreen),
                     const SizedBox(width: 8),
-                    _buildFilterChip('Busy', AppTheme.errorRed),
+                    _buildFilterChip('Busy', AppTheme.warningAmber),
                     const SizedBox(width: 8),
                     _buildFilterChip('Unknown', AppTheme.textTertiary),
                   ],
@@ -151,8 +194,13 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
         ),
       ),
       selected: isSelected,
-      selectedColor: color,
-      backgroundColor: color.withValues(alpha: 0.1),
+      selectedColor: color.withValues(alpha: 0.92),
+      backgroundColor: AppTheme.surfaceCard,
+      side: BorderSide(
+        color: isSelected
+            ? color.withValues(alpha: 0.95)
+            : color.withValues(alpha: 0.28),
+      ),
       checkmarkColor: Colors.white,
       onSelected: (selected) {
         setState(() => _filterPresence = selected ? label : 'All');
@@ -216,7 +264,16 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       itemCount: contacts.length,
       itemBuilder: (context, index) {
         final contact = contacts[index];
-        return _ContactTile(contact: contact);
+        return _ContactTile(
+          contact: contact,
+          onCallPrimary: () => _callContact(contact),
+          onCallExtension: contact.extension != null &&
+                  contact.extension!.trim().isNotEmpty
+              ? () => _callContact(contact, useExtension: true)
+              : null,
+          onEdit: () => _showEditContactDialog(contact),
+          onDelete: () => _confirmDeleteContact(contact),
+        );
       },
     );
   }
@@ -290,14 +347,16 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 style: TextStyle(color: AppTheme.textSecondary)),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
-                ref.read(contactsProvider.notifier).addContact(BlfContact(
+                await ref.read(contactsProvider.notifier).addContact(BlfContact(
                       id: DateTime.now().millisecondsSinceEpoch.toString(),
                       name: nameCtrl.text,
                       sipUri: phoneCtrl.text,
                       extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
                     ));
+                await _syncBlfSubscriptions();
+                if (!context.mounted) return;
                 Navigator.pop(context);
               }
             },
@@ -309,13 +368,250 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 
   void _refreshContacts() {
-    ref.read(contactsProvider.notifier).loadContacts();
+    ref.read(contactsProvider.notifier).loadContacts().then((_) async {
+      await _syncBlfSubscriptions();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Contacts refreshed'),
+          backgroundColor: AppTheme.callGreen,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    });
+  }
+
+  Future<void> _callContact(BlfContact contact, {bool useExtension = false}) async {
+    final account = _resolveBlfAccount();
+    if (account == null) {
+      _showFeedback(
+        'Select or register an account before dialing contacts.',
+        color: AppTheme.warningAmber,
+      );
+      return;
+    }
+
+    final target = useExtension
+        ? (contact.extension?.trim() ?? '')
+        : contact.sipUri.trim();
+    if (target.isEmpty) {
+      _showFeedback(
+        'This contact does not have a callable target.',
+        color: AppTheme.warningAmber,
+      );
+      return;
+    }
+
+    final rc = EngineChannel.instance.engine.makeCall(account.uuid, target);
+    if (rc != 0) {
+      _showFeedback(
+        'Failed to call ${contact.name} (rc=$rc)',
+        color: AppTheme.errorRed,
+      );
+    }
+  }
+
+  void _showEditContactDialog(BlfContact contact) {
+    final nameCtrl = TextEditingController(text: contact.name);
+    final extCtrl = TextEditingController(text: contact.extension ?? '');
+    final phoneCtrl = TextEditingController(text: contact.sipUri);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: const Text('Edit Contact',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: _contactInputDecoration('Name'),
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: extCtrl,
+              decoration: _contactInputDecoration('Extension (optional)'),
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneCtrl,
+              decoration: _contactInputDecoration(
+                'Phone or SIP URI',
+                hintText: '+8801XXXXXXXXX',
+              ),
+              keyboardType: TextInputType.phone,
+              style: const TextStyle(color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) return;
+              await ref.read(contactsProvider.notifier).updateContact(
+                    BlfContact(
+                      id: contact.id,
+                      name: nameCtrl.text.trim(),
+                      sipUri: phoneCtrl.text.trim(),
+                      extension: extCtrl.text.trim().isNotEmpty
+                          ? extCtrl.text.trim()
+                          : null,
+                      presenceState: contact.presenceState,
+                      activity: contact.activity,
+                    ),
+                  );
+              await _syncBlfSubscriptions();
+              if (!context.mounted) return;
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteContact(BlfContact contact) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        title: const Text('Delete Contact',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text(
+          'Delete "${contact.name}" from contacts?',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          FilledButton(
+            style:
+                FilledButton.styleFrom(backgroundColor: AppTheme.errorRed),
+            onPressed: () async {
+              await ref.read(contactsProvider.notifier).deleteContact(contact.id);
+              await _syncBlfSubscriptions();
+              if (!context.mounted) return;
+              Navigator.pop(context);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _syncBlfSubscriptions() async {
+    if (!AppSettingsService.instance.blfEnabled) {
+      debugPrint('[ContactsScreen] BLF sync skipped: BLF disabled');
+      return;
+    }
+
+    final account = _resolveBlfAccount();
+    if (account == null) {
+      debugPrint('[Contacts] BLF sync skipped: no registered account');
+      return;
+    }
+
+    final contacts = ref.read(contactsProvider);
+    final uris = contacts
+        .map((contact) {
+          final target = _buildBlfTarget(contact, account);
+          debugPrint(
+            '[ContactsScreen] BLF target for "${contact.name}" sipUri="${contact.sipUri}" ext="${contact.extension ?? ""}" => "$target"',
+          );
+          return target;
+        })
+        .where((uri) => uri.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    if (uris.isEmpty) {
+      debugPrint('[Contacts] BLF sync skipped: no contact targets');
+      return;
+    }
+
+    final engine = EngineChannel.instance.engine;
+    engine.sendCommand('BlfUnsubscribe', jsonEncode({'account_id': account.uuid}));
+    final rc = engine.sendCommand(
+      'BlfSubscribe',
+      jsonEncode({'account_id': account.uuid, 'uris': uris}),
+    );
+    debugPrint('[Contacts] BLF subscribe rc=$rc account=${account.uuid} uris=$uris');
+  }
+
+  AccountSchema? _resolveBlfAccount() {
+    final service = ref.read(accountServiceProvider);
+    final selected = service.getSelectedAccount();
+    if (selected != null) {
+      final selectedState = EngineChannel.instance.accounts[selected.uuid];
+      if (selectedState?.registrationState == RegistrationState.registered) {
+        return selected;
+      }
+    }
+
+    for (final account in service.getAllAccounts()) {
+      final state = EngineChannel.instance.accounts[account.uuid];
+      if (state?.registrationState == RegistrationState.registered) {
+        return account;
+      }
+    }
+    return null;
+  }
+
+  String _buildBlfTarget(BlfContact contact, AccountSchema account) {
+    final extension = contact.extension?.trim() ?? '';
+    if (extension.isNotEmpty) {
+      if (extension.contains('@') || extension.startsWith('sip:')) {
+        return extension;
+      }
+      final host = account.domain.trim().isNotEmpty
+          ? account.domain.trim()
+          : account.server.trim();
+      if (host.isNotEmpty) {
+        return 'sip:$extension@$host';
+      }
+      return extension;
+    }
+
+    return contact.sipUri.trim();
+  }
+
+  InputDecoration _contactInputDecoration(String label, {String? hintText}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hintText,
+      labelStyle: const TextStyle(color: AppTheme.textTertiary),
+      filled: true,
+      fillColor: AppTheme.inputFill,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  void _showFeedback(String message, {Color color = AppTheme.callGreen}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Contacts refreshed'),
-        backgroundColor: AppTheme.callGreen,
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 1),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -323,8 +619,18 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
 class _ContactTile extends StatelessWidget {
   final BlfContact contact;
+  final VoidCallback onCallPrimary;
+  final VoidCallback? onCallExtension;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _ContactTile({required this.contact});
+  const _ContactTile({
+    required this.contact,
+    required this.onCallPrimary,
+    required this.onCallExtension,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   Color get _presenceColor {
     switch (contact.presenceState) {
@@ -342,13 +648,13 @@ class _ContactTile extends StatelessWidget {
   IconData get _presenceIcon {
     switch (contact.presenceState) {
       case 'Available':
-        return Icons.check_circle;
+        return Icons.circle;
       case 'Busy':
-        return Icons.remove_circle;
+        return Icons.do_not_disturb_on_outlined;
       case 'Ringing':
         return Icons.phone;
       default:
-        return Icons.help_outline;
+        return Icons.circle_outlined;
     }
   }
 
@@ -358,12 +664,36 @@ class _ContactTile extends StatelessWidget {
       color: AppTheme.surfaceCard,
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _presenceColor.withValues(alpha: 0.2),
-          child: Icon(
-            Icons.person,
-            color: _presenceColor,
-            size: 20,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        leading: SizedBox(
+          width: 44,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: _presenceColor.withValues(alpha: 0.16),
+                child: Icon(
+                  Icons.person,
+                  color: _presenceColor,
+                  size: 20,
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 6,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.surfaceCard,
+                    border: Border.all(color: _presenceColor, width: 2),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         title: Text(
@@ -374,48 +704,51 @@ class _ContactTile extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 4),
+            if (contact.extension != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Ext: ${contact.extension}',
+                style: TextStyle(
+                  color: AppTheme.primary.withValues(alpha: 0.9),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+            ],
+            if (contact.activity != null &&
+                contact.activity!.trim().isNotEmpty) ...[
+              Text(
+                contact.activity!,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 10,
+                ),
+              ),
+              const SizedBox(height: 2),
+            ],
             Text(
               contact.sipUri,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppTheme.textTertiary,
                 fontSize: 11,
                 fontFamily: 'monospace',
               ),
             ),
-            if (contact.extension != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                'Ext: ${contact.extension}',
-                style: TextStyle(
-                  color: AppTheme.primary.withValues(alpha: 0.8),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-            if (contact.activity != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                contact.activity!,
-                style: const TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 10,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
           ],
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: _presenceColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                color: _presenceColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _presenceColor.withValues(alpha: 0.4),
+                  color: _presenceColor.withValues(alpha: 0.32),
                 ),
               ),
               child: Row(
@@ -438,30 +771,98 @@ class _ContactTile extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             PopupMenuButton<String>(
+              color: AppTheme.surfaceCard,
               icon: const Icon(Icons.more_vert, color: AppTheme.textTertiary),
               onSelected: (value) {
-                if (value == 'call') {
-                  // Dial the contact
-                  EngineChannel.instance.engine.makeCall(
-                    EngineChannel.instance.accounts.values.first.uuid,
-                    contact.sipUri,
-                  );
+                switch (value) {
+                  case 'call_extension':
+                    onCallExtension?.call();
+                    break;
+                  case 'call_primary':
+                    onCallPrimary();
+                    break;
+                  case 'edit':
+                    onEdit();
+                    break;
+                  case 'delete':
+                    onDelete();
+                    break;
                 }
               },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'call',
-                  child: Row(
-                    children: [
-                      Icon(Icons.call, size: 20, color: AppTheme.callGreen),
-                      SizedBox(width: 12),
-                      Text('Call'),
-                    ],
+              itemBuilder: (context) {
+                final items = <PopupMenuEntry<String>>[];
+                final extension = contact.extension?.trim() ?? '';
+                final sipTarget = contact.sipUri.trim();
+
+                if (extension.isNotEmpty) {
+                  items.add(
+                    PopupMenuItem(
+                      value: 'call_extension',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.dialpad,
+                              size: 18, color: AppTheme.primary),
+                          const SizedBox(width: 12),
+                          Text('Call ext $extension'),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                if (sipTarget.isNotEmpty) {
+                  items.add(
+                    PopupMenuItem(
+                      value: 'call_primary',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.call,
+                              size: 18, color: AppTheme.callGreen),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 150,
+                            child: Text(
+                              'Call $sipTarget',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                items.add(const PopupMenuDivider());
+                items.add(
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_outlined,
+                            size: 18, color: AppTheme.textPrimary),
+                        SizedBox(width: 12),
+                        Text('Edit contact'),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                );
+                items.add(
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline,
+                            size: 18, color: AppTheme.errorRed),
+                        SizedBox(width: 12),
+                        Text('Delete contact'),
+                      ],
+                    ),
+                  ),
+                );
+                return items;
+              },
             ),
           ],
         ),

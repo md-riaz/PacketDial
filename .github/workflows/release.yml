@@ -29,13 +29,33 @@ jobs:
             exit 1
           fi
 
-      - name: Update version.json
+      - name: Update app and core versions
         shell: pwsh
         run: |
-          $vj = Get-Content version.json -Raw | ConvertFrom-Json
-          $vj.version = "${{ inputs.release_version }}"
-          $vj | ConvertTo-Json -Depth 5 | Set-Content version.json
-          Get-Content version.json
+          $releaseVersion = "${{ inputs.release_version }}"
+
+          $pubspecPath = "app_flutter/pubspec.yaml"
+          $pubspecContent = Get-Content $pubspecPath -Raw
+          if ($pubspecContent -notmatch '(?m)^version:\s*([0-9A-Za-z\.\-\+]+)\s*$') {
+            throw "Could not find version in $pubspecPath"
+          }
+          $existingVersion = $Matches[1]
+          $buildNumber = 1
+          if ($existingVersion -match '\+(\d+)$') {
+            $buildNumber = [int]$Matches[1]
+          }
+          $updatedPubspec = $pubspecContent -replace '(?m)^version:\s*([0-9A-Za-z\.\-\+]+)\s*$', "version: $releaseVersion+$buildNumber"
+          Set-Content $pubspecPath -Value $updatedPubspec
+          Get-Content $pubspecPath | Select-String '^version:'
+
+          $cargoPath = "core_rust/Cargo.toml"
+          $cargoContent = Get-Content $cargoPath -Raw
+          if ($cargoContent -notmatch '(?m)^version\s*=\s*\"([0-9A-Za-z\.\-]+)\"\s*$') {
+            throw "Could not find version in $cargoPath"
+          }
+          $updatedCargo = $cargoContent -replace '(?m)^version\s*=\s*\"([0-9A-Za-z\.\-]+)\"\s*$', "version = `"$releaseVersion`""
+          Set-Content $cargoPath -Value $updatedCargo
+          Get-Content $cargoPath | Select-String '^version\s*='
 
       - name: Build Windows app
         uses: ./.github/actions/build-windows

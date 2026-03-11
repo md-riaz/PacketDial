@@ -5,7 +5,7 @@
 .DESCRIPTION
     Prepares the final release artifact by:
 
-    1. Reading version from version.json
+    1. Reading version from app_flutter/pubspec.yaml
     2. Collecting Flutter Windows release build output
     3. Adding the Rust core DLL (voip_core.dll)
     4. Validating required Flutter runtime files (flutter_windows.dll, icudtl.dat, data/)
@@ -19,7 +19,6 @@
     Prerequisites:
         - flutter build windows --release has completed
         - cargo build --release has completed (optional; app works without PJSIP DLL)
-        - version.json exists in the repository root
 
 .OUTPUTS
     dist\PacketDial-windows-x64.zip  (distributable package)
@@ -37,11 +36,33 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Get-PubspecVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PubspecPath
+    )
+
+    if (-not (Test-Path $PubspecPath)) {
+        throw "pubspec.yaml not found at: $PubspecPath"
+    }
+
+    $match = Select-String -Path $PubspecPath -Pattern '^version:\s*([0-9A-Za-z\.\-\+]+)\s*$' | Select-Object -First 1
+    if (-not $match) {
+        throw "Could not find version in pubspec.yaml"
+    }
+
+    $rawVersion = $match.Matches[0].Groups[1].Value.Trim()
+    if ($rawVersion.Contains('+')) {
+        return $rawVersion.Split('+')[0]
+    }
+    return $rawVersion
+}
+
 # ---------------------------------------------------------------------------
 # Resolve paths
 # ---------------------------------------------------------------------------
 $RepoRoot    = Split-Path -Parent $PSScriptRoot
-$VersionFile = Join-Path $RepoRoot 'version.json'
+$PubspecFile = Join-Path $RepoRoot 'app_flutter\pubspec.yaml'
 $FlutterBuild = Join-Path $RepoRoot 'app_flutter\build\windows\x64\runner\Release'
 $RustRelease  = Join-Path $RepoRoot 'core_rust\target\release'
 $RustReleaseTarget = Join-Path $RepoRoot 'core_rust\target\x86_64-pc-windows-msvc\release'
@@ -51,13 +72,7 @@ $StagingBase  = Join-Path $DistDir  'staging'
 # ---------------------------------------------------------------------------
 # Read version
 # ---------------------------------------------------------------------------
-if (-not (Test-Path $VersionFile)) {
-    Write-Warning "version.json not found - using 0.0.0-dev"
-    $Version = '0.0.0-dev'
-} else {
-    $vj = Get-Content $VersionFile -Raw | ConvertFrom-Json
-    $Version = $vj.version
-}
+$Version = Get-PubspecVersion -PubspecPath $PubspecFile
 
 $ArtifactName = "PacketDial-windows-x64"
 $StagingDir   = Join-Path $StagingBase $ArtifactName
@@ -206,13 +221,6 @@ if ($PdExe) {
     Copy-Item $PdExe -Destination $StagingDir
 } else {
     Write-Warning "pd.exe not found - skipping"
-}
-
-# ---------------------------------------------------------------------------
-# Copy version metadata into the bundle
-# ---------------------------------------------------------------------------
-if (Test-Path $VersionFile) {
-    Copy-Item $VersionFile -Destination $StagingDir
 }
 
 # ---------------------------------------------------------------------------

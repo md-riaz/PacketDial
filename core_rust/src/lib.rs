@@ -1067,8 +1067,25 @@ fn push_reg_state(account_id: &str, state: &RegistrationState) {
 
 fn push_call_state(call: &Call) {
     let mut payload = serde_json::Map::new();
+    let (account_name, display_name, username) = if let Ok(accts) = ACCOUNTS.lock() {
+        if let Some(account) = accts.get(&call.account_id) {
+            (
+                account.account_name.clone(),
+                account.display_name.clone(),
+                account.username.clone(),
+            )
+        } else {
+            (String::new(), String::new(), String::new())
+        }
+    } else {
+        (String::new(), String::new(), String::new())
+    };
+
     payload.insert("call_id".to_owned(), serde_json::json!(call.id));
     payload.insert("account_id".to_owned(), serde_json::json!(call.account_id));
+    payload.insert("account_name".to_owned(), serde_json::json!(account_name));
+    payload.insert("display_name".to_owned(), serde_json::json!(display_name));
+    payload.insert("account_user".to_owned(), serde_json::json!(username));
     payload.insert("uri".to_owned(), serde_json::json!(call.uri));
     payload.insert(
         "direction".to_owned(),

@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   bitsdojo_window_windows
+  connectivity_plus
   hotkey_manager_windows
   isar_flutter_libs
   just_audio_windows

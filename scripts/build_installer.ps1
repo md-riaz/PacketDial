@@ -2,12 +2,30 @@
 # Creates a professional Windows installer using Inno Setup
 
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "",
     [string]$OutputDir = "dist",
     [switch]$NoClean
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-PubspecVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PubspecPath
+    )
+
+    $match = Select-String -Path $PubspecPath -Pattern '^version:\s*([0-9A-Za-z\.\-\+]+)\s*$' | Select-Object -First 1
+    if (-not $match) {
+        throw "Could not find version in pubspec.yaml"
+    }
+
+    $rawVersion = $match.Matches[0].Groups[1].Value.Trim()
+    if ($rawVersion.Contains('+')) {
+        return $rawVersion.Split('+')[0]
+    }
+    return $rawVersion
+}
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "PacketDial Installer Builder" -ForegroundColor Cyan
@@ -18,6 +36,10 @@ Write-Host ""
 $AppName = "PacketDial"
 $AppPublisher = "PacketDial"
 $AppExe = "PacketDial.exe"
+$PubspecPath = Join-Path (Get-Location) "app_flutter\pubspec.yaml"
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = Get-PubspecVersion -PubspecPath $PubspecPath
+}
 $BuildDir = "app_flutter\build\windows\x64\runner\Release"
 $InstallerDir = "installer"
 $InnoScript = "$InstallerDir\setup.iss"

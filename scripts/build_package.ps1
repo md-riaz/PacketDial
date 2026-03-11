@@ -2,12 +2,30 @@
 # Flat version to avoid parser bugs in older PowerShell environments
 
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "",
     [string]$OutputDir = "dist",
     [switch]$NoClean
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-PubspecVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PubspecPath
+    )
+
+    $match = Select-String -Path $PubspecPath -Pattern '^version:\s*([0-9A-Za-z\.\-\+]+)\s*$' | Select-Object -First 1
+    if (-not $match) {
+        throw "Could not find version in pubspec.yaml"
+    }
+
+    $rawVersion = $match.Matches[0].Groups[1].Value.Trim()
+    if ($rawVersion.Contains('+')) {
+        return $rawVersion.Split('+')[0]
+    }
+    return $rawVersion
+}
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "PacketDial Portable Builder" -ForegroundColor Cyan
@@ -17,6 +35,10 @@ Write-Host ""
 # 1. Setup paths
 $AppName = "PacketDial"
 $Root = Get-Location
+$PubspecPath = Join-Path $Root "app_flutter\pubspec.yaml"
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = Get-PubspecVersion -PubspecPath $PubspecPath
+}
 $BuildDir = Join-Path $Root "app_flutter\build\windows\x64\runner\Release"
 $PackageDir = Join-Path $Root "$OutputDir\package"
 $ZipPath = Join-Path $Root "$OutputDir\$AppName-$Version-Portable.zip"

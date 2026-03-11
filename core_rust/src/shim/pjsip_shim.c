@@ -301,6 +301,37 @@ static void on_reg_state(pjsua_acc_id acc_id)
     g_on_reg((int)acc_id, info.expires, (int)info.status, reason);
 }
 
+static pj_bool_t pd_has_other_live_call(pjsua_call_id incoming_call_id)
+{
+    pjsua_call_id call_ids[PJSUA_MAX_CALLS];
+    unsigned count = PJSUA_MAX_CALLS;
+    unsigned i;
+
+    if (pjsua_enum_calls(call_ids, &count) != PJ_SUCCESS) {
+        return PJ_FALSE;
+    }
+
+    for (i = 0; i < count; i++) {
+        pjsua_call_id other_call_id = call_ids[i];
+        pjsua_call_info ci;
+
+        if (other_call_id == incoming_call_id) {
+            continue;
+        }
+
+        pj_bzero(&ci, sizeof(ci));
+        if (pjsua_call_get_info(other_call_id, &ci) != PJ_SUCCESS) {
+            continue;
+        }
+
+        if (ci.state != PJSIP_INV_STATE_DISCONNECTED) {
+            return PJ_TRUE;
+        }
+    }
+
+    return PJ_FALSE;
+}
+
 static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
                               pjsip_rx_data *rdata)
 {
@@ -312,6 +343,14 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
             g_on_log(4, "DND enabled - auto-rejecting incoming call");
         }
         /* Auto-reject with 486 Busy Here */
+        pjsua_call_hangup(call_id, 486, NULL, NULL);
+        return;
+    }
+
+    if (pd_has_other_live_call(call_id)) {
+        if (g_on_log) {
+            g_on_log(4, "Active call already in progress - rejecting incoming call with busy");
+        }
         pjsua_call_hangup(call_id, 486, NULL, NULL);
         return;
     }

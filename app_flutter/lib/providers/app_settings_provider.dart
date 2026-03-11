@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_settings_service.dart';
+import '../core/engine_channel.dart';
 
 class AppSettingsData {
   final List<Map<String, dynamic>> codecPriorities;
@@ -75,6 +76,11 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
 
   Future<void> setGlobalDndEnabled(bool value) async {
     await _service.setGlobalDndEnabled(value);
+    final rc =
+        EngineChannel.instance.engine.sendCommand('SetGlobalDnd', '{"enabled":$value}');
+    if (rc != 0) {
+      throw Exception('Failed to apply global DND in engine (rc=$rc)');
+    }
     _refresh();
   }
 

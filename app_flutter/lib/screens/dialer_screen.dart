@@ -130,32 +130,31 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         context,
         hasInput: hasInput,
         hasOutput: hasOutput,
-        onProceed: () => _dialWithAccountSelection(raw),
+        onProceed: () => _dialWithSelectedAccount(activeAccount, raw),
       );
       return;
     }
 
-    _dialWithAccountSelection(raw);
+    _dialWithSelectedAccount(activeAccount, raw);
   }
 
-  /// Handles account selection and dialing.
-  Future<void> _dialWithAccountSelection(String raw) async {
-    Account? selectedAccount;
-    try {
-      selectedAccount = await _selectAccount(context);
-    } catch (e) {
-      debugPrint('[Dialer] Account selection failed: $e');
-      _showErrorDialog(
-        'Account Selection Failed',
-        'Could not select an account for this call. Please try again.',
-      );
+  void _dialWithSelectedAccount(AccountSchema? selectedAccount, String raw) {
+    if (selectedAccount == null) {
+      _showErrorDialog('No Account Selected',
+          'Select a SIP account from the dialer header before placing a call.');
       return;
     }
 
-    if (selectedAccount == null) return;
-
     final accountState = EngineChannel.instance.accounts[selectedAccount.uuid];
-    if (accountState?.registrationState != RegistrationState.registered) {
+    if (accountState == null) {
+      _showErrorDialog(
+        'Account Unavailable',
+        'The selected account "${selectedAccount.accountName}" is not loaded in the engine.\n\n'
+            'Try re-enabling the account from the Accounts page.',
+      );
+      return;
+    }
+    if (accountState.registrationState != RegistrationState.registered) {
       _showErrorDialog(
         'Account Not Registered',
         'The selected account "${selectedAccount.accountName}" is not registered.\n\n'
@@ -163,11 +162,19 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       );
       return;
     }
+    if (selectedAccount.username.trim().isEmpty ||
+        selectedAccount.server.trim().isEmpty) {
+      _showErrorDialog(
+        'Incomplete Account',
+        'The selected account is missing username or server, so it cannot place calls.',
+      );
+      return;
+    }
 
     _executeCall(selectedAccount, raw);
   }
 
-  void _executeCall(Account activeAccount, String raw) {
+  void _executeCall(AccountSchema activeAccount, String raw) {
     final accountId = activeAccount.uuid;
 
     final uri = raw.trim();
@@ -225,112 +232,6 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
       _showErrorDialog(title, errorMessage, showSettings: showSettingsButton);
     }
-  }
-
-  /// Shows account selection dialog when multiple accounts are registered.
-  Future<Account?> _selectAccount(BuildContext context) async {
-    final registeredAccounts = EngineChannel.instance.accounts.values
-        .where((a) => a.registrationState == RegistrationState.registered)
-        .toList();
-
-    if (registeredAccounts.isEmpty) {
-      _showErrorDialog('No Account Available',
-          'Please register at least one SIP account before making calls.');
-      return null;
-    }
-
-    if (registeredAccounts.length == 1) {
-      return registeredAccounts.first;
-    }
-
-    // Multiple accounts - show selection dialog
-    return showDialog<Account>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        icon: const Icon(Icons.sim_card, color: AppTheme.primary, size: 48),
-        title: const Text('Select Account',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Choose which account to use for this call:',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: registeredAccounts.length,
-                itemBuilder: (context, index) {
-                  final account = registeredAccounts[index];
-                  final hasDialIdentity = account.username.trim().isNotEmpty &&
-                      account.server.trim().isNotEmpty;
-                  final subtitleText = hasDialIdentity
-                      ? '${account.username}@${account.server}'
-                      : 'Account details incomplete';
-
-                  return Card(
-                    color: AppTheme.inputFill,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor:
-                            AppTheme.primary.withValues(alpha: 0.2),
-                        child: Text(
-                          account.accountName.substring(0, 1).toUpperCase(),
-                          style: const TextStyle(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        account.accountName,
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text(
-                        subtitleText,
-                        style: TextStyle(
-                          color: hasDialIdentity
-                              ? AppTheme.textTertiary
-                              : AppTheme.warningAmber,
-                          fontSize: 11,
-                        ),
-                      ),
-                      onTap: hasDialIdentity
-                          ? () {
-                              debugPrint(
-                                  '[Dialer] Account selected for call: ${account.uuid}');
-                              Navigator.pop(context, account);
-                            }
-                          : () {
-                              _showErrorDialog(
-                                'Incomplete Account',
-                                'This account is missing username or server, so it cannot place calls.',
-                              );
-                            },
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showErrorDialog(String title, String message,
@@ -1016,7 +917,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeAccount = ref.watch(selectedAccountProvider);
+    final accountService = ref.watch(accountServiceProvider);
+    final activeAccount = accountService.getSelectedAccount();
+    final allAccounts = accountService.getAllAccounts();
     final activeCall = ref.watch(activeCallProvider);
     final stats = ref.watch(activeCallMediaStatsProvider);
     final dialerUi = ref.watch(dialerUiProvider);
@@ -1056,7 +959,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 child: Column(
                   children: [
                     // 1. Compact Header
-                    _buildCompactHeader(activeAccount),
+                    _buildCompactHeader(activeAccount, allAccounts),
                     const SizedBox(height: 10),
 
                     // 2. Active Call Panel (expands to fill space)
@@ -1104,7 +1007,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     );
   }
 
-  Widget _buildCompactHeader(AccountSchema? account) {
+  Widget _buildCompactHeader(
+      AccountSchema? account, List<AccountSchema> allAccounts) {
+    final selectableAccounts =
+        allAccounts.where((acct) => acct.isEnabled).toList(growable: false);
+    final selectedValue = account != null &&
+            selectableAccounts.any((acct) => acct.uuid == account.uuid)
+        ? account.uuid
+        : null;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: AppTheme.glassCard(borderRadius: 8),
@@ -1121,15 +1032,77 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              account?.displayName ?? 'No Active Account',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: selectableAccounts.length <= 1
+                ? Text(
+                    _dialerHeaderAccountLabel(account),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: selectedValue,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceCard,
+                      iconEnabledColor: AppTheme.primary,
+                      hint: const Text(
+                        'Select account',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                      items: selectableAccounts.map((acct) {
+                        final regState = EngineChannel
+                                .instance.accounts[acct.uuid]?.registrationState ??
+                            RegistrationState.unregistered;
+                        final statusText = switch (regState) {
+                          RegistrationState.registered => 'Registered',
+                          RegistrationState.registering => 'Registering',
+                          RegistrationState.failed => 'Failed',
+                          RegistrationState.unregistered => 'Offline',
+                        };
+                        return DropdownMenuItem<String>(
+                          value: acct.uuid,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _dialerHeaderAccountLabel(acct),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                statusText,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: regState == RegistrationState.registered
+                                      ? AppTheme.callGreen
+                                      : AppTheme.textTertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await ref
+                            .read(accountServiceProvider)
+                            .setSelectedAccount(value);
+                      },
+                    ),
+                  ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1154,6 +1127,17 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ],
       ),
     );
+  }
+
+  String _dialerHeaderAccountLabel(AccountSchema? account) {
+    if (account == null) return 'No Active Account';
+    final accountName = account.accountName.trim();
+    if (accountName.isNotEmpty) return accountName;
+    final displayName = account.displayName.trim();
+    if (displayName.isNotEmpty) return displayName;
+    final username = account.username.trim();
+    if (username.isNotEmpty) return username;
+    return 'No Active Account';
   }
 
   Widget _buildReadyIndicator() {

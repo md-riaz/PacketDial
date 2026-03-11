@@ -20,6 +20,8 @@ import 'core/window_prefs.dart';
 import 'ffi/engine.dart';
 import 'providers/engine_provider.dart';
 import 'providers/incoming_call_provider.dart';
+import 'providers/app_settings_provider.dart';
+import 'providers/network_status_provider.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/dialer_screen.dart';
@@ -241,6 +243,13 @@ class _AppState extends ConsumerState<App>
 
       // Auto-register saved accounts AFTER the callback is attached
       if (engineOk) {
+        final dndEnabled = AppSettingsService.instance.dndEnabled;
+        final dndRc =
+            engine.sendCommand('SetGlobalDnd', '{"enabled":$dndEnabled}');
+        if (dndRc != 0) {
+          debugPrint('[APP] Failed to sync global DND on boot: rc=$dndRc');
+        }
+
         await widget.accountService.autoRegisterAll();
 
         // Listen for registration failures → auto-show edit page
@@ -296,6 +305,7 @@ class _AppState extends ConsumerState<App>
       if (suppressForScreenPop) {
         return;
       }
+      _returnToDialerForIncomingCall();
       try {
         if (await windowManager.isMinimized()) {
           await windowManager.restore();
@@ -322,6 +332,19 @@ class _AppState extends ConsumerState<App>
       } catch (e) {
         debugPrint('[APP] Failed to restore always-on-top after call: $e');
       }
+    }
+  }
+
+  void _returnToDialerForIncomingCall() {
+    if (!mounted) return;
+
+    final navigator = _navigatorKey.currentState;
+    if (navigator != null) {
+      navigator.popUntil((route) => route.isFirst);
+    }
+
+    if (_selectedIndex != 0) {
+      setState(() => _selectedIndex = 0);
     }
   }
 
@@ -738,6 +761,7 @@ class CockpitFooter extends ConsumerWidget {
     final activeAccount = ref.watch(activeAccountProvider);
     final regState = ref.watch(registrationStateProvider);
     final activeCall = ref.watch(activeCallProvider);
+    final networkStatus = ref.watch(networkStatusProvider);
 
     // Multi-account summary vs single account
     final bool isMulti = summary.totalEnabled > 1;
@@ -755,6 +779,12 @@ class CockpitFooter extends ConsumerWidget {
     }
 
     bool hasCall = activeCall != null;
+    final isNetworkOnline =
+        networkStatus.valueOrNull != NetworkReachabilityStatus.offline;
+    final networkColor =
+        isNetworkOnline ? AppTheme.textTertiary : AppTheme.errorRed;
+    final networkLabel =
+        isNetworkOnline ? 'Network: Online' : 'Network: Offline';
 
     return Container(
       height: 28,
@@ -810,10 +840,12 @@ class CockpitFooter extends ConsumerWidget {
               ),
             ),
           ] else ...[
-            const Icon(Icons.wifi, size: 10, color: AppTheme.textTertiary),
+            Icon(Icons.wifi, size: 10, color: networkColor),
             const SizedBox(width: 4),
-            const Text('Network: OK',
-                style: TextStyle(fontSize: 10, color: AppTheme.textTertiary)),
+            Text(
+              networkLabel,
+              style: TextStyle(fontSize: 10, color: networkColor),
+            ),
           ],
 
           const Spacer(),
@@ -821,10 +853,10 @@ class CockpitFooter extends ConsumerWidget {
           // Global DND Toggle
           Consumer(
             builder: (context, ref, _) {
-              final dndEnabled = AppSettingsService.instance.dndEnabled;
+              final dndEnabled = ref.watch(appSettingsProvider).dndEnabled;
               return InkWell(
                 onTap: () async {
-                  await AppSettingsService.instance
+                  await ref.read(appSettingsProvider.notifier)
                       .setGlobalDndEnabled(!dndEnabled);
                 },
                 borderRadius: BorderRadius.circular(4),

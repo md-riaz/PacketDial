@@ -1,7 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/app_theme.dart';
 import '../widgets/page_scaffold.dart';
@@ -30,12 +30,14 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late final TextEditingController _recordingDirController;
+  late final Future<PackageInfo> _packageInfoFuture;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
     _recordingDirController = TextEditingController();
+    _packageInfoFuture = PackageInfo.fromPlatform();
   }
 
   @override
@@ -49,37 +51,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   Widget build(BuildContext context) {
     return PageScaffold(
       title: 'Settings',
-      actions: [
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: AppTheme.textPrimary),
-          onSelected: (value) {
-            if (value == 'export') _exportSettings();
-            if (value == 'import') _importSettings();
-          },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'export',
-              child: Row(
-                children: [
-                  Icon(Icons.file_download, size: 20),
-                  SizedBox(width: 12),
-                  Text('Export Settings'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'import',
-              child: Row(
-                children: [
-                  Icon(Icons.file_upload, size: 20),
-                  SizedBox(width: 12),
-                  Text('Import Settings'),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
       bottom: TabBar(
         controller: _tabController,
         labelColor: AppTheme.primary,
@@ -116,38 +87,46 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 16),
 
           // App Info Card
-          const InfoBanner(
-            icon: Icons.info_outline,
-            text: '',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'PacketDial',
-                  style: TextStyle(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
+          FutureBuilder<PackageInfo>(
+            future: _packageInfoFuture,
+            builder: (context, snapshot) {
+              final versionText = snapshot.hasData
+                  ? 'Version ${snapshot.data!.version} (build ${snapshot.data!.buildNumber})'
+                  : 'Version unavailable';
+              return InfoBanner(
+                icon: Icons.info_outline,
+                text: '',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'PacketDial',
+                      style: TextStyle(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      versionText,
+                      style: const TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Modern Windows SIP softphone with advanced features',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'Version 1.0.0',
-                  style: TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
-                  ),
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Modern Windows SIP softphone with advanced features',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
 
           const SizedBox(height: 32),
@@ -480,55 +459,79 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             subtitle: configuredDir.isNotEmpty
                 ? configuredDir
                 : 'Default: Desktop\\Recordings',
-            trailing: SizedBox(
-              width: 110,
-              child: FilledButton.tonalIcon(
-                onPressed: () async {
-                  final result = await FilePicker.platform.getDirectoryPath(
-                    dialogTitle: 'Select Recording Folder',
-                  );
-                  if (result == null || result.trim().isEmpty) return;
-                  _recordingDirController.text = result;
-                  await ref
-                      .read(appSettingsProvider.notifier)
-                      .setLocalRecordingDirectory(result);
-                },
-                icon: const Icon(Icons.folder_open, size: 18),
-                label: const Text('Browse'),
-              ),
-            ),
+            trailing: const SizedBox.shrink(),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
-          TextField(
-            controller: _recordingDirController,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-            decoration: InputDecoration(
-              labelText: 'Custom Recording Folder',
-              hintText: r'C:\Users\YourName\Desktop\Recordings',
-              prefixIcon: const Icon(Icons.edit_location_alt_outlined, size: 18),
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-              labelStyle:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-              hintStyle:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.border),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _recordingDirController,
+                  style:
+                      const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Recording Folder',
+                    hintText: r'C:\Users\YourName\Desktop\Recordings',
+                    prefixIcon:
+                        const Icon(Icons.edit_location_alt_outlined, size: 18),
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 16, horizontal: 16),
+                    labelStyle: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 13),
+                    hintStyle: const TextStyle(
+                        color: AppTheme.textTertiary, fontSize: 13),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppTheme.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide:
+                          const BorderSide(color: AppTheme.primary, width: 2),
+                    ),
+                  ),
+                  onSubmitted: (value) async {
+                    await ref
+                        .read(appSettingsProvider.notifier)
+                        .setLocalRecordingDirectory(value.trim());
+                  },
+                ),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide:
-                    const BorderSide(color: AppTheme.primary, width: 2),
+              const SizedBox(width: 8),
+              Align(
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: 46,
+                  height: 46,
+                  child: FilledButton(
+                    onPressed: () async {
+                      final result = await FilePicker.platform.getDirectoryPath(
+                        dialogTitle: 'Select Recording Folder',
+                      );
+                      if (result == null || result.trim().isEmpty) return;
+                      _recordingDirController.text = result;
+                      await ref
+                          .read(appSettingsProvider.notifier)
+                          .setLocalRecordingDirectory(result);
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.surfaceCard,
+                      foregroundColor: AppTheme.primary,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(46, 46),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Icon(Icons.folder_open, size: 18),
+                  ),
+                ),
               ),
-            ),
-            onSubmitted: (value) async {
-              await ref
-                  .read(appSettingsProvider.notifier)
-                  .setLocalRecordingDirectory(value.trim());
-            },
+            ],
           ),
 
           const SizedBox(height: 12),
@@ -562,83 +565,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         return 'SIP INFO';
       default:
         return 'Unknown';
-    }
-  }
-
-  Future<void> _exportSettings() async {
-    try {
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: 'Export Settings',
-        fileName: 'packetdial_settings.json',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
-      if (result != null) {
-        final file = File(result);
-        final success = await AppSettingsService.instance.exportSettings(file);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(success
-                  ? 'Settings exported to ${file.path}'
-                  : 'Export failed'),
-              backgroundColor: success ? AppTheme.callGreen : AppTheme.errorRed,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to export settings'),
-            backgroundColor: AppTheme.errorRed,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _importSettings() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        final success = await AppSettingsService.instance.importSettings(file);
-
-        if (success) {
-          await ref.read(appSettingsProvider.notifier).reloadSettings();
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  success ? 'Settings imported successfully' : 'Import failed'),
-              backgroundColor: success ? AppTheme.callGreen : AppTheme.errorRed,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to import settings'),
-            backgroundColor: AppTheme.errorRed,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     }
   }
 

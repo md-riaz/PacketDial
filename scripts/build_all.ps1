@@ -2,7 +2,7 @@
 # Builds Rust core, Flutter app, and creates installer
 
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "",
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     [switch]$SkipTests,
@@ -10,6 +10,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-PubspecVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PubspecPath
+    )
+
+    $match = Select-String -Path $PubspecPath -Pattern '^version:\s*([0-9A-Za-z\.\-\+]+)\s*$' | Select-Object -First 1
+    if (-not $match) {
+        throw "Could not find version in pubspec.yaml"
+    }
+
+    $rawVersion = $match.Matches[0].Groups[1].Value.Trim()
+    if ($rawVersion.Contains('+')) {
+        return $rawVersion.Split('+')[0]
+    }
+    return $rawVersion
+}
+
+$PubspecPath = Join-Path (Get-Location) "app_flutter\pubspec.yaml"
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = Get-PubspecVersion -PubspecPath $PubspecPath
+}
 
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan

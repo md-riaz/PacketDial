@@ -128,21 +128,31 @@ class ContactsService {
 
   /// Update presence state for a SIP URI.
   void updatePresence(String sipUri, String state, String? activity) {
+    debugPrint(
+      '[ContactsService] updatePresence target="$sipUri" state="$state" activity="${activity ?? ""}"',
+    );
     final contact = _contacts.firstWhere(
-      (c) => c.sipUri == sipUri,
+      (c) => _matchesPresenceTarget(c, sipUri),
       orElse: () => BlfContact(id: '', name: sipUri, sipUri: sipUri),
     );
     if (contact.id.isNotEmpty) {
+      debugPrint(
+        '[ContactsService] matched contact id=${contact.id} name="${contact.name}" sipUri="${contact.sipUri}" ext="${contact.extension ?? ""}"',
+      );
       contact.presenceState = state;
       contact.activity = activity;
       // Don't save presence to file - it's runtime state only
+    } else {
+      debugPrint(
+        '[ContactsService] no contact matched target="$sipUri"; known contacts=${_contacts.length}',
+      );
     }
   }
 
   /// Get contact by SIP URI.
   BlfContact? getByUri(String sipUri) {
     try {
-      return _contacts.firstWhere((c) => c.sipUri == sipUri);
+      return _contacts.firstWhere((c) => _matchesPresenceTarget(c, sipUri));
     } catch (_) {
       return null;
     }
@@ -198,5 +208,45 @@ class ContactsService {
   Future<File> getDefaultExportFile() async {
     final dir = await PathProviderService.instance.getDataDirectory();
     return File('${dir.path}/packetdial_contacts.json');
+  }
+
+  bool _matchesPresenceTarget(BlfContact contact, String target) {
+    final normalizedTarget = _normalizePresenceKey(target);
+    if (normalizedTarget.isEmpty) return false;
+
+    final candidates = <String>[
+      contact.sipUri,
+      if (contact.extension != null) contact.extension!,
+    ];
+
+    for (final candidate in candidates) {
+      final normalizedCandidate = _normalizePresenceKey(candidate);
+      debugPrint(
+        '[ContactsService] compare target="$normalizedTarget" candidate="$normalizedCandidate" raw="$candidate"',
+      );
+      if (normalizedCandidate == normalizedTarget) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  String _normalizePresenceKey(String value) {
+    final trimmed = value.trim().toLowerCase();
+    if (trimmed.isEmpty) return '';
+
+    var normalized = trimmed;
+    if (normalized.startsWith('sip:')) {
+      normalized = normalized.substring(4);
+    }
+    final atIndex = normalized.indexOf('@');
+    if (atIndex >= 0) {
+      normalized = normalized.substring(0, atIndex);
+    }
+    if (normalized.startsWith('<') && normalized.endsWith('>')) {
+      normalized = normalized.substring(1, normalized.length - 1);
+    }
+    return normalized.trim();
   }
 }
