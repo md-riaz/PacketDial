@@ -8,6 +8,7 @@ class AppSettingsData {
   final bool autoAnswerEnabled;
   final bool dndEnabled;
   final bool blfEnabled;
+  final bool startWithWindowsEnabled;
   final bool localCallRecordingEnabled;
   final String localRecordingDirectory;
 
@@ -17,6 +18,7 @@ class AppSettingsData {
     required this.autoAnswerEnabled,
     required this.dndEnabled,
     required this.blfEnabled,
+    required this.startWithWindowsEnabled,
     required this.localCallRecordingEnabled,
     required this.localRecordingDirectory,
   });
@@ -28,6 +30,7 @@ class AppSettingsData {
       autoAnswerEnabled: false,
       dndEnabled: false,
       blfEnabled: true,
+      startWithWindowsEnabled: false,
       localCallRecordingEnabled: false,
       localRecordingDirectory: '',
     );
@@ -40,6 +43,7 @@ class AppSettingsData {
       autoAnswerEnabled: service.autoAnswerEnabled,
       dndEnabled: service.dndEnabled,
       blfEnabled: service.blfEnabled,
+      startWithWindowsEnabled: service.startWithWindowsEnabled,
       localCallRecordingEnabled: service.localCallRecordingEnabled,
       localRecordingDirectory: service.localRecordingDirectory,
     );
@@ -74,10 +78,15 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
     _refresh();
   }
 
+  Future<void> setStartWithWindowsEnabled(bool value) async {
+    await _service.setStartWithWindowsEnabled(value);
+    _refresh();
+  }
+
   Future<void> setGlobalDndEnabled(bool value) async {
     await _service.setGlobalDndEnabled(value);
-    final rc =
-        EngineChannel.instance.engine.sendCommand('SetGlobalDnd', '{"enabled":$value}');
+    final rc = EngineChannel.instance.engine
+        .sendCommand('SetGlobalDnd', '{"enabled":$value}');
     if (rc != 0) {
       throw Exception('Failed to apply global DND in engine (rc=$rc)');
     }
@@ -118,6 +127,7 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
     await _service.setDtmfMethod(1);
     await _service.setAutoAnswer(false);
     await _service.setBlfEnabled(true);
+    await _service.setStartWithWindowsEnabled(false);
     _refresh();
   }
 }

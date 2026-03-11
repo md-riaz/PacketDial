@@ -46,10 +46,9 @@ class TrayController with TrayListener {
   }
 
   @override
-  void onTrayIconMouseDown() {
+  void onTrayIconMouseDown() async {
     debugPrint('[TrayController] Tray icon left-click: show/focus window');
-    windowManager.show();
-    windowManager.focus();
+    await showWindow();
   }
 
   @override
@@ -62,8 +61,7 @@ class TrayController with TrayListener {
   void onTrayMenuItemClick(MenuItem menuItem) async {
     debugPrint('[TrayController] Menu click: ${menuItem.key}');
     if (menuItem.key == 'show_window') {
-      windowManager.show();
-      windowManager.focus();
+      await showWindow();
     } else if (menuItem.key == 'exit_app') {
       final initializedAt = _initializedAt;
       if (initializedAt != null &&
@@ -75,5 +73,19 @@ class TrayController with TrayListener {
       debugPrint('[TrayController] Exiting app via tray menu');
       await windowManager.destroy();
     }
+  }
+
+  Future<void> showWindow() async {
+    await windowManager.setSkipTaskbar(false);
+    if (await windowManager.isMinimized()) {
+      await windowManager.restore();
+    }
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  Future<void> hideToTray() async {
+    await windowManager.setSkipTaskbar(true);
+    await windowManager.hide();
   }
 }

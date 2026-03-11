@@ -33,6 +33,8 @@ import 'core/clipboard_service.dart';
 import 'widgets/clipboard_popup.dart';
 import 'core/tray_controller.dart';
 
+const String _startupLaunchArg = '--startup-launch';
+
 String _resolveRuntimeIconPath() {
   const candidates = [
     'assets/app_icon.png',
@@ -48,6 +50,7 @@ String _resolveRuntimeIconPath() {
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  final launchedFromWindowsStartup = args.contains(_startupLaunchArg);
 
   // ── Global Error Handler ────────────────────────────────────────────────
   // Capture and log all uncaught Flutter errors
@@ -98,8 +101,6 @@ void main(List<String> args) async {
     appWindow.alignment = Alignment.center;
     appWindow.title = "PacketDial";
 
-    await windowManager.show();
-    await windowManager.focus();
     final iconPath = _resolveRuntimeIconPath();
     try {
       await windowManager.setIcon(iconPath);
@@ -112,6 +113,17 @@ void main(List<String> args) async {
       await TrayController.instance.init();
     } catch (e) {
       debugPrint('[APP] Failed to initialize tray: $e');
+    }
+
+    if (launchedFromWindowsStartup) {
+      await windowManager.setSkipTaskbar(true);
+      await windowManager.hide();
+      debugPrint(
+          '[APP] Startup launch detected; app initialized hidden to tray');
+    } else {
+      await windowManager.setSkipTaskbar(false);
+      await windowManager.show();
+      await windowManager.focus();
     }
   });
 
@@ -132,8 +144,7 @@ void main(List<String> args) async {
       final number = clipboardData?.text?.trim() ?? '';
       if (number.isNotEmpty) {
         // Show window and trigger dialer (simplified for now)
-        await windowManager.show();
-        await windowManager.focus();
+        await TrayController.instance.showWindow();
         // In a real app, we'd navigate to Dialer and pre-fill or auto-call
         log("Hotkey triggered: Dialing $number from clipboard");
       }
@@ -141,7 +152,9 @@ void main(List<String> args) async {
   );
 
   // Pre-process protocol URIs (tel:, sip:, callto:)
-  final processedArgs = <String>[...args];
+  final processedArgs = <String>[
+    ...args.where((arg) => arg != _startupLaunchArg),
+  ];
   for (int i = 0; i < processedArgs.length; i++) {
     final arg = processedArgs[i];
     if (arg.startsWith('tel:') ||
@@ -160,6 +173,7 @@ void main(List<String> args) async {
       child: App(
         accountService: accountService,
         windowPrefs: windowPrefs,
+        launchedFromWindowsStartup: launchedFromWindowsStartup,
         args: processedArgs, // Pass processed args
       ),
     ),
@@ -169,11 +183,13 @@ void main(List<String> args) async {
 class App extends ConsumerStatefulWidget {
   final AccountService accountService;
   final WindowPrefs windowPrefs;
+  final bool launchedFromWindowsStartup;
   final List<String> args;
   const App({
     super.key,
     required this.accountService,
     required this.windowPrefs,
+    required this.launchedFromWindowsStartup,
     required this.args,
   });
 
@@ -307,12 +323,8 @@ class _AppState extends ConsumerState<App>
       }
       _returnToDialerForIncomingCall();
       try {
-        if (await windowManager.isMinimized()) {
-          await windowManager.restore();
-        }
-        await windowManager.show();
+        await TrayController.instance.showWindow();
         await windowManager.setAlwaysOnTop(true);
-        await windowManager.focus();
         _forcedTopMostForIncoming = true;
       } catch (e) {
         debugPrint('[APP] Failed to raise window for incoming call: $e');
@@ -422,7 +434,7 @@ class _AppState extends ConsumerState<App>
     // Save window geometry before closing
     await widget.windowPrefs.saveGeometry();
     // Hide to tray instead of destroying
-    await windowManager.hide();
+    await TrayController.instance.hideToTray();
     debugPrint('[APP] Window hidden to tray from onWindowClose');
   }
 
@@ -856,7 +868,8 @@ class CockpitFooter extends ConsumerWidget {
               final dndEnabled = ref.watch(appSettingsProvider).dndEnabled;
               return InkWell(
                 onTap: () async {
-                  await ref.read(appSettingsProvider.notifier)
+                  await ref
+                      .read(appSettingsProvider.notifier)
                       .setGlobalDndEnabled(!dndEnabled);
                 },
                 borderRadius: BorderRadius.circular(4),

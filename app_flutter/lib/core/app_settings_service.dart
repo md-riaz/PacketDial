@@ -9,6 +9,10 @@ import '../models/caller_id_transformation.dart';
 class AppSettingsService {
   AppSettingsService._();
   static final AppSettingsService instance = AppSettingsService._();
+  static const String _windowsRunKey =
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
+  static const String _windowsRunValueName = 'PacketDial';
+  static const String _windowsAutoStartArg = '--startup-launch';
 
   // Codec settings
   List<Map<String, dynamic>> _codecPriorities = [];
@@ -24,6 +28,7 @@ class AppSettingsService {
 
   // BLF settings
   bool _blfEnabled = true;
+  bool _startWithWindowsEnabled = false;
 
   // Integration settings - Webhooks
   String _ringWebhookUrl = '';
@@ -69,6 +74,7 @@ class AppSettingsService {
   bool get autoAnswerEnabled => _autoAnswerEnabled;
   bool get dndEnabled => _dndEnabled;
   bool get blfEnabled => _blfEnabled;
+  bool get startWithWindowsEnabled => _startWithWindowsEnabled;
 
   // Getters - Webhooks
   String get ringWebhookUrl => _ringWebhookUrl;
@@ -110,6 +116,8 @@ class AppSettingsService {
   Future<void> loadSettings() async {
     if (_isLoaded) return;
 
+    bool shouldEnableDefaultAutoStart = false;
+
     try {
       final file = await _getSettingsFile();
       if (await file.exists()) {
@@ -123,6 +131,8 @@ class AppSettingsService {
         _autoAnswerEnabled = data['auto_answer_enabled'] as bool? ?? false;
         _dndEnabled = data['dnd_enabled'] as bool? ?? false;
         _blfEnabled = data['blf_enabled'] as bool? ?? true;
+        _startWithWindowsEnabled =
+            data['start_with_windows_enabled'] as bool? ?? true;
         _ringWebhookUrl = data['ring_webhook_url'] as String? ?? '';
         _ringWebhookEnabled =
             data['ring_webhook_enabled'] as bool? ?? _ringWebhookUrl.isNotEmpty;
@@ -172,6 +182,8 @@ class AppSettingsService {
                 CallerIdTransformation.fromJson(t as Map<String, dynamic>))
             .toList();
 
+        shouldEnableDefaultAutoStart =
+            !data.containsKey('start_with_windows_enabled');
         debugPrint('[AppSettings] Loaded settings from file');
       } else {
         // Initialize with default codec list
@@ -182,6 +194,8 @@ class AppSettingsService {
           {'codec': 'G722', 'priority': 7, 'enabled': true},
           {'codec': 'OPUS', 'priority': 6, 'enabled': true},
         ];
+        _startWithWindowsEnabled = true;
+        shouldEnableDefaultAutoStart = true;
         debugPrint('[AppSettings] Initialized with defaults');
         // Save defaults immediately so the user can see/edit the file
         await saveSettings();
@@ -193,6 +207,25 @@ class AppSettingsService {
         {'codec': 'PCMU', 'priority': 10, 'enabled': true},
         {'codec': 'PCMA', 'priority': 9, 'enabled': true},
       ];
+      _startWithWindowsEnabled = true;
+    }
+
+    if (shouldEnableDefaultAutoStart) {
+      try {
+        await _setWindowsAutoStartEnabled(true);
+      } catch (e) {
+        debugPrint(
+            '[AppSettings] Error enabling default Windows auto-start: $e');
+      }
+    }
+
+    _startWithWindowsEnabled = await _isWindowsAutoStartEnabled();
+    if (_startWithWindowsEnabled) {
+      try {
+        await _syncWindowsAutoStartRegistration();
+      } catch (e) {
+        debugPrint('[AppSettings] Error syncing Windows auto-start: $e');
+      }
     }
 
     _isLoaded = true;
@@ -208,6 +241,7 @@ class AppSettingsService {
         'auto_answer_enabled': _autoAnswerEnabled,
         'dnd_enabled': _dndEnabled,
         'blf_enabled': _blfEnabled,
+        'start_with_windows_enabled': _startWithWindowsEnabled,
         'ring_webhook_url': _ringWebhookUrl,
         'ring_webhook_enabled': _ringWebhookEnabled,
         'end_webhook_url': _endWebhookUrl,
@@ -265,6 +299,12 @@ class AppSettingsService {
   /// Update BLF enabled.
   Future<void> setBlfEnabled(bool enabled) async {
     _blfEnabled = enabled;
+    await saveSettings();
+  }
+
+  Future<void> setStartWithWindowsEnabled(bool enabled) async {
+    await _setWindowsAutoStartEnabled(enabled);
+    _startWithWindowsEnabled = await _isWindowsAutoStartEnabled();
     await saveSettings();
   }
 
@@ -444,6 +484,67 @@ class AppSettingsService {
     return File('${dir.path}/app_settings.json');
   }
 
+  Future<bool> _isWindowsAutoStartEnabled() async {
+    if (!Platform.isWindows) return false;
+
+    try {
+      final result = await Process.run('reg', [
+        'query',
+        _windowsRunKey,
+        '/v',
+        _windowsRunValueName,
+      ]);
+      return result.exitCode == 0;
+    } catch (e) {
+      debugPrint('[AppSettings] Error checking Windows auto-start: $e');
+      return false;
+    }
+  }
+
+  Future<void> _setWindowsAutoStartEnabled(bool enabled) async {
+    if (!Platform.isWindows) {
+      _startWithWindowsEnabled = false;
+      return;
+    }
+
+    try {
+      if (enabled) {
+        final executablePath = Platform.resolvedExecutable;
+        final valueData = '"$executablePath" $_windowsAutoStartArg';
+        final result = await Process.run('reg', [
+          'add',
+          _windowsRunKey,
+          '/v',
+          _windowsRunValueName,
+          '/t',
+          'REG_SZ',
+          '/d',
+          valueData,
+          '/f',
+        ]);
+        if (result.exitCode != 0) {
+          throw Exception(result.stderr.toString().trim());
+        }
+      } else {
+        await Process.run('reg', [
+          'delete',
+          _windowsRunKey,
+          '/v',
+          _windowsRunValueName,
+          '/f',
+        ]);
+      }
+    } catch (e) {
+      debugPrint('[AppSettings] Error updating Windows auto-start: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _syncWindowsAutoStartRegistration() async {
+    if (!Platform.isWindows) return;
+    await _setWindowsAutoStartEnabled(true);
+  }
+
   /// Export settings to file.
   Future<bool> exportSettings(File file) async {
     try {
@@ -452,6 +553,7 @@ class AppSettingsService {
         'dtmf_method': _dtmfMethod,
         'auto_answer_enabled': _autoAnswerEnabled,
         'blf_enabled': _blfEnabled,
+        'start_with_windows_enabled': _startWithWindowsEnabled,
       };
       await file.writeAsString(jsonEncode(data));
       return true;
@@ -480,6 +582,11 @@ class AppSettingsService {
       }
       if (data.containsKey('blf_enabled')) {
         _blfEnabled = data['blf_enabled'] as bool;
+      }
+      if (data.containsKey('start_with_windows_enabled')) {
+        await setStartWithWindowsEnabled(
+          data['start_with_windows_enabled'] as bool,
+        );
       }
 
       await saveSettings();

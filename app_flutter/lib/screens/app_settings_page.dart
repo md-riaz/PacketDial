@@ -152,6 +152,23 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
 
           const SizedBox(height: 16),
 
+          SettingCard(
+            icon: Icons.restart_alt,
+            title: 'Start With Windows',
+            subtitle: 'Launch PacketDial automatically after Windows sign-in',
+            trailing: Switch(
+              value: ref.watch(appSettingsProvider).startWithWindowsEnabled,
+              onChanged: (value) async {
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setStartWithWindowsEnabled(value);
+              },
+              activeThumbColor: AppTheme.primary,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           // Reset Settings
           SizedBox(
             width: double.infinity,
@@ -470,8 +487,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               Expanded(
                 child: TextField(
                   controller: _recordingDirController,
-                  style:
-                      const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     labelText: 'Recording Folder',
                     hintText: r'C:\Users\YourName\Desktop\Recordings',
