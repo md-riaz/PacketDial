@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/app_settings_service.dart';
 import '../core/clipboard_service.dart';
 import '../core/customer_lookup_service.dart';
@@ -7,6 +8,8 @@ import '../core/recording_service.dart';
 import '../models/dialing_rule.dart';
 import '../models/caller_id_transformation.dart';
 import '../core/app_theme.dart';
+import '../widgets/section_title.dart';
+import '../widgets/info_banner.dart';
 
 /// Integration settings page with tabs for all integration features
 class IntegrationSettingsPage extends StatefulWidget {
@@ -96,6 +99,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         title: const Text('Integration Settings'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           labelColor: AppTheme.primary,
           unselectedLabelColor: AppTheme.textSecondary,
           indicatorColor: AppTheme.primary,
@@ -125,161 +129,157 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
 
   Widget _buildWebhooksTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        _buildSectionTitle('Webhook Configuration'),
-        _buildInfoCard(
-          'Webhooks are triggered on specific call events.',
-          'URLs support placeholders: %NUMBER%, %ID%, %DIRECTION%, %DURATION%',
+        const SectionTitle('Webhook Configuration'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.webhook,
+          text:
+              'Webhooks are triggered on specific call events. URLs support placeholders: %NUMBER%, %ID%, %DIRECTION%, %DURATION%',
         ),
         const SizedBox(height: 24),
 
         // Ring Webhook
         SwitchListTile(
-          title: const Text('Incoming Call Webhook'),
-          subtitle: const Text('Triggered when call starts ringing'),
+          title: const Text('Incoming Call Webhook',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Triggered when call starts ringing',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.ringWebhookEnabled,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setRingWebhookEnabled(value);
             setState(() {});
           },
         ),
-        if (_settings.ringWebhookEnabled)
-          Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-            child: TextField(
-              controller: _ringWebhookController,
-              decoration: const InputDecoration(
-                labelText: 'Webhook URL',
-                hintText: 'https://example.com/webhook/ring?number=%NUMBER%',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (value) async {
-                await _settings.setRingWebhookUrl(value);
-                _showSavedSnackbar();
-              },
-            ),
+        if (_settings.ringWebhookEnabled) ...[
+          const SizedBox(height: 12),
+          _buildField(
+            controller: _ringWebhookController,
+            label: 'Webhook URL',
+            hint: 'https://example.com/webhook/ring?number=%NUMBER%',
+            icon: Icons.link,
+            onSubmitted: (value) async {
+              await _settings.setRingWebhookUrl(value);
+              _showSavedSnackbar();
+            },
           ),
+        ],
 
-        const Divider(height: 32),
+        const SizedBox(height: 24),
 
         // Call End Webhook
         SwitchListTile(
-          title: const Text('Call End Webhook'),
-          subtitle: const Text('Triggered when call ends'),
+          title: const Text('Call End Webhook',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Triggered when call ends',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.callEndWebhookEnabled,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setCallEndWebhookEnabled(value);
             setState(() {});
           },
         ),
-        if (_settings.callEndWebhookEnabled)
-          Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-            child: TextField(
-              controller: _endWebhookController,
-              decoration: const InputDecoration(
-                labelText: 'Webhook URL',
-                hintText:
-                    'https://example.com/webhook/end?number=%NUMBER%&duration=%DURATION%',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (value) async {
-                await _settings.setEndWebhookUrl(value);
-                _showSavedSnackbar();
-              },
-            ),
+        if (_settings.callEndWebhookEnabled) ...[
+          const SizedBox(height: 12),
+          _buildField(
+            controller: _endWebhookController,
+            label: 'Webhook URL',
+            hint:
+                'https://example.com/webhook/end?number=%NUMBER%&duration=%DURATION%',
+            icon: Icons.link,
+            onSubmitted: (value) async {
+              await _settings.setEndWebhookUrl(value);
+              _showSavedSnackbar();
+            },
           ),
+        ],
 
         const SizedBox(height: 32),
-        ElevatedButton.icon(
-          onPressed: () async {
-            await _settings.setRingWebhookUrl(_ringWebhookController.text);
-            await _settings.setEndWebhookUrl(_endWebhookController.text);
-            _showSavedSnackbar();
-          },
-          icon: const Icon(Icons.save),
-          label: const Text('Save Settings'),
-        ),
+        _buildSaveButton(() async {
+          await _settings.setRingWebhookUrl(_ringWebhookController.text);
+          await _settings.setEndWebhookUrl(_endWebhookController.text);
+          _showSavedSnackbar();
+        }),
       ],
     );
   }
 
   Widget _buildCrmLookupTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        _buildSectionTitle('CRM Customer Lookup'),
-        _buildInfoCard(
-          'Automatically fetch customer data from your CRM when a call comes in.',
-          'Response format: {"crm_info": {"contact_name": "John", "company": "ACME", "contact_link": "https://..."}}',
+        const SectionTitle('CRM Customer Lookup'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.person_search,
+          text:
+              'Automatically fetch customer data from your CRM when a call comes in.',
         ),
         const SizedBox(height: 24),
         SwitchListTile(
-          title: const Text('Enable Customer Lookup'),
-          subtitle: const Text('Fetch customer data on incoming calls'),
+          title: const Text('Enable Customer Lookup',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Fetch customer data on incoming calls',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.customerLookupEnabled,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setCustomerLookupEnabled(value);
             setState(() {});
           },
         ),
-        const Divider(height: 32),
-        const ListTile(
-          title: Text('Lookup URL'),
-          subtitle: Text('Use %NUMBER% and %EXTID% placeholders'),
+        const SizedBox(height: 24),
+        _buildField(
+          controller: _customerLookupUrlController,
+          label: 'CRM Web Service URL',
+          hint: 'https://crm.example.com/lookup?number=%NUMBER%',
+          icon: Icons.link,
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _customerLookupUrlController,
-            decoration: const InputDecoration(
-              labelText: 'CRM Web Service URL',
-              hintText: 'https://crm.example.com/lookup?number=%NUMBER%',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const ListTile(
-          title: Text('Timeout'),
-          subtitle: Text('Maximum time to wait for response'),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _customerLookupTimeoutController,
-            decoration: const InputDecoration(
-              labelText: 'Timeout (seconds)',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
+        const SizedBox(height: 18),
+        _buildField(
+          controller: _customerLookupTimeoutController,
+          label: 'Timeout (seconds)',
+          hint: '5',
+          icon: Icons.timer_outlined,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
         const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () async {
-            await _settings
-                .setCustomerLookupUrl(_customerLookupUrlController.text);
-            final timeoutSec =
-                int.tryParse(_customerLookupTimeoutController.text) ?? 5;
-            await _settings.setCustomerLookupTimeoutMs(timeoutSec * 1000);
-            _showSavedSnackbar();
-          },
-          icon: const Icon(Icons.save),
-          label: const Text('Save Settings'),
-        ),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          onPressed: () {
-            CustomerLookupService.instance.clearCache();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Customer lookup cache cleared')),
-            );
-          },
-          icon: const Icon(Icons.delete_outline),
-          label: const Text('Clear Cache'),
+        _buildSaveButton(() async {
+          await _settings
+              .setCustomerLookupUrl(_customerLookupUrlController.text);
+          final timeoutSec =
+              int.tryParse(_customerLookupTimeoutController.text) ?? 5;
+          await _settings.setCustomerLookupTimeoutMs(timeoutSec * 1000);
+          _showSavedSnackbar();
+        }),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              CustomerLookupService.instance.clearCache();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Customer lookup cache cleared')),
+              );
+            },
+            icon:
+                const Icon(Icons.delete_outline, color: AppTheme.textTertiary),
+            label: const Text('Clear Cache',
+                style: TextStyle(color: AppTheme.textTertiary)),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppTheme.border),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+            ),
+          ),
         ),
       ],
     );
@@ -287,133 +287,133 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
 
   Widget _buildScreenPopTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        _buildSectionTitle('Screen Pop Configuration'),
-        _buildInfoCard(
-          'Open a CRM page or trigger a webhook when calls come in.',
-          'Supports browser launch or background HTTP request. Use placeholders in URL query params.',
+        const SectionTitle('Screen Pop Configuration'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.open_in_browser,
+          text:
+              'Open a CRM page or trigger a webhook when calls come in. Supports browser launch or background HTTP request.',
         ),
         const SizedBox(height: 12),
-        const Card(
-          child: Padding(
-            padding: EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Supported placeholders',
+        InfoBanner(
+          icon: Icons.code,
+          color: AppTheme.accent,
+          text: '',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Supported placeholders',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  '%NUMBER%, %NAME%, %COMPANY%, %EXTID%, %DID%, %ID%, %ACCOUNT_ID%, %STATE%, %DIRECTION%, %CONTACT_LINK%',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Example: https://portal.example.com/callcenter.php?apikey=YOUR_API_KEY&phone=%NUMBER%',
-                  style: TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                      fontSize: 13)),
+              const SizedBox(height: 6),
+              Text(
+                '%NUMBER%, %NAME%, %COMPANY%, %EXTID%, %DID%, %ID%, %ACCOUNT_ID%, %STATE%, %DIRECTION%, %CONTACT_LINK%',
+                style: TextStyle(
+                    color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                    fontSize: 11,
+                    fontFamily: 'monospace'),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 24),
-        const ListTile(
-          title: Text('Screen Pop URL'),
-          subtitle: Text('URL to open on incoming calls'),
+        _buildField(
+          controller: _screenPopUrlController,
+          label: 'Screen Pop URL',
+          hint: 'https://portal.example.com/callcenter.php?phone=%NUMBER%',
+          icon: Icons.link,
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _screenPopUrlController,
-            decoration: const InputDecoration(
-              labelText: 'URL',
-              border: OutlineInputBorder(),
+        const SizedBox(height: 18),
+        DropdownButtonFormField<String>(
+          initialValue: _settings.screenPopEvent,
+          decoration: InputDecoration(
+            labelText: 'Trigger Event',
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            labelStyle:
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              borderSide: const BorderSide(color: AppTheme.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              borderSide: const BorderSide(color: AppTheme.primary, width: 2),
             ),
           ),
+          dropdownColor: AppTheme.surfaceVariant,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+          items: const [
+            DropdownMenuItem(value: 'ring', child: Text('Incoming Call Ring')),
+            DropdownMenuItem(value: 'answer', child: Text('Call Answered')),
+            DropdownMenuItem(value: 'end', child: Text('Call Ended')),
+          ],
+          onChanged: (value) async {
+            if (value != null) {
+              await _settings.setScreenPopEvent(value);
+            }
+          },
         ),
         const SizedBox(height: 16),
-        const ListTile(
-          title: Text('Trigger Event'),
-          subtitle: Text('When to trigger screen pop'),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: DropdownButtonFormField<String>(
-            initialValue: _settings.screenPopEvent,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem(
-                  value: 'ring', child: Text('Incoming Call Ring')),
-              DropdownMenuItem(value: 'answer', child: Text('Call Answered')),
-              DropdownMenuItem(value: 'end', child: Text('Call Ended')),
-            ],
-            onChanged: (value) async {
-              if (value != null) {
-                await _settings.setScreenPopEvent(value);
-              }
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
         SwitchListTile(
-          title: const Text('Open in Browser'),
-          subtitle: const Text('If off, send background HTTP request'),
+          title: const Text('Open in Browser',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('If off, send background HTTP request',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.screenPopOpenBrowser,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setScreenPopOpenBrowser(value);
             setState(() {});
           },
         ),
         SwitchListTile(
-          title: const Text('Suppress Main Window'),
-          subtitle: const Text('Don\'t show PacketDial window on screen pop'),
+          title: const Text('Suppress Main Window',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Don\'t show PacketDial window on screen pop',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.screenPopSuppressWindow,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setScreenPopSuppressWindow(value);
             setState(() {});
           },
         ),
         const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () async {
-            await _settings.setScreenPopUrl(_screenPopUrlController.text);
-            _showSavedSnackbar();
-          },
-          icon: const Icon(Icons.save),
-          label: const Text('Save Settings'),
-        ),
+        _buildSaveButton(() async {
+          await _settings.setScreenPopUrl(_screenPopUrlController.text);
+          _showSavedSnackbar();
+        }),
       ],
     );
   }
 
   Widget _buildRecordingTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        _buildSectionTitle('Local Call Recording'),
-        _buildInfoCard(
-          'Record all calls locally for all accounts when enabled.',
-          'Saved as WAV files in the app recordings folder.',
+        const SectionTitle('Local Call Recording'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.mic,
+          text:
+              'Record all calls locally. Saved as WAV files in the app recordings folder.',
         ),
         const SizedBox(height: 24),
         SwitchListTile(
-          title: const Text('Enable Local Call Recording'),
-          subtitle: const Text('Auto-record every active call'),
+          title: const Text('Enable Local Call Recording',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Auto-record every active call',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.localCallRecordingEnabled,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             if (value && _localRecordingDirController.text.trim().isEmpty) {
               final defaultDir =
@@ -425,122 +425,140 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             setState(() {});
           },
         ),
-        const ListTile(
-          title: Text('Recording Folder'),
-          subtitle: Text('Local path where call recordings are saved'),
+        const SizedBox(height: 18),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildField(
+                controller: _localRecordingDirController,
+                label: 'Recording Folder',
+                hint: r'C:\Recordings\PacketDial',
+                icon: Icons.folder_outlined,
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 52,
+              child: FilledButton(
+                onPressed: () async {
+                  final result = await FilePicker.platform.getDirectoryPath(
+                    dialogTitle: 'Select Recording Folder',
+                  );
+                  if (result != null) {
+                    _localRecordingDirController.text = result;
+                  }
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.surfaceCard,
+                  foregroundColor: AppTheme.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                ),
+                child: const Icon(Icons.folder_open, size: 20),
+              ),
+            ),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _localRecordingDirController,
-            decoration: const InputDecoration(
-              labelText: 'Folder Path',
-              helperText: 'Defaults to app Documents/recordings folder.',
-              hintText: r'C:\Recordings\PacketDial',
-              border: OutlineInputBorder(),
+        const SizedBox(height: 18),
+        DropdownButtonFormField<String>(
+          initialValue: _settings.localRecordingFormat,
+          decoration: InputDecoration(
+            labelText: 'Recording Format',
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            labelStyle:
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              borderSide: const BorderSide(color: AppTheme.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              borderSide: const BorderSide(color: AppTheme.primary, width: 2),
             ),
           ),
+          dropdownColor: AppTheme.surfaceVariant,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+          items: const [
+            DropdownMenuItem(value: 'wav', child: Text('WAV')),
+            DropdownMenuItem(value: 'mp3', child: Text('MP3')),
+          ],
+          onChanged: (value) async {
+            if (value == null) return;
+            await _settings.setLocalRecordingFormat(value);
+          },
         ),
-        const SizedBox(height: 12),
-        const ListTile(
-          title: Text('Recording Format'),
-          subtitle: Text('File format for new local recordings'),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: DropdownButtonFormField<String>(
-            initialValue: _settings.localRecordingFormat,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: 'wav', child: Text('WAV')),
-              DropdownMenuItem(value: 'mp3', child: Text('MP3')),
-            ],
-            onChanged: (value) async {
-              if (value == null) return;
-              await _settings.setLocalRecordingFormat(value);
-            },
-          ),
-        ),
-        const Divider(height: 32),
-        _buildSectionTitle('Recording Upload'),
-        _buildInfoCard(
-          'Automatically upload call recordings to your server.',
-          'Uses HTTP POST with multipart/form-data.',
+        const SizedBox(height: 32),
+        const SectionTitle('Recording Upload'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.cloud_upload_outlined,
+          text:
+              'Automatically upload call recordings to your server via HTTP POST.',
         ),
         const SizedBox(height: 24),
         SwitchListTile(
-          title: const Text('Enable Recording Upload'),
-          subtitle: const Text('Upload recordings after calls end'),
+          title: const Text('Enable Recording Upload',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Upload recordings after calls end',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.recordingUploadEnabled,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setRecordingUploadEnabled(value);
             setState(() {});
           },
         ),
-        const Divider(height: 32),
-        const ListTile(
-          title: Text('Upload URL'),
-          subtitle: Text('Endpoint to receive recording files'),
+        const SizedBox(height: 18),
+        _buildField(
+          controller: _recordingUploadUrlController,
+          label: 'Upload URL',
+          hint: 'https://example.com/upload-recording',
+          icon: Icons.link,
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _recordingUploadUrlController,
-            decoration: const InputDecoration(
-              labelText: 'Upload URL',
-              hintText: 'https://example.com/upload-recording',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const ListTile(
-          title: Text('File Field Name'),
-          subtitle: Text('HTML input field name for the file'),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _recordingFieldNameController,
-            decoration: const InputDecoration(
-              labelText: 'Field Name',
-              hintText: 'recording',
-              border: OutlineInputBorder(),
-            ),
-          ),
+        const SizedBox(height: 18),
+        _buildField(
+          controller: _recordingFieldNameController,
+          label: 'File Field Name',
+          hint: 'recording',
+          icon: Icons.text_fields,
         ),
         const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () async {
-            await _settings
-                .setLocalRecordingDirectory(_localRecordingDirController.text);
-            await _settings
-                .setRecordingUploadUrl(_recordingUploadUrlController.text);
-            await _settings
-                .setRecordingFileFieldName(_recordingFieldNameController.text);
-            _showSavedSnackbar();
-          },
-          icon: const Icon(Icons.save),
-          label: const Text('Save Settings'),
-        ),
+        _buildSaveButton(() async {
+          await _settings
+              .setLocalRecordingDirectory(_localRecordingDirController.text);
+          await _settings
+              .setRecordingUploadUrl(_recordingUploadUrlController.text);
+          await _settings
+              .setRecordingFileFieldName(_recordingFieldNameController.text);
+          _showSavedSnackbar();
+        }),
       ],
     );
   }
 
   Widget _buildClipboardTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        _buildSectionTitle('Clipboard Monitoring'),
-        _buildInfoCard(
-          'Automatically detect phone numbers copied to clipboard.',
-          'A popup will appear to confirm dialing.',
+        const SectionTitle('Clipboard Monitoring'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.content_paste_search,
+          text:
+              'Automatically detect phone numbers copied to clipboard. A popup will appear to confirm dialing.',
         ),
         const SizedBox(height: 24),
         SwitchListTile(
-          title: const Text('Enable Clipboard Monitoring'),
-          subtitle: const Text('Watch clipboard for phone numbers'),
+          title: const Text('Enable Clipboard Monitoring',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          subtitle: const Text('Watch clipboard for phone numbers',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
           value: _settings.clipboardMonitoringEnabled,
+          activeThumbColor: AppTheme.primary,
+          contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setClipboardMonitoringEnabled(value);
             if (value) {
@@ -551,53 +569,52 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             setState(() {});
           },
         ),
-        const Divider(height: 32),
-        const ListTile(
-          title: Text('Polling Interval'),
-          subtitle: Text('How often to check clipboard'),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _clipboardIntervalController,
-            decoration: const InputDecoration(
-              labelText: 'Interval (seconds)',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
+        const SizedBox(height: 18),
+        _buildField(
+          controller: _clipboardIntervalController,
+          label: 'Polling Interval (seconds)',
+          hint: '1',
+          icon: Icons.timer_outlined,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
         const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: () async {
-            final intervalSec =
-                int.tryParse(_clipboardIntervalController.text) ?? 1;
-            await _settings.setClipboardPollIntervalMs(intervalSec * 1000);
-            _showSavedSnackbar();
-          },
-          icon: const Icon(Icons.save),
-          label: const Text('Save Settings'),
-        ),
+        _buildSaveButton(() async {
+          final intervalSec =
+              int.tryParse(_clipboardIntervalController.text) ?? 1;
+          await _settings.setClipboardPollIntervalMs(intervalSec * 1000);
+          _showSavedSnackbar();
+        }),
       ],
     );
   }
 
   Widget _buildDialingRulesTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        _buildSectionTitle('Dialing Rules'),
-        _buildInfoCard(
-          'Transform phone numbers before dialing.',
-          'Rules are applied in priority order (highest first).',
+        const SectionTitle('Dialing Rules'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.rule,
+          text:
+              'Transform phone numbers before dialing. Rules are applied in priority order (highest first).',
         ),
         const SizedBox(height: 16),
 
-        ElevatedButton.icon(
-          onPressed: () => _showAddRuleDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('Add Dialing Rule'),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => _showAddRuleDialog(),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Dialing Rule'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+            ),
+          ),
         ),
 
         const SizedBox(height: 16),
@@ -606,17 +623,28 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         ..._settings.dialingRules.map((rule) => _buildRuleTile(rule)),
 
         const SizedBox(height: 32),
-        _buildSectionTitle('Caller ID Transformations'),
-        _buildInfoCard(
-          'Transform incoming caller ID using regex.',
-          'Useful for normalizing different number formats.',
+        const SectionTitle('Caller ID Transformations'),
+        const SizedBox(height: 8),
+        const InfoBanner(
+          icon: Icons.transform,
+          text:
+              'Transform incoming caller ID using regex. Useful for normalizing different number formats.',
         ),
         const SizedBox(height: 16),
 
-        ElevatedButton.icon(
-          onPressed: () => _showAddTransformationDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('Add Transformation'),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => _showAddTransformationDialog(),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add Transformation'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+            ),
+          ),
         ),
 
         const SizedBox(height: 16),
@@ -994,37 +1022,54 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    String? hint,
+    IconData? icon,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: icon != null ? Icon(icon, size: 18) : null,
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        labelStyle:
+            const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          borderSide: const BorderSide(color: AppTheme.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+        ),
+      ),
     );
   }
 
-  Widget _buildInfoCard(String title, String subtitle) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-            ),
-          ],
+  Widget _buildSaveButton(VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.save, size: 18),
+        label: const Text('Save Settings'),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppTheme.primary,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
         ),
       ),
     );

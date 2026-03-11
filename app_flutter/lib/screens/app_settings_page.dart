@@ -7,11 +7,11 @@ import '../core/app_theme.dart';
 import '../widgets/page_scaffold.dart';
 import '../widgets/section_title.dart';
 import '../widgets/setting_card.dart';
-import '../widgets/stat_badge.dart';
+
 import '../widgets/info_banner.dart';
 import '../core/app_settings_service.dart';
 import '../core/clipboard_service.dart';
-import '../core/contacts_service.dart';
+
 import 'diagnostics_screen.dart';
 import 'integration_settings_page.dart';
 import '../core/engine_channel.dart';
@@ -32,7 +32,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -86,7 +86,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           Tab(icon: Icon(Icons.volume_up), text: 'Audio'),
           Tab(icon: Icon(Icons.audio_file), text: 'Codecs'),
           Tab(icon: Icon(Icons.phone_in_talk), text: 'Calls'),
-          Tab(icon: Icon(Icons.contacts), text: 'Contacts'),
           Tab(icon: Icon(Icons.integration_instructions), text: 'Integrations'),
         ],
       ),
@@ -97,7 +96,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           _buildAudioTab(),
           _buildCodecsTab(),
           _buildCallsTab(),
-          _buildContactsTab(),
           _buildIntegrationsTab(),
         ],
       ),
@@ -262,6 +260,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 24),
           ReorderableListView.builder(
             shrinkWrap: true,
+            buildDefaultDragHandles: false,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: availableCodecs.length,
             onReorder: (oldIndex, newIndex) {
@@ -402,18 +401,34 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             title: 'DTMF Method',
             subtitle:
                 _getDtmfMethodName(ref.watch(appSettingsProvider).dtmfMethod),
-            trailing: PopupMenuButton<int>(
-              initialValue: ref.watch(appSettingsProvider).dtmfMethod,
-              onSelected: (value) async {
-                await ref
-                    .read(appSettingsProvider.notifier)
-                    .setDtmfMethod(value);
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 0, child: Text('In-band')),
-                const PopupMenuItem(value: 1, child: Text('RFC2833')),
-                const PopupMenuItem(value: 2, child: Text('SIP INFO')),
+            trailing: DropdownButton<int>(
+              value: ref.watch(appSettingsProvider).dtmfMethod,
+              dropdownColor: AppTheme.surfaceCard,
+              underline: const SizedBox(),
+              items: const [
+                DropdownMenuItem(
+                    value: 0,
+                    child: Text('In-band',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13))),
+                DropdownMenuItem(
+                    value: 1,
+                    child: Text('RFC2833',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13))),
+                DropdownMenuItem(
+                    value: 2,
+                    child: Text('SIP INFO',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13))),
               ],
+              onChanged: (value) async {
+                if (value != null) {
+                  await ref
+                      .read(appSettingsProvider.notifier)
+                      .setDtmfMethod(value);
+                }
+              },
             ),
           ),
 
@@ -424,88 +439,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             icon: Icons.info_outline,
             text:
                 'These settings apply to all accounts. Changes take effect immediately.',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContactsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionTitle('BLF Contacts'),
-          const SizedBox(height: 8),
-          Text(
-            '${ContactsService.instance.contacts.length} contacts loaded',
-            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Contact stats
-          Row(
-            children: [
-              Expanded(
-                child: StatBadge.card(
-                  icon: Icons.circle,
-                  color: AppTheme.callGreen,
-                  count: ContactsService.instance
-                      .getByPresence('Available')
-                      .length
-                      .toString(),
-                  label: 'Available',
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: StatBadge.card(
-                  icon: Icons.circle,
-                  color: AppTheme.errorRed,
-                  count: ContactsService.instance
-                      .getByPresence('Busy')
-                      .length
-                      .toString(),
-                  label: 'Busy',
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: StatBadge.card(
-                  icon: Icons.circle,
-                  color: AppTheme.textTertiary,
-                  count: ContactsService.instance
-                      .getByPresence('Unknown')
-                      .length
-                      .toString(),
-                  label: 'Unknown',
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Actions
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/blf-contacts'),
-              icon: const Icon(Icons.manage_accounts, color: AppTheme.primary),
-              label: const Text(
-                'Manage Contacts',
-                style: TextStyle(color: AppTheme.primary),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppTheme.primary),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
           ),
         ],
       ),
