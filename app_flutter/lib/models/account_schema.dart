@@ -63,12 +63,11 @@ class AccountSchema {
   }
 
   factory AccountSchema.fromJson(Map<String, dynamic> json) {
-    final rawPassword = json['password'] as String? ?? '';
-    final decryptedPassword = EncryptionService.decrypt(rawPassword);
-
     // Check for "plain_pass" override
     final plainPass = json['plain_pass'] as String? ?? '';
-    final finalPassword = plainPass.isNotEmpty ? plainPass : decryptedPassword;
+    final finalPassword = plainPass.isNotEmpty
+        ? plainPass
+        : EncryptionService.decrypt(json['password'] as String? ?? '');
 
     return AccountSchema(
       uuid: json['uuid'] as String? ?? '',

@@ -25,14 +25,23 @@ class EncryptionService {
   /// Decrypt a Base64 string.
   static String decrypt(String base64Text) {
     if (base64Text.isEmpty) return '';
+    if (!_looksLikeEncryptedBase64(base64Text)) {
+      return base64Text;
+    }
     try {
       final decrypted = _encrypter.decrypt64(base64Text, iv: _iv);
       return decrypted;
     } catch (e) {
-      // If decryption fails, it might be plain text from an older version
-      debugPrint(
-          '[EncryptionService] Decryption failed (might be plain text): $e');
+      debugPrint('[EncryptionService] Decryption error: $e');
       return base64Text;
     }
+  }
+
+  static bool _looksLikeEncryptedBase64(String value) {
+    final trimmed = value.trim();
+    if (trimmed.length < 24 || trimmed.length % 4 != 0) {
+      return false;
+    }
+    return RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(trimmed);
   }
 }
