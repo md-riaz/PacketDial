@@ -81,7 +81,8 @@ Before creating a release:
 
 - [ ] All tests pass (`cargo test` + `flutter test`)
 - [ ] Flutter analyze shows no errors
-- [ ] Version number updated in `version.json`
+- [ ] Version number updated in `app_flutter/pubspec.yaml`
+- [ ] Version number updated in `core_rust/Cargo.toml`
 - [ ] CHANGELOG.md updated
 - [ ] Documentation updated
 - [ ] Tested on clean Windows 10/11 VM

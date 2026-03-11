@@ -278,7 +278,7 @@ icudtl.dat
 voip_core.dll          (present when PJSIP integration is enabled)
 data\
 └── flutter_assets\
-version.json
+app.so
 ```
 
 ---

@@ -1,122 +1,175 @@
-# Rust <-> Flutter FFI API (v1)
+# Rust <-> Flutter FFI API
 
-PacketDial uses a structured C ABI for communication between Dart and Rust.
+This document describes the active native API surface used by PacketDial today.
 
-## C ABI Core
+## API Shape
 
-All functions use `extern "C"` and stable primitive types.
+PacketDial currently uses both:
+
+- direct exported C ABI functions for common engine operations
+- `engine_send_command(...)` for higher-level structured commands
+
+Events are delivered through a single native callback as `(event_id, json_payload)`.
+
+## Core Exports
 
 ```c
-// Initialize the engine. returns 0 on success.
 int32_t engine_init(const char* user_agent);
-
-// Shutdown the engine. returns 0 on success.
 int32_t engine_shutdown(void);
-
-// Returns pointer to a static null-terminated UTF-8 version string.
 const char* engine_version(void);
-
-// Set a callback for events.
-//   cb: function pointer with signature (int event_id, const char* json_payload)
 void engine_set_event_callback(void (*cb)(int event_id, const char* json_payload));
+int32_t engine_send_command(const char* cmd_type, const char* json_payload);
 ```
 
-## Structured API Commands
-
-These functions provide the primary interface for controlling the VoIP engine.
+## Direct Call/Audio Exports
 
 ```c
-// Register a SIP account.
-// Returns 0 on success, non-zero on error.
 int32_t engine_register(const char* account_id, const char* user, const char* pass, const char* domain);
-
-// Unregister a SIP account.
 int32_t engine_unregister(const char* account_id);
-
-// Make an outgoing call.
 int32_t engine_make_call(const char* account_id, const char* number);
-
-// Answer an incoming call.
 int32_t engine_answer_call(void);
-
-// Hang up the current active call.
 int32_t engine_hangup(void);
-
-// Toggle mute (1=muted, 0=unmuted).
 int32_t engine_set_mute(int32_t muted);
-
-// Toggle hold (1=on_hold, 0=resumed).
 int32_t engine_set_hold(int32_t on_hold);
-
-// Send DTMF digits.
 int32_t engine_send_dtmf(const char* digits);
-
-// Request audio device list (triggers AudioDeviceList event).
+int32_t engine_play_dtmf(const char* digits);
+int32_t engine_start_recording(const char* file_path);
+int32_t engine_stop_recording(void);
+int32_t engine_is_recording(void);
+int32_t engine_transfer_call(int32_t call_id, const char* dest_uri);
+int32_t engine_start_attended_xfer(int32_t call_id, const char* dest_uri);
+int32_t engine_complete_xfer(int32_t call_a_id, int32_t call_b_id);
+int32_t engine_merge_conference(int32_t call_a_id, int32_t call_b_id);
 int32_t engine_list_audio_devices(void);
-
-// Set active audio devices.
 int32_t engine_set_audio_devices(int32_t input_id, int32_t output_id);
-
-// Request call history (triggers CallHistoryResult event).
-int32_t engine_query_call_history(void);
-
-// Set engine log level ("Error", "Warn", "Info", "Debug").
 int32_t engine_set_log_level(const char* level);
-
-// Request all buffered logs (triggers LogBufferResult event).
 int32_t engine_get_log_buffer(void);
 ```
 
-## Events (via Callback)
+## Structured Commands
 
-Events are delivered to the registered callback. Each event has an `event_id` and a JSON string `payload`.
+The active `engine_send_command(...)` command set includes:
 
-| ID | Name | Payload Key Fields |
-|----|------|--------------------|
-| 1 | `EngineReady` | _(empty)_ |
-| 2 | `RegistrationStateChanged` | `account_id`, `state` (Unregistered/Registering/Registered/Failed), `reason` |
-| 3 | `CallStateChanged` | `call_id`, `account_id`, `uri`, `direction`, `state`, `muted`, `on_hold` |
-| 4 | `MediaStatsUpdated` | `call_id`, `jitter_ms`, `packet_loss_pct`, `codec`, `bitrate_kbps` |
-| 5 | `AudioDeviceList` | `devices[]` (id/name/kind), `selected_input`, `selected_output` |
-| 6 | `AudioDevicesSet` | `input_id`, `output_id` |
-| 7 | `CallHistoryResult` | `entries[]` (call_id, account_id, uri, direction, started_at, ended_at, duration_secs, end_state) |
-| 8 | `SipMessageCaptured` | `direction`, `raw` (masked) |
-| 9 | `DiagBundleReady` | `anonymize`, `call_history_count`, `account_count` |
-| 14| `LogLevelSet` | `level` |
-| 15| `LogBufferResult` | `entries[]` (level, message, ts) |
-| 16| `EngineLog` | `level`, `message`, `ts` |
+- `AccountUpsert`
+- `AccountRegister`
+- `AccountUnregister`
+- `AccountSetSecurity`
+- `CallStart`
+- `CallAnswer`
+- `CallHangup`
+- `CallMute`
+- `CallHold`
+- `CallSendDtmf`
+- `CallStartRecording`
+- `CallStopRecording`
+- `MediaStatsUpdate`
+- `AccountSetForwarding`
+- `AccountGetForwarding`
+- `SetGlobalDnd`
+- `AccountSetLookupUrl`
+- `AccountGetLookupUrl`
+- `AccountSetCodecPriority`
+- `AccountGetCodecPriority`
+- `AccountSetCodec`
+- `AccountSetAutoAnswer`
+- `AccountGetAutoAnswer`
+- `AccountSetDtmfMethod`
+- `AccountGetDtmfMethod`
+- `AccountDeleteProfile`
+- `SetGlobalCodecPriority`
+- `GetGlobalCodecPriority`
+- `SetGlobalDtmfMethod`
+- `GetGlobalDtmfMethod`
+- `SetGlobalAutoAnswer`
+- `GetGlobalAutoAnswer`
+- `BlfSubscribe`
+- `BlfUnsubscribe`
+- `AudioListDevices`
+- `AudioSetDevices`
+- `SipCaptureMessage`
+- `DiagExportBundle`
+- `CredStore`
+- `CredRetrieve`
+- `EnginePing`
+- `SetLogLevel`
+- `GetLogBuffer`
 
----
+## Active Event IDs
 
-## Remote API (IPC / JSON)
+Current event ID map used by Flutter:
 
-PacketDial exposes its functionality via a Windows Named Pipe, allowing non-FFI clients (like `pd.exe` or external scripts) to control the engine.
+| ID | Name |
+|----|------|
+| 1 | `EngineReady` |
+| 2 | `RegistrationStateChanged` |
+| 3 | `CallStateChanged` |
+| 4 | `MediaStatsUpdated` |
+| 5 | `AudioDeviceList` |
+| 6 | `AudioDevicesSet` |
+| 7 | `CallHistoryResult` |
+| 8 | `SipMessageCaptured` |
+| 9 | `DiagBundleReady` |
+| 10 | `AccountSecurityUpdated` |
+| 11 | `CredStored` |
+| 12 | `CredRetrieved` |
+| 13 | `EnginePong` |
+| 14 | `LogLevelSet` |
+| 15 | `LogBufferResult` |
+| 16 | `EngineLog` |
+| 17 | `CallTransferInitiated` |
+| 18 | `CallTransferStatus` |
+| 19 | `CallTransferCompleted` |
+| 20 | `ConferenceMerged` |
+| 21 | `ForwardingUpdated` |
+| 22 | `ForwardingResult` |
+| 23 | `GlobalDndUpdated` |
+| 24 | `BlfSubscribed` |
+| 25 | `BlfUnsubscribed` |
+| 26 | `BlfStatus` |
+| 27 | `LookupUrlUpdated` |
+| 28 | `LookupUrlResult` |
+| 29 | `CodecPriorityUpdated` |
+| 30 | `CodecPriorityResult` |
+| 31 | `CodecUpdated` |
+| 32 | `AutoAnswerUpdated` |
+| 33 | `AutoAnswerResult` |
+| 34 | `DtmfMethodUpdated` |
+| 35 | `DtmfMethodResult` |
+| 38 | `AccountProfileDeleted` |
+| 39 | `GlobalCodecPriorityUpdated` |
+| 40 | `GlobalCodecPriorityResult` |
+| 41 | `GlobalDtmfMethodUpdated` |
+| 42 | `GlobalDtmfMethodResult` |
+| 43 | `GlobalAutoAnswerUpdated` |
+| 44 | `GlobalAutoAnswerResult` |
+| 45 | `RecordingStarted` |
+| 46 | `RecordingStopped` |
+| 47 | `RecordingSaved` |
+| 48 | `RecordingError` |
 
-**Pipe Name:** `\\.\pipe\PacketDial.API`  
-**Protocol:** Line-based JSON (each message must end with `\n`).
+Notes:
 
-### Command Schema
-Clients send a JSON object with `type` and `payload`.
+- IDs 36-37 are intentionally unused after account config import/export removal.
+- Flutter-owned call history means older Rust history docs are stale, even though `CallHistoryResult` remains reserved in the event map.
 
-| IPC Type | DLL Command Mapping |
-|----------|----------------------|
-| `CallStart` | `cmd_call_start` |
-| `CallAnswer`| `cmd_call_answer`|
-| `CallHangup`| `cmd_call_hangup`|
-| `CallMute`  | `cmd_call_mute`  |
-| `CallHold`  | `cmd_call_hold`  |
-| `DiagBundle`| `cmd_diag_bundle`|
+## Event Payload Style
 
-**Example Command:**
+Rust emits callback payloads in the form:
+
 ```json
-{"type": "CallStart", "payload": {"uri": "sip:100@domain"}}
+{
+  "type": "CallStateChanged",
+  "payload": {
+    "call_id": 1,
+    "state": "Ringing"
+  }
+}
 ```
 
-### Event Broadcasting
-The IPC server broadcasts all engine events to **all connected pipe clients**. The JSON format matches the `payload` delivered to the C callback, but wrapped in a top-level `type` field.
+## Where to Update This
 
-**Example Event:**
-```json
-{"type": "CallStateChanged", "payload": {"call_id": 1, "state": "Confirmed"}}
-```
+When changing the API, update all of:
 
+- [`core_rust/src/lib.rs`](/C:/Users/vm_user/Downloads/PacketDial/core_rust/src/lib.rs)
+- [`app_flutter/lib/ffi/engine.dart`](/C:/Users/vm_user/Downloads/PacketDial/app_flutter/lib/ffi/engine.dart)
+- [`app_flutter/lib/core/engine_channel.dart`](/C:/Users/vm_user/Downloads/PacketDial/app_flutter/lib/core/engine_channel.dart)
