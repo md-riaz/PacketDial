@@ -11,6 +11,7 @@ import '../widgets/setting_card.dart';
 import '../widgets/info_banner.dart';
 import '../core/app_settings_service.dart';
 import '../core/clipboard_service.dart';
+import '../core/recording_service.dart';
 
 import 'diagnostics_screen.dart';
 import 'integration_settings_page.dart';
@@ -28,16 +29,19 @@ class AppSettingsPage extends ConsumerStatefulWidget {
 class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late final TextEditingController _recordingDirController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _recordingDirController = TextEditingController();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _recordingDirController.dispose();
     super.dispose();
   }
 
@@ -347,6 +351,12 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   }
 
   Widget _buildCallsTab() {
+    final settings = ref.watch(appSettingsProvider);
+    final configuredDir = settings.localRecordingDirectory.trim();
+    if (_recordingDirController.text != configuredDir) {
+      _recordingDirController.text = configuredDir;
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -355,19 +365,19 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SectionTitle('Call Settings'),
           const SizedBox(height: 16),
 
-          // DND Toggle
+          // Global DND Toggle
           SettingCard(
             icon: Icons.do_not_disturb,
-            title: 'Do Not Disturb',
+            title: 'Global Do Not Disturb',
             subtitle: ref.watch(appSettingsProvider).dndEnabled
-                ? 'Enabled - All incoming calls rejected'
-                : 'Disabled - Calls ring normally',
+                ? 'Enabled - all incoming calls rejected across the app'
+                : 'Disabled - incoming calls ring normally',
             trailing: Switch(
               value: ref.watch(appSettingsProvider).dndEnabled,
               onChanged: (value) async {
                 await ref
                     .read(appSettingsProvider.notifier)
-                    .setDndEnabled(value);
+                    .setGlobalDndEnabled(value);
               },
               activeThumbColor: AppTheme.errorRed,
             ),
@@ -430,6 +440,103 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 }
               },
             ),
+          ),
+
+          const SizedBox(height: 24),
+
+          const SectionTitle('Call Recording'),
+          const SizedBox(height: 12),
+
+          SettingCard(
+            icon: Icons.fiber_manual_record,
+            title: 'Local Call Recording',
+            subtitle: settings.localCallRecordingEnabled
+                ? 'Enabled - calls are recorded locally as WAV files'
+                : 'Disabled - calls are not recorded automatically',
+            trailing: Switch(
+              value: settings.localCallRecordingEnabled,
+              onChanged: (value) async {
+                if (value && configuredDir.isEmpty) {
+                  final defaultDir =
+                      await RecordingService.instance.getRecordingsDir();
+                  _recordingDirController.text = defaultDir.path;
+                  await ref
+                      .read(appSettingsProvider.notifier)
+                      .setLocalRecordingDirectory(defaultDir.path);
+                }
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setLocalCallRecordingEnabled(value);
+              },
+              activeThumbColor: AppTheme.errorRed,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          SettingCard(
+            icon: Icons.folder_outlined,
+            title: 'Recording Folder',
+            subtitle: configuredDir.isNotEmpty
+                ? configuredDir
+                : 'Default: Desktop\\Recordings',
+            trailing: SizedBox(
+              width: 110,
+              child: FilledButton.tonalIcon(
+                onPressed: () async {
+                  final result = await FilePicker.platform.getDirectoryPath(
+                    dialogTitle: 'Select Recording Folder',
+                  );
+                  if (result == null || result.trim().isEmpty) return;
+                  _recordingDirController.text = result;
+                  await ref
+                      .read(appSettingsProvider.notifier)
+                      .setLocalRecordingDirectory(result);
+                },
+                icon: const Icon(Icons.folder_open, size: 18),
+                label: const Text('Browse'),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          TextField(
+            controller: _recordingDirController,
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              labelText: 'Custom Recording Folder',
+              hintText: r'C:\Users\YourName\Desktop\Recordings',
+              prefixIcon: const Icon(Icons.edit_location_alt_outlined, size: 18),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              labelStyle:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              hintStyle:
+                  const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: AppTheme.primary, width: 2),
+              ),
+            ),
+            onSubmitted: (value) async {
+              await ref
+                  .read(appSettingsProvider.notifier)
+                  .setLocalRecordingDirectory(value.trim());
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          const InfoBanner(
+            icon: Icons.audio_file_outlined,
+            text:
+                'Recording is a built-in call feature and always uses WAV. If no folder is configured, PacketDial saves to Desktop\\Recordings.',
           ),
 
           const SizedBox(height: 24),
@@ -734,7 +841,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   const SizedBox(height: 8),
                   const Text(
                     'Configure webhooks, CRM customer lookup, screen pop, '
-                    'call recording upload, clipboard monitoring, and dialing rules.',
+                    'recording upload, clipboard monitoring, and dialing rules.',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,

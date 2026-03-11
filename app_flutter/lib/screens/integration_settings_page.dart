@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 import '../core/app_settings_service.dart';
 import '../core/clipboard_service.dart';
 import '../core/customer_lookup_service.dart';
@@ -398,104 +397,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const SectionTitle('Local Call Recording'),
-        const SizedBox(height: 8),
-        const InfoBanner(
-          icon: Icons.mic,
-          text:
-              'Record all calls locally. Saved as WAV files in the app recordings folder.',
-        ),
-        const SizedBox(height: 24),
-        SwitchListTile(
-          title: const Text('Enable Local Call Recording',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Auto-record every active call',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
-          value: _settings.localCallRecordingEnabled,
-          activeThumbColor: AppTheme.primary,
-          contentPadding: EdgeInsets.zero,
-          onChanged: (value) async {
-            if (value && _localRecordingDirController.text.trim().isEmpty) {
-              final defaultDir =
-                  await RecordingService.instance.getRecordingsDir();
-              _localRecordingDirController.text = defaultDir.path;
-              await _settings.setLocalRecordingDirectory(defaultDir.path);
-            }
-            await _settings.setLocalCallRecordingEnabled(value);
-            setState(() {});
-          },
-        ),
-        const SizedBox(height: 18),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _buildField(
-                controller: _localRecordingDirController,
-                label: 'Recording Folder',
-                hint: r'C:\Recordings\PacketDial',
-                icon: Icons.folder_outlined,
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 52,
-              child: FilledButton(
-                onPressed: () async {
-                  final result = await FilePicker.platform.getDirectoryPath(
-                    dialogTitle: 'Select Recording Folder',
-                  );
-                  if (result != null) {
-                    _localRecordingDirController.text = result;
-                  }
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.surfaceCard,
-                  foregroundColor: AppTheme.primary,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
-                ),
-                child: const Icon(Icons.folder_open, size: 20),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        DropdownButtonFormField<String>(
-          initialValue: _settings.localRecordingFormat,
-          decoration: InputDecoration(
-            labelText: 'Recording Format',
-            contentPadding:
-                const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            labelStyle:
-                const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              borderSide: const BorderSide(color: AppTheme.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-            ),
-          ),
-          dropdownColor: AppTheme.surfaceVariant,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-          items: const [
-            DropdownMenuItem(value: 'wav', child: Text('WAV')),
-            DropdownMenuItem(value: 'mp3', child: Text('MP3')),
-          ],
-          onChanged: (value) async {
-            if (value == null) return;
-            await _settings.setLocalRecordingFormat(value);
-          },
-        ),
-        const SizedBox(height: 32),
         const SectionTitle('Recording Upload'),
         const SizedBox(height: 8),
         const InfoBanner(
           icon: Icons.cloud_upload_outlined,
           text:
-              'Automatically upload call recordings to your server via HTTP POST.',
+              'Automatically upload locally saved call recordings to your server via HTTP POST.',
         ),
         const SizedBox(height: 24),
         SwitchListTile(

@@ -90,6 +90,12 @@ static struct {
 /* DTMF method per account */
 static int g_acc_dtmf_method[MAX_ACCOUNTS];
 
+/* Recording state per call */
+static int g_is_recording[MAX_CALLS] = { 0 };
+static char g_rec_path[MAX_CALLS][512] = { {0} };
+static int g_recorder_id[MAX_CALLS];
+static int g_recorder_slot[MAX_CALLS];
+
 /* -----------------------------------------------------------------------
  * Internal helpers
  * ----------------------------------------------------------------------- */
@@ -131,6 +137,17 @@ static void safe_copy(char *dst, int dst_len, const char *src)
     snprintf(dst, (size_t)dst_len, "%s", src);
 #endif
     dst[dst_len - 1] = '\0';
+}
+
+static void pd_reset_recording_state(void)
+{
+    int i;
+    for (i = 0; i < MAX_CALLS; ++i) {
+        g_is_recording[i] = 0;
+        g_rec_path[i][0] = '\0';
+        g_recorder_id[i] = PJSUA_INVALID_ID;
+        g_recorder_slot[i] = PJSUA_INVALID_ID;
+    }
 }
 
 static void pd_log_audio_state(const char *prefix)
@@ -557,6 +574,8 @@ int pd_init(const char *user_agent,
 {
     pj_status_t status;
 
+    pd_reset_recording_state();
+
     /* Save callbacks */
     g_on_reg      = on_reg;
     g_on_incoming = on_incoming;
@@ -732,6 +751,15 @@ int pd_init(const char *user_agent,
 
 int pd_shutdown(void)
 {
+    int i;
+
+    for (i = 0; i < MAX_CALLS; ++i) {
+        if (g_recorder_id[i] != PJSUA_INVALID_ID) {
+            pjsua_recorder_destroy(g_recorder_id[i]);
+        }
+    }
+    pd_reset_recording_state();
+
     if (g_tone_slot != PJSUA_INVALID_ID) {
         pjsua_conf_remove_port(g_tone_slot);
         g_tone_slot = PJSUA_INVALID_ID;
@@ -1517,15 +1545,15 @@ int pd_acc_get_forward(int acc_id, char *fwd_uri_buf, int fwd_uri_len,
     return 0;
 }
 
-int pd_acc_set_dnd(int acc_id, int enabled)
+int pd_set_global_dnd(int enabled)
 {
     pd_ensure_thread();
     g_dnd_enabled = enabled ? PJ_TRUE : PJ_FALSE;
     
     if (g_on_log) {
         char buf[128];
-        snprintf(buf, sizeof(buf), "DND %s for account %d", 
-                 enabled ? "enabled" : "disabled", acc_id);
+        snprintf(buf, sizeof(buf), "Global DND %s",
+                 enabled ? "enabled" : "disabled");
         g_on_log(4, buf);
     }
     
@@ -1618,14 +1646,14 @@ int pd_acc_get_lookup_url(int acc_id, char *url_buf, int url_len)
  * Call Recording Implementation
  * ----------------------------------------------------------------------- */
 
-/* Recording state per call */
-static int g_is_recording[MAX_CALLS] = { 0 };
-static char g_rec_path[MAX_CALLS][512] = { {0} };
-
 int pd_call_start_recording(int call_id, const char *file_path)
 {
     pjsua_call_info ci;
     pj_status_t status;
+    pj_str_t path;
+    pjsua_conf_port_id call_slot;
+    pjsua_conf_port_id rec_slot;
+    pjsua_recorder_id rec_id = PJSUA_INVALID_ID;
 
     pd_ensure_thread();
 
@@ -1641,22 +1669,46 @@ int pd_call_start_recording(int call_id, const char *file_path)
     status = pjsua_call_get_info(call_id, &ci);
     if (status != PJ_SUCCESS) return -1;
 
+    call_slot = pjsua_call_get_conf_port(call_id);
+    if (call_slot == PJSUA_INVALID_ID) return -1;
+
+    path = pj_str((char *)file_path);
+    status = pjsua_recorder_create(&path, 0, NULL, 0, 0, &rec_id);
+    if (status != PJ_SUCCESS) return -1;
+
+    rec_slot = pjsua_recorder_get_conf_port(rec_id);
+    if (rec_slot == PJSUA_INVALID_ID) {
+        pjsua_recorder_destroy(rec_id);
+        return -1;
+    }
+
+    status = pjsua_conf_connect(call_slot, rec_slot);
+    if (status != PJ_SUCCESS) {
+        pjsua_recorder_destroy(rec_id);
+        return -1;
+    }
+
+    status = pjsua_conf_connect(0, rec_slot);
+    if (status != PJ_SUCCESS) {
+        pjsua_conf_disconnect(call_slot, rec_slot);
+        pjsua_recorder_destroy(rec_id);
+        return -1;
+    }
+
     /* Store recording path */
     strncpy(g_rec_path[call_id], file_path, sizeof(g_rec_path[call_id]) - 1);
     g_rec_path[call_id][sizeof(g_rec_path[call_id]) - 1] = '\0';
-    
-    /* Mark as recording */
     g_is_recording[call_id] = 1;
-
-    /* Note: Full PJSIP call recording requires additional PJSIP configuration
-     * and media port bridging. This is a placeholder for future implementation.
-     * For now, we track recording state but don't actually write to file. */
+    g_recorder_id[call_id] = rec_id;
+    g_recorder_slot[call_id] = rec_slot;
 
     return 0;
 }
 
 int pd_call_stop_recording(int call_id)
 {
+    pjsua_conf_port_id call_slot;
+
     pd_ensure_thread();
 
     if (call_id < 0 || call_id >= MAX_CALLS) return -1;
@@ -1665,9 +1717,21 @@ int pd_call_stop_recording(int call_id)
         return -1;  /* Not recording */
     }
 
-    /* Mark as not recording */
+    call_slot = pjsua_call_get_conf_port(call_id);
+    if (g_recorder_slot[call_id] != PJSUA_INVALID_ID) {
+        if (call_slot != PJSUA_INVALID_ID) {
+            pjsua_conf_disconnect(call_slot, g_recorder_slot[call_id]);
+        }
+        pjsua_conf_disconnect(0, g_recorder_slot[call_id]);
+    }
+    if (g_recorder_id[call_id] != PJSUA_INVALID_ID) {
+        pjsua_recorder_destroy(g_recorder_id[call_id]);
+    }
+
     g_is_recording[call_id] = 0;
     g_rec_path[call_id][0] = '\0';
+    g_recorder_id[call_id] = PJSUA_INVALID_ID;
+    g_recorder_slot[call_id] = PJSUA_INVALID_ID;
 
     return 0;
 }
@@ -1797,57 +1861,15 @@ int pd_acc_get_dtmf_method(int acc_id, int *method_out)
     return 0;
 }
 
-int pd_acc_export_config(int acc_id, char *json_buf, int json_len)
+int pd_acc_delete_profile(const char *uuid)
 {
     pd_ensure_thread();
 
-    if (acc_id < 0 || acc_id >= MAX_ACCOUNTS) return -1;
-    if (!json_buf || json_len <= 0) return -1;
-
-    pjsua_acc_info info;
-    pj_bzero(&info, sizeof(info));
-    if (pjsua_acc_get_info((pjsua_acc_id)acc_id, &info) != PJ_SUCCESS) {
-        return -1;
-    }
-
-    /* Build JSON config using available fields and per-account storage */
-    char codec_buf[512] = {0};
-    pd_acc_get_codec_priority(acc_id, codec_buf, sizeof(codec_buf));
-
-    int written = snprintf(json_buf, (size_t)json_len,
-        "{"
-        "\"acc_uri\":\"%.*s\","
-        "\"reg_uri\":\"%s\","
-        "\"user_data\":\"%s\","
-        "\"auto_answer\":%d,"
-        "\"dtmf_type\":%d,"
-        "\"codec_priority\":%s"
-        "}",
-        (int)info.acc_uri.slen, info.acc_uri.ptr,
-        g_acc_config[acc_id].reg_uri,
-        g_acc_config[acc_id].user_data,
-        g_acc_auto_answer[acc_id].enabled,
-        g_acc_dtmf_method[acc_id],
-        codec_buf);
-
-    return (written > 0 && written < json_len) ? 0 : -1;
-}
-
-int pd_acc_import_config(const char *json_str, int *new_acc_id_out)
-{
-    /* Full implementation would parse JSON and create account */
-    /* For now, return not implemented */
-    (void)json_str;
-    (void)new_acc_id_out;
-    return -1;
-}
-
-int pd_acc_delete_profile(const char *uuid)
-{
-    /* Delete account by UUID - requires account map lookup */
-    /* For now, return not implemented */
+    /* Native account profiles are not persisted independently of the Rust/Flutter
+     * model today. Rust removes the live PJSIP account before calling this hook,
+     * so this is currently a no-op success. */
     (void)uuid;
-    return -1;
+    return 0;
 }
 
 /* -----------------------------------------------------------------------

@@ -148,8 +148,10 @@ class AppSettingsService {
             data['local_call_recording_enabled'] as bool? ?? false;
         _localRecordingDirectory =
             data['local_recording_directory'] as String? ?? '';
-        _localRecordingFormat =
+        final storedRecordingFormat =
             data['local_recording_format'] as String? ?? 'wav';
+        _localRecordingFormat =
+            storedRecordingFormat.toLowerCase() == 'wav' ? 'wav' : 'wav';
         _recordingUploadUrl = data['recording_upload_url'] as String? ?? '';
         _recordingFileFieldName =
             data['recording_file_field_name'] as String? ?? 'recording';
@@ -254,8 +256,8 @@ class AppSettingsService {
     await saveSettings();
   }
 
-  /// Update DND.
-  Future<void> setDndEnabled(bool enabled) async {
+  /// Update global DND.
+  Future<void> setGlobalDndEnabled(bool enabled) async {
     _dndEnabled = enabled;
     await saveSettings();
   }
@@ -347,8 +349,7 @@ class AppSettingsService {
   }
 
   Future<void> setLocalRecordingFormat(String format) async {
-    if (format != 'wav' && format != 'mp3') return;
-    _localRecordingFormat = format;
+    _localRecordingFormat = 'wav';
     await saveSettings();
   }
 

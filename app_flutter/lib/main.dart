@@ -818,13 +818,14 @@ class CockpitFooter extends ConsumerWidget {
 
           const Spacer(),
 
-          // DND Toggle
+          // Global DND Toggle
           Consumer(
             builder: (context, ref, _) {
               final dndEnabled = AppSettingsService.instance.dndEnabled;
               return InkWell(
                 onTap: () async {
-                  await AppSettingsService.instance.setDndEnabled(!dndEnabled);
+                  await AppSettingsService.instance
+                      .setGlobalDndEnabled(!dndEnabled);
                 },
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
@@ -853,7 +854,7 @@ class CockpitFooter extends ConsumerWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'DND',
+                        'GLOBAL DND',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w600,

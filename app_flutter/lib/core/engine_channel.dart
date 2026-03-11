@@ -280,8 +280,8 @@ class EngineChannel {
         return 'ForwardingUpdated';
       case EngineEventId.forwardingResult:
         return 'ForwardingResult';
-      case EngineEventId.dndUpdated:
-        return 'DndUpdated';
+      case EngineEventId.globalDndUpdated:
+        return 'GlobalDndUpdated';
       case EngineEventId.blfSubscribed:
         return 'BlfSubscribed';
       case EngineEventId.blfUnsubscribed:
@@ -306,10 +306,6 @@ class EngineChannel {
         return 'DtmfMethodUpdated';
       case EngineEventId.dtmfMethodResult:
         return 'DtmfMethodResult';
-      case EngineEventId.accountConfigExported:
-        return 'AccountConfigExported';
-      case EngineEventId.accountConfigImported:
-        return 'AccountConfigImported';
       case EngineEventId.accountProfileDeleted:
         return 'AccountProfileDeleted';
       case EngineEventId.globalCodecPriorityUpdated:
@@ -324,6 +320,14 @@ class EngineChannel {
         return 'GlobalAutoAnswerUpdated';
       case EngineEventId.globalAutoAnswerResult:
         return 'GlobalAutoAnswerResult';
+      case EngineEventId.recordingStarted:
+        return 'RecordingStarted';
+      case EngineEventId.recordingStopped:
+        return 'RecordingStopped';
+      case EngineEventId.recordingSaved:
+        return 'RecordingSaved';
+      case EngineEventId.recordingError:
+        return 'RecordingError';
       default:
         return 'Unknown';
     }
@@ -399,16 +403,6 @@ class EngineChannel {
     return _engine?.mergeConference(callAId, callBId) ?? -1;
   }
 
-  Future<void> _stopRecordingDeferred() async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    if (!RecordingService.instance.isRecording) return;
-    try {
-      await RecordingService.instance.stopRecording();
-    } catch (e) {
-      debugPrint('[EngineChannel] Deferred recording stop failed: $e');
-    }
-  }
-
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     final payload =
@@ -476,6 +470,8 @@ class EngineChannel {
       case 'CallStateChanged':
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
         final state = CallState.fromString(payload['state'] as String? ?? '');
+        final previousCall =
+            activeCall?.callId == callId ? activeCall : null;
         final eventCall = ActiveCall(
           callId: callId,
           accountId: payload['account_id'] as String? ?? '',
@@ -485,7 +481,7 @@ class EngineChannel {
           state: state,
           muted: payload['muted'] as bool? ?? false,
           onHold: payload['on_hold'] as bool? ?? false,
-          startedAt: activeCall?.startedAt ??
+          startedAt: previousCall?.startedAt ??
               ((state == CallState.inCall) ? DateTime.now() : null),
           accumulatedSeconds: payload['accumulated_active_secs'] as int? ?? 0,
           lastResumedAt: payload['last_resumed_at'] != null
@@ -494,6 +490,10 @@ class EngineChannel {
               : null,
         );
         activeCall = eventCall;
+
+        if (state == CallState.inCall) {
+          unawaited(RecordingService.instance.maybeAutoStartForCall(eventCall));
+        }
 
         debugPrint(
             '[EngineChannel] Emitting CallEvent for call $callId, state $state');
@@ -514,12 +514,16 @@ class EngineChannel {
 
         if (state == CallState.ended) {
           final endedRecordingPath = (payload['recording_path'] as String?) ??
-              RecordingService.instance.currentRecordingPath;
-
-          // Stop recording if active
-          if (RecordingService.instance.isRecording) {
-            unawaited(_stopRecordingDeferred());
-          }
+              RecordingService.instance.recordingPathForCall(callId);
+          final historyCall = previousCall ?? eventCall;
+          final wasConnected = previousCall != null &&
+              (previousCall.state == CallState.inCall ||
+                  previousCall.startedAt != null ||
+                  previousCall.accumulatedSeconds > 0);
+          RecordingService.instance.handleCallEnded(
+            callId,
+            finalRecordingPath: endedRecordingPath,
+          );
 
           if (activeCall?.callId == callId) {
             // Save to JSON via AccountService
@@ -529,18 +533,18 @@ class EngineChannel {
 
               // Map SIP code to professional Result (Spec 2.2)
               String result = 'Ended';
-              if (activeCall!.direction == CallDirection.incoming) {
+              if (historyCall.direction == CallDirection.incoming) {
                 if (sipCode == 487) {
-                  result = 'Missed';
+                  result = wasConnected ? 'Answered' : 'Missed';
                 } else if (sipCode == 603 || sipCode == 486) {
                   result = 'Rejected';
-                } else if (activeCall!.state == CallState.inCall) {
+                } else if (wasConnected) {
                   result = 'Answered';
                 } else {
                   result = 'Missed';
                 }
               } else {
-                if (activeCall!.state == CallState.inCall) {
+                if (wasConnected) {
                   result = 'Answered';
                 } else if (sipCode == 486) {
                   result = 'Busy';
@@ -555,13 +559,13 @@ class EngineChannel {
 
               final entry = CallHistorySchema(
                 id: '', // Will be set in AccountService
-                accountId: activeCall!.accountId,
-                uri: activeCall!.uri,
-                direction: activeCall!.direction.name,
+                accountId: historyCall.accountId,
+                uri: historyCall.uri,
+                direction: historyCall.direction.name,
                 timestamp: DateTime.now(),
-                durationSeconds: activeCall!.startedAt != null
+                durationSeconds: historyCall.startedAt != null
                     ? DateTime.now()
-                        .difference(activeCall!.startedAt!)
+                        .difference(historyCall.startedAt!)
                         .inSeconds
                     : 0,
                 sipCode: sipCode,
@@ -573,9 +577,9 @@ class EngineChannel {
             }
 
             // Trigger CRM End Hook and Recording Upload
-            if (activeCall != null) {
+            if (previousCall != null) {
               IntegrationService.instance.onCallEnd(
-                activeCall!,
+                historyCall,
                 recordingPath: endedRecordingPath,
               );
             }
@@ -652,15 +656,23 @@ class EngineChannel {
             '[EngineChannel] Conference merged: call A=$callAId, call B=$callBId');
 
       case 'RecordingStarted':
-        // Recording started
+        RecordingService.instance.handleRecordingStarted(payload);
         final filePath = payload['file_path'] as String?;
         debugPrint('[EngineChannel] Recording started: $filePath');
 
       case 'RecordingStopped':
-        // Recording stopped
+        RecordingService.instance.handleRecordingStopped(payload);
         debugPrint('[EngineChannel] Recording stopped');
-        // Reset recording service state
-        RecordingService.instance.reset();
+
+      case 'RecordingSaved':
+        RecordingService.instance.handleRecordingSaved(payload);
+        debugPrint(
+            '[EngineChannel] Recording saved: ${payload['absolute_file_path']}');
+
+      case 'RecordingError':
+        RecordingService.instance.handleRecordingError(payload);
+        debugPrint(
+            '[EngineChannel] Recording error: ${payload['code']} ${payload['message']}');
     }
   }
 }

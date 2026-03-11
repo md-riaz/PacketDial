@@ -7,6 +7,8 @@ class AppSettingsData {
   final bool autoAnswerEnabled;
   final bool dndEnabled;
   final bool blfEnabled;
+  final bool localCallRecordingEnabled;
+  final String localRecordingDirectory;
 
   AppSettingsData({
     required this.codecPriorities,
@@ -14,6 +16,8 @@ class AppSettingsData {
     required this.autoAnswerEnabled,
     required this.dndEnabled,
     required this.blfEnabled,
+    required this.localCallRecordingEnabled,
+    required this.localRecordingDirectory,
   });
 
   factory AppSettingsData.defaultSettings() {
@@ -23,6 +27,8 @@ class AppSettingsData {
       autoAnswerEnabled: false,
       dndEnabled: false,
       blfEnabled: true,
+      localCallRecordingEnabled: false,
+      localRecordingDirectory: '',
     );
   }
 
@@ -33,6 +39,8 @@ class AppSettingsData {
       autoAnswerEnabled: service.autoAnswerEnabled,
       dndEnabled: service.dndEnabled,
       blfEnabled: service.blfEnabled,
+      localCallRecordingEnabled: service.localCallRecordingEnabled,
+      localRecordingDirectory: service.localRecordingDirectory,
     );
   }
 }
@@ -65,8 +73,8 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
     _refresh();
   }
 
-  Future<void> setDndEnabled(bool value) async {
-    await _service.setDndEnabled(value);
+  Future<void> setGlobalDndEnabled(bool value) async {
+    await _service.setGlobalDndEnabled(value);
     _refresh();
   }
 
@@ -82,6 +90,16 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
 
   Future<void> setCodecPriorities(List<Map<String, dynamic>> priorities) async {
     await _service.setCodecPriorities(priorities);
+    _refresh();
+  }
+
+  Future<void> setLocalCallRecordingEnabled(bool value) async {
+    await _service.setLocalCallRecordingEnabled(value);
+    _refresh();
+  }
+
+  Future<void> setLocalRecordingDirectory(String value) async {
+    await _service.setLocalRecordingDirectory(value);
     _refresh();
   }
 

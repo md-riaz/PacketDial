@@ -257,12 +257,11 @@ int pd_acc_get_forward(int acc_id, char *fwd_uri_buf, int fwd_uri_len,
                         int *fwd_flags_out);
 
 /**
- * Enable/Disable Do Not Disturb (DND) mode.
- * @param acc_id    pjsua_acc_id.
+ * Enable/Disable global Do Not Disturb (DND) mode.
  * @param enabled   1 to enable DND, 0 to disable.
  * @return 0 on success, non-zero on error.
  */
-int pd_acc_set_dnd(int acc_id, int enabled);
+int pd_set_global_dnd(int enabled);
 
 /**
  * Subscribe to BLF/Presence for a list of URIs.
@@ -356,23 +355,6 @@ int pd_acc_set_dtmf_method(int acc_id, int dtmf_method);
  * @return 0 on success, non-zero on error.
  */
 int pd_acc_get_dtmf_method(int acc_id, int *method_out);
-
-/**
- * Export account configuration to JSON string.
- * @param acc_id            pjsua_acc_id.
- * @param json_buf          Buffer to receive JSON configuration.
- * @param json_len          Size of json_buf.
- * @return 0 on success, non-zero on error.
- */
-int pd_acc_export_config(int acc_id, char *json_buf, int json_len);
-
-/**
- * Import account configuration from JSON string.
- * @param json_str          JSON configuration string.
- * @param new_acc_id_out    Receives new account ID if successful.
- * @return 0 on success, non-zero on error.
- */
-int pd_acc_import_config(const char *json_str, int *new_acc_id_out);
 
 /**
  * Delete an account profile by UUID.

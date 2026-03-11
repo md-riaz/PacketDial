@@ -5,13 +5,8 @@ import '../core/account_service.dart';
 import '../core/engine_channel.dart';
 import '../models/account.dart';
 import '../models/account_schema.dart';
-import '../providers/engine_provider.dart';
 import '../widgets/empty_state.dart';
 import 'account_setup_page.dart';
-
-final accountsListProvider = Provider<List<AccountSchema>>((ref) {
-  return ref.watch(accountServiceProvider).getAllAccounts();
-});
 
 final accountRegisteringProvider =
     StateProvider.family<bool, String>((ref, id) {
@@ -35,22 +30,15 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     )
         .then((saved) {
       if (saved == true && mounted) {
-        // Refresh account list
-        ref.invalidate(accountsListProvider);
+        setState(() {});
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final accounts = ref.watch(accountsListProvider);
-
-    // Simple way to listen to global reg updates and refresh local UI list
-    ref.listen(engineEventsProvider, (prev, next) {
-      if (next.value?['type'] == 'RegistrationStateChanged') {
-        ref.invalidate(accountsListProvider);
-      }
-    });
+    final accountService = ref.watch(accountServiceProvider);
+    final accounts = accountService.getAllAccounts();
 
     return Scaffold(
       appBar: AppBar(
@@ -254,7 +242,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
         }
       }
       if (mounted) {
-        ref.invalidate(accountsListProvider);
+        setState(() {});
       }
     } catch (e) {
       // Show error dialog
@@ -320,7 +308,6 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
 
     if (confirmed == true && mounted) {
       await ref.read(accountServiceProvider).deleteAccount(widget.account.uuid);
-      ref.invalidate(accountsListProvider);
     }
   }
 

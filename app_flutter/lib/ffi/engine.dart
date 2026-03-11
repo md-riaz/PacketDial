@@ -35,8 +35,6 @@ typedef _EngineStopRecordingC = ffi.Int32 Function();
 typedef _EngineIsRecordingC = ffi.Int32 Function();
 typedef _EngineSendCommandC = ffi.Int32 Function(
     ffi.Pointer<ffi.Int8>, ffi.Pointer<ffi.Int8>);
-typedef _EngineExportProfileC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
-typedef _EngineImportProfileC = ffi.Int32 Function(ffi.Pointer<ffi.Int8>);
 typedef _EngineSetEventCallbackC = ffi.Void Function(
     ffi.Pointer<
         ffi
@@ -66,7 +64,7 @@ abstract class EngineEventId {
   static const int conferenceMerged = 20;
   static const int forwardingUpdated = 21;
   static const int forwardingResult = 22;
-  static const int dndUpdated = 23;
+  static const int globalDndUpdated = 23;
   static const int blfSubscribed = 24;
   static const int blfUnsubscribed = 25;
   static const int blfStatus = 26;
@@ -79,8 +77,7 @@ abstract class EngineEventId {
   static const int autoAnswerResult = 33;
   static const int dtmfMethodUpdated = 34;
   static const int dtmfMethodResult = 35;
-  static const int accountConfigExported = 36;
-  static const int accountConfigImported = 37;
+  // 36-37 reserved: account config import/export removed
   static const int accountProfileDeleted = 38;
   static const int globalCodecPriorityUpdated = 39;
   static const int globalCodecPriorityResult = 40;
@@ -88,6 +85,10 @@ abstract class EngineEventId {
   static const int globalDtmfMethodResult = 42;
   static const int globalAutoAnswerUpdated = 43;
   static const int globalAutoAnswerResult = 44;
+  static const int recordingStarted = 45;
+  static const int recordingStopped = 46;
+  static const int recordingSaved = 47;
+  static const int recordingError = 48;
 }
 
 class VoipEngine {
@@ -121,12 +122,6 @@ class VoipEngine {
       .lookupFunction<_EngineAnswerCallC, int Function()>('engine_answer_call');
   late final int Function() _hangup =
       _lib.lookupFunction<_EngineHangupC, int Function()>('engine_hangup');
-  late final int Function(ffi.Pointer<ffi.Int8>) _exportProfile =
-      _lib.lookupFunction<_EngineExportProfileC,
-          int Function(ffi.Pointer<ffi.Int8>)>('engine_export_profile');
-  late final int Function(ffi.Pointer<ffi.Int8>) _importProfile =
-      _lib.lookupFunction<_EngineImportProfileC,
-          int Function(ffi.Pointer<ffi.Int8>)>('engine_import_profile');
   late final int Function(int) _setMute = _lib
       .lookupFunction<_EngineSetMuteC, int Function(int)>('engine_set_mute');
   late final int Function(int) _setHold = _lib
@@ -281,28 +276,6 @@ class VoipEngine {
     }
   }
 
-  /// Export account profile configuration.
-  /// Returns 0 on success, non-zero on error.
-  int exportProfile(String accountId) {
-    final ptr = _allocCString(accountId);
-    try {
-      return _exportProfile(ptr);
-    } finally {
-      _freeNative(ptr);
-    }
-  }
-
-  /// Import account profile configuration.
-  /// Returns 0 on success, non-zero on error.
-  int importProfile(String configJson) {
-    final ptr = _allocCString(configJson);
-    try {
-      return _importProfile(ptr);
-    } finally {
-      _freeNative(ptr);
-    }
-  }
-
   /// Hang up the current active call.
   /// Returns 0 on success, non-zero on error.
   int hangup() => _hangup();
@@ -427,6 +400,17 @@ class VoipEngine {
     return _isRecording();
   }
 
+  int startRecordingForCall(int callId, String filePath) {
+    return sendCommand(
+      'CallStartRecording',
+      '{"call_id":$callId,"file_path":${_jsonString(filePath)}}',
+    );
+  }
+
+  int stopRecordingForCall(int callId) {
+    return sendCommand('CallStopRecording', '{"call_id":$callId}');
+  }
+
   /// Send a structured command to the engine as JSON.
   /// [type] is the command name, [payloadJson] is the parameters.
   int sendCommand(String type, String payloadJson) {
@@ -529,5 +513,9 @@ class VoipEngine {
 
   void _freeNative(ffi.Pointer<ffi.Int8> ptr) {
     ffi_alloc.calloc.free(ptr);
+  }
+
+  String _jsonString(String value) {
+    return '"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"';
   }
 }

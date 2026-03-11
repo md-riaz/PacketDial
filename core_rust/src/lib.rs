@@ -198,6 +198,8 @@ struct Call {
     pjsip_call_id: Option<i32>,
     /// Path to the recording file (if recording was enabled)
     recording_path: Option<String>,
+    /// Timestamp when recording started.
+    recording_started_at_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -277,6 +279,13 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 // ---------------------------------------------------------------------------
 // PJSIP shim FFI — the C shim (src/shim/pjsip_shim.c) wraps pjsua so that
 // every call from Rust goes through a thin, stable C boundary.
@@ -341,7 +350,7 @@ extern "C" {
         fwd_uri_len: i32,
         fwd_flags_out: *mut i32,
     ) -> i32;
-    fn pd_acc_set_dnd(acc_id: i32, enabled: i32) -> i32;
+    fn pd_set_global_dnd(enabled: i32) -> i32;
     fn pd_blf_subscribe(acc_id: i32, uris: *const *const c_char, count: i32) -> i32;
     fn pd_blf_unsubscribe(acc_id: i32) -> i32;
     fn pd_acc_set_lookup_url(acc_id: i32, lookup_url: *const c_char) -> i32;
@@ -353,8 +362,6 @@ extern "C" {
     fn pd_acc_get_auto_answer(acc_id: i32, enabled_out: *mut i32, delay_ms_out: *mut i32) -> i32;
     fn pd_acc_set_dtmf_method(acc_id: i32, dtmf_method: i32) -> i32;
     fn pd_acc_get_dtmf_method(acc_id: i32, method_out: *mut i32) -> i32;
-    fn pd_acc_export_config(acc_id: i32, json_buf: *mut c_char, json_len: i32) -> i32;
-    fn pd_acc_import_config(json_str: *const c_char, new_acc_id_out: *mut i32) -> i32;
     fn pd_acc_delete_profile(uuid: *const c_char) -> i32;
     fn pd_set_global_codec_priority(codec_priorities: *const c_char) -> i32;
     fn pd_get_global_codec_priority(json_buf: *mut c_char, json_len: i32) -> i32;
@@ -504,6 +511,7 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
         last_resumed_at: None,
         pjsip_call_id: Some(pj_call_id),
         recording_path: None,
+        recording_started_at_ms: None,
     };
 
     push_call_state(&call);
@@ -534,8 +542,12 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
     };
 
     let our_call_id = {
-        let map = PJSIP_CALL_MAP.lock().unwrap();
-        map.get(&pj_call_id).copied()
+        let mut map = PJSIP_CALL_MAP.lock().unwrap();
+        if new_state == CallState::Ended {
+            map.remove(&pj_call_id)
+        } else {
+            map.get(&pj_call_id).copied()
+        }
     };
     let our_call_id = match our_call_id {
         Some(id) => id,
@@ -548,7 +560,7 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
         }
     };
 
-    let should_record_history = new_state == CallState::Ended;
+    let should_cleanup = new_state == CallState::Ended;
 
     {
         let mut calls = CALLS.lock().unwrap();
@@ -569,15 +581,23 @@ extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code:
 
             push_call_state(call);
 
-            if should_record_history {
+            if should_cleanup {
                 MEDIA_STATS.lock().unwrap().remove(&our_call_id);
             }
         }
     }
 
-    if should_record_history {
-        // Remove from PJSIP call map
-        PJSIP_CALL_MAP.lock().unwrap().remove(&pj_call_id);
+    if should_cleanup {
+        let should_stop_recording = {
+            let calls = CALLS.lock().unwrap();
+            calls
+                .get(&our_call_id)
+                .map(|call| call.recording_path.is_some())
+                .unwrap_or(false)
+        };
+        if should_stop_recording {
+            let _ = stop_recording_for_call(our_call_id);
+        }
     }
 }
 
@@ -964,7 +984,7 @@ fn push_event(event_type: &str, payload: serde_json::Value) {
         "ConferenceMerged" => Some(EngineEventId::ConferenceMerged),
         "ForwardingUpdated" => Some(EngineEventId::ForwardingUpdated),
         "ForwardingResult" => Some(EngineEventId::ForwardingResult),
-        "DndUpdated" => Some(EngineEventId::DndUpdated),
+        "GlobalDndUpdated" => Some(EngineEventId::GlobalDndUpdated),
         "BlfSubscribed" => Some(EngineEventId::BlfSubscribed),
         "BlfUnsubscribed" => Some(EngineEventId::BlfUnsubscribed),
         "BlfStatusChanged" => Some(EngineEventId::BlfStatus),
@@ -977,8 +997,6 @@ fn push_event(event_type: &str, payload: serde_json::Value) {
         "AutoAnswerResult" => Some(EngineEventId::AutoAnswerResult),
         "DtmfMethodUpdated" => Some(EngineEventId::DtmfMethodUpdated),
         "DtmfMethodResult" => Some(EngineEventId::DtmfMethodResult),
-        "AccountConfigExported" => Some(EngineEventId::AccountConfigExported),
-        "AccountConfigImported" => Some(EngineEventId::AccountConfigImported),
         "AccountProfileDeleted" => Some(EngineEventId::AccountProfileDeleted),
         "GlobalCodecPriorityUpdated" => Some(EngineEventId::GlobalCodecPriorityUpdated),
         "GlobalCodecPriorityResult" => Some(EngineEventId::GlobalCodecPriorityResult),
@@ -986,6 +1004,10 @@ fn push_event(event_type: &str, payload: serde_json::Value) {
         "GlobalDtmfMethodResult" => Some(EngineEventId::GlobalDtmfMethodResult),
         "GlobalAutoAnswerUpdated" => Some(EngineEventId::GlobalAutoAnswerUpdated),
         "GlobalAutoAnswerResult" => Some(EngineEventId::GlobalAutoAnswerResult),
+        "RecordingStarted" => Some(EngineEventId::RecordingStarted),
+        "RecordingStopped" => Some(EngineEventId::RecordingStopped),
+        "RecordingSaved" => Some(EngineEventId::RecordingSaved),
+        "RecordingError" => Some(EngineEventId::RecordingError),
         _ => None,
     };
 
@@ -1097,6 +1119,69 @@ fn push_media_stats(stats: &MediaStats) {
     );
 }
 
+fn emit_recording_started(call_id: u32, file_path: &str, started_at: u64) {
+    push_event(
+        "RecordingStarted",
+        serde_json::json!({
+            "call_id": call_id,
+            "file_path": file_path,
+            "started_at": started_at,
+            "state": "Recording",
+        }),
+    );
+}
+
+fn emit_recording_stopped(call_id: u32, file_path: &str) {
+    push_event(
+        "RecordingStopped",
+        serde_json::json!({
+            "call_id": call_id,
+            "file_path": file_path,
+            "state": "Stopped",
+        }),
+    );
+}
+
+fn emit_recording_saved(
+    call_id: u32,
+    file_path: &str,
+    started_at: u64,
+    ended_at: u64,
+    duration_ms: u64,
+    file_size_bytes: u64,
+) {
+    let format = std::path::Path::new(file_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("wav")
+        .to_ascii_lowercase();
+    push_event(
+        "RecordingSaved",
+        serde_json::json!({
+            "recording_id": format!("{}-{}", call_id, started_at),
+            "call_id": call_id,
+            "absolute_file_path": file_path,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "duration_ms": duration_ms,
+            "file_size_bytes": file_size_bytes,
+            "format": format,
+            "status": "completed",
+        }),
+    );
+}
+
+fn emit_recording_error(call_id: u32, code: &str, message: &str) {
+    push_event(
+        "RecordingError",
+        serde_json::json!({
+            "call_id": call_id,
+            "code": code,
+            "message": message,
+        }),
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Command dispatch
 // ---------------------------------------------------------------------------
@@ -1113,10 +1198,12 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "CallMute" => cmd_call_mute(payload),
         "CallHold" => cmd_call_hold(payload),
         "CallSendDtmf" => cmd_call_send_dtmf(payload),
+        "CallStartRecording" => cmd_call_start_recording(payload),
+        "CallStopRecording" => cmd_call_stop_recording(payload),
         "MediaStatsUpdate" => cmd_media_stats_update(payload),
         "AccountSetForwarding" => cmd_account_set_forwarding(payload),
         "AccountGetForwarding" => cmd_account_get_forwarding(payload),
-        "AccountSetDnd" => cmd_account_set_dnd(payload),
+        "SetGlobalDnd" => cmd_set_global_dnd(payload),
         "AccountSetLookupUrl" => cmd_account_set_lookup_url(payload),
         "AccountGetLookupUrl" => cmd_account_get_lookup_url(payload),
         "AccountSetCodecPriority" => cmd_account_set_codec_priority(payload),
@@ -1126,8 +1213,6 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "AccountGetAutoAnswer" => cmd_account_get_auto_answer(payload),
         "AccountSetDtmfMethod" => cmd_account_set_dtmf_method(payload),
         "AccountGetDtmfMethod" => cmd_account_get_dtmf_method(payload),
-        "AccountExportConfig" => cmd_account_export_config(payload),
-        "AccountImportConfig" => cmd_account_import_config(payload),
         "AccountDeleteProfile" => cmd_account_delete_profile(payload),
         "SetGlobalCodecPriority" => cmd_set_global_codec_priority(payload),
         "GetGlobalCodecPriority" => cmd_get_global_codec_priority(payload),
@@ -1662,6 +1747,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             last_resumed_at: None,
             pjsip_call_id: Some(pj_call_id),
             recording_path: None,
+            recording_started_at_ms: None,
         };
         push_call_state(&call);
         CALLS.lock().unwrap().insert(call_id, call);
@@ -2119,6 +2205,142 @@ fn cmd_call_send_dtmf(p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
+fn start_recording_for_call(call_id: u32, file_path_s: String) -> EngineErrorCode {
+    let (pjsip_call_id, state) = {
+        let calls = CALLS.lock().unwrap();
+        match calls.get(&call_id) {
+            Some(call) => (call.pjsip_call_id, call.state.clone()),
+            None => return EngineErrorCode::NotFound,
+        }
+    };
+
+    if state == CallState::Ended {
+        return EngineErrorCode::NotFound;
+    }
+    if state != CallState::InCall {
+        return EngineErrorCode::MediaNotReady;
+    }
+
+    let pjsip_call_id = match pjsip_call_id {
+        Some(id) => id,
+        None => return EngineErrorCode::NotFound,
+    };
+
+    let path_cstr = match CString::new(file_path_s.clone()) {
+        Ok(s) => s,
+        Err(_) => return EngineErrorCode::InvalidUtf8,
+    };
+
+    let already_recording = unsafe { pd_call_is_recording(pjsip_call_id) } != 0;
+    if already_recording {
+        return EngineErrorCode::InternalError;
+    }
+
+    let rc = unsafe { pd_call_start_recording(pjsip_call_id, path_cstr.as_ptr()) };
+    if rc != 0 {
+        log_engine(
+            LogLevel::Error,
+            &format!("Failed to start recording for call {}: {}", call_id, rc),
+        );
+        emit_recording_error(call_id, "RecorderCreateFailed", "Failed to start recording");
+        return EngineErrorCode::InternalError;
+    }
+
+    let started_at = now_millis();
+    {
+        let mut calls = CALLS.lock().unwrap();
+        if let Some(call) = calls.get_mut(&call_id) {
+            call.recording_path = Some(file_path_s.clone());
+            call.recording_started_at_ms = Some(started_at);
+        }
+    }
+
+    emit_recording_started(call_id, &file_path_s, started_at);
+    EngineErrorCode::Ok
+}
+
+fn stop_recording_for_call(call_id: u32) -> EngineErrorCode {
+    let (pjsip_call_id, file_path, started_at) = {
+        let calls = CALLS.lock().unwrap();
+        match calls.get(&call_id) {
+            Some(call) => (
+                call.pjsip_call_id,
+                call.recording_path.clone(),
+                call.recording_started_at_ms,
+            ),
+            None => return EngineErrorCode::NotFound,
+        }
+    };
+
+    let pjsip_call_id = match pjsip_call_id {
+        Some(id) => id,
+        None => return EngineErrorCode::NotFound,
+    };
+    let file_path = match file_path {
+        Some(path) => path,
+        None => return EngineErrorCode::NotFound,
+    };
+
+    let was_recording = unsafe { pd_call_is_recording(pjsip_call_id) } != 0;
+    if !was_recording {
+        return EngineErrorCode::NotFound;
+    }
+
+    let rc = unsafe { pd_call_stop_recording(pjsip_call_id) };
+    if rc != 0 {
+        log_engine(
+            LogLevel::Error,
+            &format!("Failed to stop recording for call {}: {}", call_id, rc),
+        );
+        emit_recording_error(call_id, "RecorderFinalizeFailed", "Failed to stop recording");
+        return EngineErrorCode::InternalError;
+    }
+
+    let ended_at = now_millis();
+    let started_at = started_at.unwrap_or(ended_at);
+    let duration_ms = ended_at.saturating_sub(started_at);
+    let file_size_bytes = std::fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
+
+    {
+        let mut calls = CALLS.lock().unwrap();
+        if let Some(call) = calls.get_mut(&call_id) {
+            call.recording_started_at_ms = None;
+        }
+    }
+
+    emit_recording_stopped(call_id, &file_path);
+    emit_recording_saved(
+        call_id,
+        &file_path,
+        started_at,
+        ended_at,
+        duration_ms,
+        file_size_bytes,
+    );
+
+    EngineErrorCode::Ok
+}
+
+fn cmd_call_start_recording(p: &serde_json::Value) -> EngineErrorCode {
+    let call_id = match p["call_id"].as_u64() {
+        Some(v) => v as u32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let file_path = match p["file_path"].as_str() {
+        Some(s) if !s.trim().is_empty() => s.trim().to_owned(),
+        _ => return EngineErrorCode::InvalidJson,
+    };
+    start_recording_for_call(call_id, file_path)
+}
+
+fn cmd_call_stop_recording(p: &serde_json::Value) -> EngineErrorCode {
+    let call_id = match p["call_id"].as_u64() {
+        Some(v) => v as u32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    stop_recording_for_call(call_id)
+}
+
 fn cmd_account_set_forwarding(p: &serde_json::Value) -> EngineErrorCode {
     let account_id = match p["account_id"].as_str() {
         Some(s) => s.to_owned(),
@@ -2215,11 +2437,7 @@ fn cmd_account_get_forwarding(p: &serde_json::Value) -> EngineErrorCode {
     EngineErrorCode::Ok
 }
 
-fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
-    let account_id = match p["account_id"].as_str() {
-        Some(s) => s.to_owned(),
-        None => return EngineErrorCode::InvalidJson,
-    };
+fn cmd_set_global_dnd(p: &serde_json::Value) -> EngineErrorCode {
     let enabled = match p["enabled"].as_bool() {
         Some(v) => v,
         None => return EngineErrorCode::InvalidJson,
@@ -2227,30 +2445,18 @@ fn cmd_account_set_dnd(p: &serde_json::Value) -> EngineErrorCode {
 
     log_engine(
         LogLevel::Info,
-        &format!(
-            "Setting DND for {}: {}",
-            account_id,
-            if enabled { "ON" } else { "OFF" }
-        ),
+        &format!("Setting global DND: {}", if enabled { "ON" } else { "OFF" }),
     );
 
-    let pj_acc_id = {
-        let accounts = ACCOUNTS.lock().unwrap();
-        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
-    };
-
-    if let Some(pj_id) = pj_acc_id {
-        let rc = unsafe { pd_acc_set_dnd(pj_id, if enabled { 1 } else { 0 }) };
-        if rc != 0 {
-            log_engine(LogLevel::Error, &format!("Set DND failed: {}", rc));
-            return EngineErrorCode::InternalError;
-        }
+    let rc = unsafe { pd_set_global_dnd(if enabled { 1 } else { 0 }) };
+    if rc != 0 {
+        log_engine(LogLevel::Error, &format!("Set global DND failed: {}", rc));
+        return EngineErrorCode::InternalError;
     }
 
     push_event(
-        "DndUpdated",
+        "GlobalDndUpdated",
         serde_json::json!({
-            "account_id": account_id,
             "enabled": enabled,
         }),
     );
@@ -2677,84 +2883,6 @@ fn cmd_account_get_dtmf_method(p: &serde_json::Value) -> EngineErrorCode {
         serde_json::json!({
             "account_id": account_id,
             "dtmf_method": dtmf_method,
-        }),
-    );
-    EngineErrorCode::Ok
-}
-
-fn cmd_account_export_config(p: &serde_json::Value) -> EngineErrorCode {
-    let account_id = match p["account_id"].as_str() {
-        Some(s) => s.to_owned(),
-        None => return EngineErrorCode::InvalidJson,
-    };
-
-    let pj_acc_id = {
-        let accounts = ACCOUNTS.lock().unwrap();
-        accounts.get(&account_id).and_then(|a| a.pjsip_acc_id)
-    };
-
-    let config_json = if let Some(pj_id) = pj_acc_id {
-        let mut json_buf = vec![0u8; 2048];
-        let rc = unsafe {
-            pd_acc_export_config(
-                pj_id,
-                json_buf.as_mut_ptr() as *mut c_char,
-                json_buf.len() as i32,
-            )
-        };
-        if rc == 0 {
-            String::from_utf8_lossy(&json_buf)
-                .trim_end_matches('\0')
-                .to_string()
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
-
-    let config_value =
-        serde_json::from_str::<serde_json::Value>(&config_json).unwrap_or_else(|_| serde_json::json!({}));
-    push_event(
-        "AccountConfigExported",
-        serde_json::json!({
-            "account_id": account_id,
-            "config": config_value,
-        }),
-    );
-    EngineErrorCode::Ok
-}
-
-fn cmd_account_import_config(p: &serde_json::Value) -> EngineErrorCode {
-    let config = match p["config"].as_str() {
-        Some(s) => s,
-        None => return EngineErrorCode::InvalidJson,
-    };
-
-    let config_cstr = match CString::new(config) {
-        Ok(s) => s,
-        Err(_) => return EngineErrorCode::InvalidUtf8,
-    };
-
-    let mut new_acc_id: i32 = 0;
-    let rc = unsafe { pd_acc_import_config(config_cstr.as_ptr(), &mut new_acc_id) };
-
-    if rc != 0 {
-        push_event(
-            "AccountConfigImported",
-            serde_json::json!({
-                "success": false,
-                "error": format!("Import failed with code {}", rc),
-            }),
-        );
-        return EngineErrorCode::InternalError;
-    }
-
-    push_event(
-        "AccountConfigImported",
-        serde_json::json!({
-            "success": true,
-            "error": serde_json::Value::Null,
         }),
     );
     EngineErrorCode::Ok
@@ -3270,7 +3398,7 @@ pub enum EngineEventId {
     ConferenceMerged = 20,
     ForwardingUpdated = 21,
     ForwardingResult = 22,
-    DndUpdated = 23,
+    GlobalDndUpdated = 23,
     BlfSubscribed = 24,
     BlfUnsubscribed = 25,
     BlfStatus = 26,
@@ -3283,8 +3411,7 @@ pub enum EngineEventId {
     AutoAnswerResult = 33,
     DtmfMethodUpdated = 34,
     DtmfMethodResult = 35,
-    AccountConfigExported = 36,
-    AccountConfigImported = 37,
+    /* Reserved: account config import/export removed */
     AccountProfileDeleted = 38,
     GlobalCodecPriorityUpdated = 39,
     GlobalCodecPriorityResult = 40,
@@ -3292,6 +3419,10 @@ pub enum EngineEventId {
     GlobalDtmfMethodResult = 42,
     GlobalAutoAnswerUpdated = 43,
     GlobalAutoAnswerResult = 44,
+    RecordingStarted = 45,
+    RecordingStopped = 46,
+    RecordingSaved = 47,
+    RecordingError = 48,
 }
 
 /// C callback: `void (*)(int event_id, const char* message)`
@@ -3750,55 +3881,15 @@ pub extern "C" fn engine_start_recording(file_path: *const c_char) -> i32 {
             Err(_) => return EngineErrorCode::InvalidUtf8 as i32,
         };
 
-        // Find the first active call
-        let (call_id, pjsip_call_id) = {
+        let call_id = {
             let calls = CALLS.lock().unwrap();
             let call = calls.values().find(|c| c.state != CallState::Ended);
             match call {
-                Some(c) => (c.id, c.pjsip_call_id),
+                Some(c) => c.id,
                 None => return EngineErrorCode::NotFound as i32,
             }
         };
-
-        let pjsip_call_id = match pjsip_call_id {
-            Some(id) => id,
-            None => return EngineErrorCode::NotFound as i32,
-        };
-
-        unsafe {
-            let path_cstr = CString::new(file_path_s.clone()).unwrap();
-            let rc = pd_call_start_recording(pjsip_call_id, path_cstr.as_ptr());
-            if rc != 0 {
-                log_engine(
-                    LogLevel::Error,
-                    &format!("Failed to start recording: {}", rc),
-                );
-                return EngineErrorCode::InternalError as i32;
-            }
-        }
-
-        // Store recording path in the call struct
-        {
-            let mut calls = CALLS.lock().unwrap();
-            if let Some(call) = calls.values_mut().find(|c| c.state != CallState::Ended) {
-                call.recording_path = Some(file_path_s.clone());
-            }
-        }
-
-        // Emit event
-        let event = serde_json::json!({
-            "type": "RecordingStarted",
-            "payload": {
-                "call_id": call_id,
-                "file_path": file_path_s,
-            }
-        });
-        push_event(
-            event["type"].as_str().unwrap_or("UnknownEvent"),
-            event["payload"].clone(),
-        );
-
-        0
+        start_recording_for_call(call_id, file_path_s) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
@@ -3814,55 +3905,15 @@ pub extern "C" fn engine_stop_recording() -> i32 {
             return EngineErrorCode::NotInitialized as i32;
         }
 
-        // Find the first active call
-        let (_call_id, pjsip_call_id) = {
+        let call_id = {
             let calls = CALLS.lock().unwrap();
             let call = calls.values().find(|c| c.state != CallState::Ended);
             match call {
-                Some(c) => (c.id, c.pjsip_call_id),
+                Some(c) => c.id,
                 None => return EngineErrorCode::NotFound as i32,
             }
         };
-
-        let pjsip_call_id = match pjsip_call_id {
-            Some(id) => id,
-            None => return EngineErrorCode::NotFound as i32,
-        };
-
-        unsafe {
-            let rc = pd_call_stop_recording(pjsip_call_id);
-            if rc != 0 {
-                log_engine(
-                    LogLevel::Error,
-                    &format!("Failed to stop recording: {}", rc),
-                );
-                return EngineErrorCode::InternalError as i32;
-            }
-        }
-
-        // Get call ID for event
-        let call_id = {
-            let calls = CALLS.lock().unwrap();
-            calls
-                .values()
-                .find(|c| c.state != CallState::Ended)
-                .map(|c| c.id)
-                .unwrap_or(0)
-        };
-
-        // Emit event
-        let event = serde_json::json!({
-            "type": "RecordingStopped",
-            "payload": {
-                "call_id": call_id,
-            }
-        });
-        push_event(
-            event["type"].as_str().unwrap_or("UnknownEvent"),
-            event["payload"].clone(),
-        );
-
-        0
+        stop_recording_for_call(call_id) as i32
     }));
     result.unwrap_or(EngineErrorCode::InternalError as i32)
 }
@@ -3998,6 +4049,7 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
             last_resumed_at: None,
             pjsip_call_id: Some(new_pj_id),
             recording_path: None,
+            recording_started_at_ms: None,
         };
 
         push_call_state(&call);

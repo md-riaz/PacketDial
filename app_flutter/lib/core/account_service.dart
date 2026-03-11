@@ -220,9 +220,7 @@ class AccountService extends ChangeNotifier {
     }
   }
 
-  List<AccountSchema> getAllAccounts() {
-    return _accounts;
-  }
+  List<AccountSchema> getAllAccounts() => List.unmodifiable(_accounts);
 
   AccountSchema? getSelectedAccount() {
     try {

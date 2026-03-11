@@ -35,6 +35,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   @override
   void initState() {
     super.initState();
+    RecordingService.instance.addListener(_handleRecordingChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusNode.requestFocus();
@@ -44,9 +45,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   @override
   void dispose() {
+    RecordingService.instance.removeListener(_handleRecordingChanged);
     _uriCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _handleRecordingChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   /// Check if there's a consultation call active.
@@ -972,8 +979,13 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   void _hangup() => EngineChannel.instance.engine.hangup();
 
   Future<void> _toggleRecording() async {
-    final wasRecording = RecordingService.instance.isRecording;
-    final ok = await RecordingService.instance.toggleRecording();
+    final activeCall = EngineChannel.instance.activeCall;
+    if (activeCall == null) return;
+
+    final wasRecording =
+        RecordingService.instance.isRecordingForCall(activeCall.callId);
+    final ok =
+        await RecordingService.instance.toggleRecordingForCall(activeCall.callId);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1060,7 +1072,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                           onConference: () => _showConferenceDialog(activeCall),
                           hasConsultationCall: dialerUi.hasConsultationCall,
                           consultationDisplay: dialerUi.consultationDisplay,
-                          isRecording: RecordingService.instance.isRecording,
+                          isRecording: RecordingService.instance
+                              .isRecordingForCall(activeCall.callId),
                         ),
                       )
                     else
