@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import '../core/recording_service.dart';
 
-/// Represents a call recording item with metadata.
+/// Represents a call recording item with metadata from RecordingSession.
 class RecordingItem {
   final String filePath;
   final String fileName;
@@ -24,20 +24,33 @@ class RecordingItem {
     this.session,
   });
 
-  /// Create from File (for existing recordings on disk).
-  /// Returns null if the file doesn't match the expected naming pattern.
-  static RecordingItem? fromFile(File file) {
+  /// Create from session data and file.
+  factory RecordingItem.fromSessionData({
+    required File file,
+    required int callId,
+    required RecordingSession? session,
+  }) {
     final fileName = p.basename(file.path);
     final match = RegExp(r'(\d+)_(\d{8}_\d{6})\.wav').firstMatch(fileName);
 
-    if (match == null) return null;
+    DateTime createdAt;
+    if (match != null) {
+      final timestamp = match.group(2)!;
+      createdAt = _parseTimestamp(timestamp);
+    } else {
+      // Fall back to file modification time
+      try {
+        createdAt = file.lastModifiedSync();
+      } catch (_) {
+        createdAt = DateTime.now();
+      }
+    }
 
-    final callId = int.parse(match.group(1)!);
-    final timestamp = match.group(2)!;
-    final createdAt = _parseTimestamp(timestamp);
-
-    // Check if there's an active session for this call
-    final session = RecordingService.instance.sessionForCall(callId);
+    // Get duration from session if available
+    Duration? duration;
+    if (session?.durationMs != null && session!.durationMs! > 0) {
+      duration = Duration(milliseconds: session.durationMs!);
+    }
 
     return RecordingItem(
       filePath: file.path,
@@ -45,9 +58,7 @@ class RecordingItem {
       callId: callId,
       createdAt: createdAt,
       fileSizeBytes: file.lengthSync(),
-      duration: session?.durationMs != null
-          ? Duration(milliseconds: session!.durationMs!)
-          : null,
+      duration: duration,
       autoRecorded: session?.autoRequested ?? false,
       session: session,
     );

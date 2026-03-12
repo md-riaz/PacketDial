@@ -7,8 +7,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   hotkey_manager_windows
   isar_flutter_libs
-  just_audio_windows
   local_notifier
+  media_kit_libs_windows_audio
   screen_retriever_windows
   tray_manager
   url_launcher_windows

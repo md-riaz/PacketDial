@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
 import '../core/app_theme.dart';
 import '../models/recording_item.dart';
 import '../providers/recordings_provider.dart';
@@ -182,11 +181,10 @@ class AudioPlayerControls extends ConsumerWidget {
   Widget _buildPlaybackControls(WidgetRef ref) {
     final state = ref.watch(recordingsProvider);
     final isPlaying = state.isPlaying;
-    final processingState = state.processingState;
+    final isBuffering = state.isBuffering;
 
     // Show loading indicator when buffering
-    if (processingState == ProcessingState.loading ||
-        processingState == ProcessingState.buffering) {
+    if (isBuffering) {
       return Padding(
         padding: const EdgeInsets.all(24),
         child: CircularProgressIndicator(

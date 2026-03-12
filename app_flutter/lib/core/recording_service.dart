@@ -384,6 +384,53 @@ class RecordingService extends ChangeNotifier {
     }
   }
 
+  /// Get all recordings with their session data, filtering out missing files.
+  /// Returns a list of maps containing the file and its associated session (if any).
+  Future<List<Map<String, dynamic>>> getRecordingsWithSessions() async {
+    try {
+      final files = await getRecordings();
+      final result = <Map<String, dynamic>>[];
+
+      for (final file in files) {
+        // Skip if file no longer exists
+        if (!await file.exists()) {
+          debugPrint('[RecordingService] Skipping missing file: ${file.path}');
+          continue;
+        }
+
+        // Extract callId from filename
+        final fileName = p.basename(file.path);
+        final match = RegExp(r'(\d+)_(\d{8}_\d{6})\.wav').firstMatch(fileName);
+
+        if (match == null) {
+          debugPrint('[RecordingService] Skipping file with invalid name: $fileName');
+          continue;
+        }
+
+        final callId = int.parse(match.group(1)!);
+        final session = _sessions[callId];
+
+        result.add({
+          'file': file,
+          'callId': callId,
+          'session': session,
+        });
+      }
+
+      return result;
+    } catch (e) {
+      debugPrint('[RecordingService] Error getting recordings with sessions: $e');
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  /// Get all completed recording sessions (for active calls).
+  List<RecordingSession> getCompletedSessions() {
+    return _sessions.values
+        .where((s) => s.phase == RecordingPhase.stopped && s.filePath != null)
+        .toList();
+  }
+
   Future<bool> deleteRecording(String path) async {
     try {
       final file = File(path);

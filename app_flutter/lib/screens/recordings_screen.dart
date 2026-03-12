@@ -15,30 +15,21 @@ class RecordingsScreen extends ConsumerStatefulWidget {
 }
 
 class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
-  bool _showPlayer = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Listen for playback state changes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.listen<RecordingsState>(
-        recordingsProvider,
-        (previous, next) {
-          if (next.currentRecording != null &&
-              (previous?.currentRecording == null ||
-                  previous?.currentRecording?.filePath !=
-                      next.currentRecording?.filePath)) {
-            setState(() => _showPlayer = true);
-          }
-        },
-      );
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(recordingsProvider);
+
+    // Listen for when a recording is selected (for debugging)
+    ref.listen<RecordingsState>(
+      recordingsProvider,
+      (previous, next) {
+        if (next.currentRecording != null &&
+            previous?.currentRecording?.filePath !=
+                next.currentRecording?.filePath) {
+          debugPrint('[RecordingsScreen] Now playing: ${next.currentRecording?.fileName}');
+        }
+      },
+    );
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -52,12 +43,11 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
             child: _buildContent(state),
           ),
 
-          // Player bottom sheet
-          if (_showPlayer && state.currentRecording != null)
+          // Player bottom sheet - show when there's a current recording
+          if (state.currentRecording != null)
             AudioPlayerControls(
               recording: state.currentRecording!,
               onClose: () {
-                setState(() => _showPlayer = false);
                 ref.read(recordingsProvider.notifier).stop();
               },
             ),
@@ -176,12 +166,6 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
           final recording = state.recordings[index];
           return RecordingListTile(
             recording: recording,
-            onDelete: () {
-              // Check if this was the last recording
-              if (state.recordings.length == 1) {
-                setState(() => _showPlayer = false);
-              }
-            },
           );
         },
       ),

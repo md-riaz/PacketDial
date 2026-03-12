@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:flutter/services.dart';
@@ -50,6 +51,10 @@ String _resolveRuntimeIconPath() {
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize media_kit for audio playback
+  MediaKit.ensureInitialized();
+
   final launchedFromWindowsStartup = args.contains(_startupLaunchArg);
 
   // ── Global Error Handler ────────────────────────────────────────────────

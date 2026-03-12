@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:media_kit/media_kit.dart';
 import '../core/recording_service.dart';
 import '../models/recording_item.dart';
 
@@ -13,7 +15,7 @@ class RecordingsState {
   final bool isPlaying;
   final Duration position;
   final Duration? duration;
-  final ProcessingState processingState;
+  final bool isBuffering;
 
   RecordingsState({
     this.recordings = const [],
@@ -22,7 +24,7 @@ class RecordingsState {
     this.isPlaying = false,
     this.position = Duration.zero,
     this.duration,
-    this.processingState = ProcessingState.idle,
+    this.isBuffering = false,
   });
 
   RecordingsState copyWith({
@@ -33,7 +35,7 @@ class RecordingsState {
     bool? isPlaying,
     Duration? position,
     Duration? duration,
-    ProcessingState? processingState,
+    bool? isBuffering,
   }) {
     return RecordingsState(
       recordings: recordings ?? this.recordings,
@@ -44,14 +46,15 @@ class RecordingsState {
       isPlaying: isPlaying ?? this.isPlaying,
       position: position ?? this.position,
       duration: duration ?? this.duration,
-      processingState: processingState ?? this.processingState,
+      isBuffering: isBuffering ?? this.isBuffering,
     );
   }
 }
 
-/// Notifier for managing recordings state and playback.
+/// Notifier for managing recordings state and playback using media_kit.
 class RecordingsNotifier extends StateNotifier<RecordingsState> {
-  final AudioPlayer _player = AudioPlayer();
+  final Player _player = Player();
+  List<StreamSubscription> _subscriptions = [];
 
   RecordingsNotifier() : super(RecordingsState()) {
     _init();
@@ -61,23 +64,30 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
     // Listen to RecordingService changes
     RecordingService.instance.addListener(_onRecordingChanged);
 
-    // Set up player state listeners
-    _player.playerStateStream.listen((playerState) {
-      state = state.copyWith(
-        isPlaying: playerState.playing,
-        processingState: playerState.processingState,
-      );
-    });
+    // Set up player event listeners - schedule on platform thread
+    _subscriptions.add(_player.stream.playing.listen((playing) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        state = state.copyWith(isPlaying: playing);
+      });
+    }));
 
-    // Listen to position updates
-    _player.positionStream.listen((position) {
-      state = state.copyWith(position: position);
-    });
+    _subscriptions.add(_player.stream.position.listen((position) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        state = state.copyWith(position: position);
+      });
+    }));
 
-    // Listen to duration updates
-    _player.durationStream.listen((duration) {
-      state = state.copyWith(duration: duration);
-    });
+    _subscriptions.add(_player.stream.duration.listen((duration) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        state = state.copyWith(duration: duration);
+      });
+    }));
+
+    _subscriptions.add(_player.stream.buffering.listen((buffering) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        state = state.copyWith(isBuffering: buffering);
+      });
+    }));
 
     // Load recordings on init
     loadRecordings();
@@ -93,10 +103,13 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
     state = state.copyWith(isLoading: true);
 
     try {
-      final files = await RecordingService.instance.getRecordings();
-      final items = files
-          .map((f) => RecordingItem.fromFile(f))
-          .whereType<RecordingItem>()
+      final recordingsData = await RecordingService.instance.getRecordingsWithSessions();
+      final items = recordingsData
+          .map((data) => RecordingItem.fromSessionData(
+                file: data['file'] as File,
+                callId: data['callId'] as int,
+                session: data['session'] as RecordingSession?,
+              ))
           .toList();
 
       state = state.copyWith(
@@ -128,8 +141,8 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
       // Stop current playback
       await _player.stop();
 
-      // Set new source
-      await _player.setFilePath(recording.filePath);
+      // Set new source - use file:// URI for local files
+      await _player.open(Media('file://${recording.filePath.replaceAll('\\', '/')}'));
 
       // Update state
       state = state.copyWith(
@@ -137,11 +150,15 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
         isPlaying: false,
         position: Duration.zero,
       );
-
-      // Start playback
-      await _player.play();
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('[RecordingsNotifier] Error playing recording: $e');
+      debugPrint('Stack trace: $stack');
+      // Clear current recording on error
+      state = state.copyWith(
+        clearCurrentRecording: true,
+        duration: null,
+        isBuffering: false,
+      );
       rethrow;
     }
   }
@@ -162,6 +179,9 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
     state = state.copyWith(
       isPlaying: false,
       position: Duration.zero,
+      clearCurrentRecording: true,
+      duration: null,
+      isBuffering: false,
     );
   }
 
@@ -179,12 +199,12 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
       }
 
       final deleted = await RecordingService.instance.deleteRecording(recording.filePath);
-      
+
       if (deleted) {
         // Refresh the list
         await loadRecordings();
       }
-      
+
       return deleted;
     } catch (e) {
       debugPrint('[RecordingsNotifier] Error deleting recording: $e');
@@ -205,6 +225,9 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
   @override
   void dispose() {
     RecordingService.instance.removeListener(_onRecordingChanged);
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
     _player.dispose();
     super.dispose();
   }
