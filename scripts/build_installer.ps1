@@ -48,16 +48,21 @@ Write-Host ""
 $AppName = "PacketDial"
 $AppPublisher = "PacketDial"
 $AppExe = "PacketDial.exe"
-$PubspecPath = Join-Path (Get-Location) "app_flutter\pubspec.yaml"
+
+# Resolve absolute paths based on script location
+$ScriptDir = $PSScriptRoot
+$ProjectRoot = (Get-Item (Join-Path $ScriptDir "..")).FullName
+
+$PubspecPath = Join-Path $ProjectRoot "app_flutter\pubspec.yaml"
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = Get-PubspecVersion -PubspecPath $PubspecPath
 }
 
-$BuildDir = "app_flutter\build\windows\x64\runner\Release"
-$InstallerDir = "installer"
+$BuildDir = Join-Path $ProjectRoot "app_flutter\build\windows\x64\runner\Release"
+$InstallerDir = Join-Path $ProjectRoot "installer"
 $StagingDir = Join-Path $InstallerDir "staging"
 $InnoScript = Join-Path $InstallerDir "setup.iss"
-$ZipPath = Join-Path $OutputDir "PacketDial-$Version.zip"
+$ZipPath = Join-Path $ProjectRoot (Join-Path $OutputDir "PacketDial-$Version.zip")
 
 if (!(Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir | Out-Null
@@ -72,7 +77,7 @@ if (!(Test-Path $InnoScript)) {
 }
 
 Write-Host "[1/5] Building Flutter Windows app..." -ForegroundColor Yellow
-Push-Location "app_flutter"
+Push-Location (Join-Path $ProjectRoot "app_flutter")
 try {
     flutter build windows --release
     if ($LASTEXITCODE -ne 0) {
@@ -89,7 +94,7 @@ if (Test-Path $StagingDir) {
 New-Item -ItemType Directory -Path $StagingDir | Out-Null
 Copy-Item -Path "$BuildDir\*" -Destination $StagingDir -Recurse -Force
 
-$AppSoSrc = "app_flutter\build\windows\app.so"
+$AppSoSrc = Join-Path $ProjectRoot "app_flutter\build\windows\app.so"
 $AppSoDestDir = Join-Path $StagingDir "data"
 $AppSoDest = Join-Path $AppSoDestDir "app.so"
 if (Test-Path $AppSoSrc) {
@@ -102,7 +107,7 @@ if (Test-Path $AppSoSrc) {
     throw "app.so not found at $AppSoSrc"
 }
 
-$IconSource = "installer\app_icon.ico"
+$IconSource = Join-Path $InstallerDir "app_icon.ico"
 if (Test-Path $IconSource) {
     Write-Host "  Icon ready: $IconSource" -ForegroundColor Gray
 } else {
