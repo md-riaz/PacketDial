@@ -64,7 +64,8 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
     // Listen to RecordingService changes
     RecordingService.instance.addListener(_onRecordingChanged);
 
-    // Set up player event listeners - schedule on platform thread
+    // Set up player event listeners
+    // Note: position updates are direct (not scheduled) for smooth progress bar
     _subscriptions.add(_player.stream.playing.listen((playing) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
         state = state.copyWith(isPlaying: playing);
@@ -72,9 +73,8 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
     }));
 
     _subscriptions.add(_player.stream.position.listen((position) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        state = state.copyWith(position: position);
-      });
+      // Direct update for smooth progress bar animation
+      state = state.copyWith(position: position);
     }));
 
     _subscriptions.add(_player.stream.duration.listen((duration) {

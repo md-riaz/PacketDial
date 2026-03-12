@@ -99,16 +99,10 @@ class AudioPlayerControls extends ConsumerWidget {
             ),
           ),
 
-          // Progress slider
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                _buildSeekBar(ref),
-                const SizedBox(height: 8),
-                _buildTimeLabels(state),
-              ],
-            ),
+          // Progress slider with separate consumer for smooth updates
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: _SeekBarSection(),
           ),
 
           const SizedBox(height: 8),
@@ -117,62 +111,6 @@ class AudioPlayerControls extends ConsumerWidget {
           _buildPlaybackControls(ref),
 
           const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSeekBar(WidgetRef ref) {
-    final state = ref.watch(recordingsProvider);
-    final duration = state.duration ?? Duration.zero;
-
-    return SliderTheme(
-      data: SliderThemeData(
-        trackHeight: 4,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-        activeTrackColor: AppTheme.primary,
-        inactiveTrackColor: AppTheme.surfaceVariant,
-        thumbColor: AppTheme.primary,
-        overlayColor: AppTheme.primary.withValues(alpha: 0.2),
-      ),
-      child: Slider(
-        value: duration.inMilliseconds > 0
-            ? state.position.inMilliseconds.clamp(0, duration.inMilliseconds).toDouble()
-            : 0,
-        min: 0,
-        max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1,
-        onChanged: (value) {
-          ref
-              .read(recordingsProvider.notifier)
-              .seek(Duration(milliseconds: value.toInt()));
-        },
-      ),
-    );
-  }
-
-  Widget _buildTimeLabels(RecordingsState state) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            _formatDuration(state.position),
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Text(
-            _formatDuration(state.duration ?? Duration.zero),
-            style: const TextStyle(
-              color: AppTheme.textTertiary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
         ],
       ),
     );
@@ -256,6 +194,84 @@ class AudioPlayerControls extends ConsumerWidget {
               }
             },
             tooltip: 'Skip to end',
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds.remainder(60);
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Separate widget for seek bar to optimize rebuilds.
+class _SeekBarSection extends ConsumerWidget {
+  const _SeekBarSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(recordingsProvider);
+    final duration = state.duration ?? Duration.zero;
+
+    return Column(
+      children: [
+        _buildSeekBar(ref, state, duration),
+        const SizedBox(height: 8),
+        _buildTimeLabels(state),
+      ],
+    );
+  }
+
+  Widget _buildSeekBar(WidgetRef ref, RecordingsState state, Duration duration) {
+    return SliderTheme(
+      data: SliderThemeData(
+        trackHeight: 4,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        activeTrackColor: AppTheme.primary,
+        inactiveTrackColor: AppTheme.surfaceVariant,
+        thumbColor: AppTheme.primary,
+        overlayColor: AppTheme.primary.withValues(alpha: 0.2),
+      ),
+      child: Slider(
+        value: duration.inMilliseconds > 0
+            ? state.position.inMilliseconds.clamp(0, duration.inMilliseconds).toDouble()
+            : 0,
+        min: 0,
+        max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1,
+        onChanged: (value) {
+          ref
+              .read(recordingsProvider.notifier)
+              .seek(Duration(milliseconds: value.toInt()));
+        },
+      ),
+    );
+  }
+
+  Widget _buildTimeLabels(RecordingsState state) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            _formatDuration(state.position),
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            _formatDuration(state.duration ?? Duration.zero),
+            style: const TextStyle(
+              color: AppTheme.textTertiary,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
