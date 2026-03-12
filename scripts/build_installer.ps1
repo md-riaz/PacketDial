@@ -59,7 +59,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 }
 
 $BuildDir = Join-Path $ProjectRoot "app_flutter\build\windows\x64\runner\Release"
-$InstallerDir = Join-Path $ProjectRoot "installer"
+$InstallerDir = Join-Path $ProjectRoot "assets\installer"
 $StagingDir = Join-Path $InstallerDir "staging"
 $InnoScript = Join-Path $InstallerDir "setup.iss"
 $ZipPath = Join-Path $ProjectRoot (Join-Path $OutputDir "PacketDial-$Version.zip")
@@ -70,10 +70,6 @@ if (!(Test-Path $OutputDir)) {
 
 if (!(Test-Path $InstallerDir)) {
     throw "Installer directory not found: $InstallerDir"
-}
-
-if (!(Test-Path $InnoScript)) {
-    throw "Inno Setup template not found: $InnoScript"
 }
 
 Write-Host "[1/5] Building Flutter Windows app..." -ForegroundColor Yellow
@@ -114,17 +110,7 @@ if (Test-Path $IconSource) {
     Write-Host "  No custom installer icon found, using default" -ForegroundColor Gray
 }
 
-Write-Host "[3/5] Updating Inno Setup script..." -ForegroundColor Yellow
-$InnoContent = Get-Content -Path $InnoScript -Raw
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppName ".*"$' -Replacement ('#define MyAppName "{0}"' -f $AppName)
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppVersion ".*"$' -Replacement ('#define MyAppVersion "{0}"' -f $Version)
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppPublisher ".*"$' -Replacement ('#define MyAppPublisher "{0}"' -f $AppPublisher)
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppExeName ".*"$' -Replacement ('#define MyAppExeName "{0}"' -f $AppExe)
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputDir=.*$' -Replacement ('OutputDir=..\{0}' -f $OutputDir)
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputBaseFilename=.*$' -Replacement ('OutputBaseFilename=PacketDial-Setup-{0}' -f $Version)
-Set-Content -Path $InnoScript -Value $InnoContent
-
-Write-Host "[4/5] Checking for Inno Setup..." -ForegroundColor Yellow
+Write-Host "[3/5] Checking for Inno Setup..." -ForegroundColor Yellow
 $InnoPaths = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     "C:\Program Files\Inno Setup 6\ISCC.exe",
@@ -139,7 +125,17 @@ foreach ($path in $InnoPaths) {
     }
 }
 
-if ($InnoCompiler) {
+if ($InnoCompiler -and (Test-Path $InnoScript)) {
+    Write-Host "[4/5] Updating Inno Setup script..." -ForegroundColor Yellow
+    $InnoContent = Get-Content -Path $InnoScript -Raw
+    $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppName ".*"$' -Replacement ('#define MyAppName "{0}"' -f $AppName)
+    $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppVersion ".*"$' -Replacement ('#define MyAppVersion "{0}"' -f $Version)
+    $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppPublisher ".*"$' -Replacement ('#define MyAppPublisher "{0}"' -f $AppPublisher)
+    $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppExeName ".*"$' -Replacement ('#define MyAppExeName "{0}"' -f $AppExe)
+    $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputDir=.*$' -Replacement ('OutputDir=..\{0}' -f $OutputDir)
+    $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputBaseFilename=.*$' -Replacement ('OutputBaseFilename=PacketDial-Setup-{0}' -f $Version)
+    Set-Content -Path $InnoScript -Value $InnoContent
+
     Write-Host "[5/5] Building installer with Inno Setup..." -ForegroundColor Yellow
     Write-Host "Using: $InnoCompiler" -ForegroundColor Gray
     & $InnoCompiler $InnoScript
