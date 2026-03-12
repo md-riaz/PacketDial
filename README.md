@@ -43,7 +43,7 @@ PacketDial is a Windows SIP softphone built with:
 | `core_rust/` | Rust engine DLL and PJSIP shim |
 | `engine_pjsip/` | vendored PJSIP source |
 | `scripts/` | setup, build, packaging, and run scripts |
-| `installer/` | Inno Setup resources |
+| `assets/installer/` | Inno Setup resources |
 | `docs/` | project documentation |
 | `tools/` | auxiliary tools such as the CLI |
 
