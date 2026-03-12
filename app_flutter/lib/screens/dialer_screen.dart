@@ -16,6 +16,7 @@ import '../models/media_stats.dart';
 import '../providers/engine_provider.dart';
 import '../providers/dialer_ui_provider.dart';
 import '../widgets/gradient_action_button.dart';
+import 'recordings_screen.dart';
 
 final selectedAccountProvider = Provider<AccountSchema?>((ref) {
   return ref.watch(accountServiceProvider).getSelectedAccount();
@@ -54,6 +55,12 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   void _handleRecordingChanged() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _navigateToRecordings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RecordingsScreen()),
+    );
   }
 
   /// Check if there's a consultation call active.
@@ -1104,6 +1111,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     ),
                   ),
           ),
+          // Recordings button
+          IconButton(
+            icon: const Icon(Icons.library_music, size: 20),
+            color: AppTheme.textSecondary,
+            onPressed: _navigateToRecordings,
+            tooltip: 'Recordings',
+            padding: const EdgeInsets.all(4),
+          ),
+          const SizedBox(width: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
