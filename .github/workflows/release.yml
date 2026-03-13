@@ -60,6 +60,16 @@ jobs:
       - name: Build Windows app
         uses: ./.github/actions/build-windows
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          # Install Inno Setup using Chocolatey (required for installer)
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup installation failed"
+            exit 1
+          }
+
       - name: Create portable package
         shell: pwsh
         run: |
@@ -112,7 +122,7 @@ jobs:
 
             #### Option 1: Windows Installer (Recommended)
             Download and run `PacketDial-Setup-${{ inputs.release_version }}.exe`
-            
+
             - Professional setup wizard
             - Installs to Program Files
             - Start Menu & Desktop shortcuts
@@ -120,7 +130,7 @@ jobs:
 
             #### Option 2: Portable Version
             Download `PacketDial-${{ inputs.release_version }}-Portable.zip`
-            
+
             - No installation required
             - Extract and run
             - Perfect for USB drives

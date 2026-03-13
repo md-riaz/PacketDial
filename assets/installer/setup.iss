@@ -28,9 +28,8 @@ UninstallDisplayName={#MyAppName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=admin
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+PrivilegesRequiredOverridesAllowed=dialog
+ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.19041
 DisableDirPage=no
 DisableReadyPage=no
@@ -62,19 +61,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [Code]
 function InitializeSetup(): Boolean;
-var
-  ResultCode: Integer;
 begin
   Result := True;
 end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // Any post-install tasks can go here
-  end;
-end;
-
-
 

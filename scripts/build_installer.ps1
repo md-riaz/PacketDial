@@ -149,15 +149,6 @@ if ($InnoCompiler) {
     Write-Host ""
     Write-Host "Installer created successfully" -ForegroundColor Green
     Write-Host "Output: $OutputDir\PacketDial-Setup-$Version.exe" -ForegroundColor Cyan
-} else {
-    Write-Host ""
-    Write-Host "WARNING: Inno Setup not found" -ForegroundColor Yellow
-    Write-Host "Creating ZIP archive fallback..." -ForegroundColor Yellow
-    if (Test-Path $ZipPath) {
-        Remove-Item $ZipPath -Force
-    }
-    Compress-Archive -Path "$StagingDir\*" -DestinationPath $ZipPath -Force
-    Write-Host "Fallback ZIP created: $ZipPath" -ForegroundColor Cyan
 }
 
 if (!$NoClean -and (Test-Path $StagingDir)) {
