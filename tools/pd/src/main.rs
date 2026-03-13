@@ -93,7 +93,7 @@ fn send_command(stream: &mut LocalSocketStream, cmd_type: &str, payload: serde_j
     // Read one-line JSON response
     let mut reader = BufReader::new(stream);
     let mut response = String::new();
-    if let Ok(_) = reader.read_line(&mut response) {
+    if reader.read_line(&mut response).is_ok() {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&response) {
             let rc = v["payload"]["rc"].as_i64().unwrap_or(-1);
             if rc == 0 {
@@ -110,17 +110,15 @@ fn send_command(stream: &mut LocalSocketStream, cmd_type: &str, payload: serde_j
 fn listen_events(stream: LocalSocketStream) {
     println!("Listening for PacketDial events (Ctrl+C to stop)...");
     let reader = BufReader::new(stream);
-    for line in reader.lines() {
-        if let Ok(l) = line {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&l) {
-                // Ignore command responses in event stream
-                if v["type"] == "CommandResponse" {
-                    continue;
-                }
-
-                let timestamp = chrono::Local::now().format("%H:%M:%S");
-                println!("[{}] {}", timestamp, l);
+    for l in reader.lines().map_while(Result::ok) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&l) {
+            // Ignore command responses in event stream
+            if v["type"] == "CommandResponse" {
+                continue;
             }
+
+            let timestamp = chrono::Local::now().format("%H:%M:%S");
+            println!("[{}] {}", timestamp, l);
         }
     }
 }
