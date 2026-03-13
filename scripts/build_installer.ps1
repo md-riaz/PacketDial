@@ -146,9 +146,21 @@ if ($InnoCompiler) {
     if ($LASTEXITCODE -ne 0) {
         throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
     }
+
+    # Inno Setup outputs to assets/dist/, copy to project dist/
+    $SourcePath = Join-Path $InstallerDir "dist\PacketDial-Setup-$Version.exe"
+    $DestPath = Join-Path $OutputDir "PacketDial-Setup-$Version.exe"
+    if (Test-Path $SourcePath) {
+        if (!(Test-Path $OutputDir)) {
+            New-Item -ItemType Directory -Path $OutputDir | Out-Null
+        }
+        Move-Item -Path $SourcePath -Destination $DestPath -Force
+        Remove-Item -Path (Join-Path $InstallerDir "dist") -Recurse -Force
+    }
+
     Write-Host ""
     Write-Host "Installer created successfully" -ForegroundColor Green
-    Write-Host "Output: $OutputDir\PacketDial-Setup-$Version.exe" -ForegroundColor Cyan
+    Write-Host "Output: $DestPath" -ForegroundColor Cyan
 }
 
 if (!$NoClean -and (Test-Path $StagingDir)) {
