@@ -535,7 +535,7 @@ extern "C" fn pjsip_on_incoming_call(pj_acc_id: i32, pj_call_id: i32, from_uri_p
 extern "C" fn pjsip_on_call_state(pj_call_id: i32, inv_state: i32, _status_code: i32) {
     // pjsip_inv_state: 0=NULL 1=CALLING 2=INCOMING 3=EARLY 4=CONNECTING 5=CONFIRMED 6=DISCONNECTED
     let new_state = match inv_state {
-        0 | 1 | 2 | 3 => CallState::Ringing,
+        0..=3 => CallState::Ringing,
         4 | 5 => CallState::InCall,
         6 => CallState::Ended,
         _ => return,
@@ -1498,7 +1498,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
             &format!("Account '{id}' registering via PJSIP (pj_acc_id={pj_acc_id})"),
         );
         // on_reg_state callback will push the final Registered / Failed event
-        return EngineErrorCode::Ok;
+        EngineErrorCode::Ok
     }
 }
 
@@ -1689,7 +1689,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             let error_code = match status {
                 // Device ID out of range error (Windows MMSYSERR or PJSIP audio device error)
                 // This is the specific error from the issue: 450002
-                450002 | 450003 | 450004 | 450005 | 450006 | 450007 => {
+                450002..=450007 => {
                     log_engine(
                         LogLevel::Error,
                         &format!("CallStart: audio device not available for uri={uri}. Please check audio device settings (status={}).", status),
@@ -1773,7 +1773,7 @@ fn cmd_call_start(p: &serde_json::Value) -> EngineErrorCode {
             LogLevel::Info,
             &format!("Outgoing call id={call_id} pj_call={pj_call_id} uri={uri}"),
         );
-        return EngineErrorCode::Ok;
+        EngineErrorCode::Ok
     }
 }
 
@@ -3239,6 +3239,7 @@ fn version_cstr() -> &'static CString {
 /// Initialize the engine.
 /// Initialise pjsua with transports and register PJSIP callbacks.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn engine_init(user_agent: *const c_char) -> i32 {
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         if INITIALIZED.swap(true, Ordering::SeqCst) {
@@ -3964,10 +3965,7 @@ pub extern "C" fn engine_is_recording() -> i32 {
             None => return 0,
         };
 
-        unsafe {
-            let rc = pd_call_is_recording(pjsip_call_id);
-            rc
-        }
+        unsafe { pd_call_is_recording(pjsip_call_id) }
     }));
     result.unwrap_or(0)
 }
@@ -4074,8 +4072,8 @@ pub extern "C" fn engine_start_attended_xfer(call_id: i32, dest_uri: *const c_ch
         };
 
         push_call_state(&call);
-        CALLS.lock().unwrap().insert(consultation_call_id as u32, call);
-        PJSIP_CALL_MAP.lock().unwrap().insert(new_pj_id, consultation_call_id as u32);
+        CALLS.lock().unwrap().insert(consultation_call_id, call);
+        PJSIP_CALL_MAP.lock().unwrap().insert(new_pj_id, consultation_call_id);
 
         log_engine(
             LogLevel::Info,

@@ -48,13 +48,13 @@ fn main() {
     // Validate that the resolved lib dir actually contains .lib files.
     // If the stamp exists but libs are missing (e.g. partial build), emit a
     // clear warning rather than silently producing a link failure downstream.
-    let lib_dir = lib_dir.and_then(|p| {
+    let lib_dir = lib_dir.map(|p| {
         let has_libs = std::fs::read_dir(&p).ok().is_some_and(|d| {
             d.flatten()
                 .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("lib"))
         });
         if has_libs {
-            Some(p)
+            p
         } else {
             println!(
                 "cargo:warning=PJSIP lib dir exists ({}) but contains no .lib files",

@@ -59,7 +59,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 }
 
 $BuildDir = Join-Path $ProjectRoot "app_flutter\build\windows\x64\runner\Release"
-$InstallerDir = Join-Path $ProjectRoot "installer"
+$InstallerDir = Join-Path $ProjectRoot "assets\installer"
 $StagingDir = Join-Path $InstallerDir "staging"
 $InnoScript = Join-Path $InstallerDir "setup.iss"
 $ZipPath = Join-Path $ProjectRoot (Join-Path $OutputDir "PacketDial-$Version.zip")
@@ -107,7 +107,7 @@ if (Test-Path $AppSoSrc) {
     throw "app.so not found at $AppSoSrc"
 }
 
-$IconSource = Join-Path $InstallerDir "app_icon.ico"
+$IconSource = Join-Path $InstallerDir "icon.ico"
 if (Test-Path $IconSource) {
     Write-Host "  Icon ready: $IconSource" -ForegroundColor Gray
 } else {
