@@ -190,6 +190,14 @@ if (-not $env:VCPKG_ROOT) {
     $env:VCPKG_ROOT = Join-Path $RepoRoot 'vcpkg'
 }
 
+# Set up vcpkg paths for OpenSSL and other dependencies
+$VcpkgLibDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib"
+$VcpkgIncDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
+
+# Prepend vcpkg paths to environment variables so they're found during build
+$env:LIB = "$VcpkgLibDir;$env:LIB"
+$env:INCLUDE = "$VcpkgIncDir;$env:INCLUDE"
+
 $MsBuildArgs = @(
     $SlnFile.FullName,
     '/p:Configuration=Release',
@@ -199,8 +207,9 @@ $MsBuildArgs = @(
     '/nologo',
     '/verbosity:minimal',
     '/clp:Summary',
-    "/p:AdditionalLibraryDirectories=$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib",
-    "/p:AdditionalIncludeDirectories=$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
+    "/p:AdditionalLibraryDirectories=$VcpkgLibDir",
+    "/p:AdditionalIncludeDirectories=$VcpkgIncDir",
+    "/p:LibraryPath=$VcpkgLibDir"
 )
 
 Push-Location $PjProjectDir

@@ -43,6 +43,10 @@
 /* Enable TLS transport for SIP over TLS (SIPS) */
 #define PJSIP_HAS_TLS_TRANSPORT         1
 
+/* Enable SSL socket support using OpenSSL */
+#define PJ_HAS_SSL_SOCK                 1
+#define PJ_SSL_SOCK_IMP                 "ssl_sock_ossl.c"
+
 /* -----------------------------------------------------------------------
  * Logging (pjlib level)
  * The Rust wrapper adds its own log layer on top; keep pjlib logging minimal.
