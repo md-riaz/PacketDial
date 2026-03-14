@@ -19,8 +19,8 @@ PJLIB=../lib/pjlib-i386-win32-$(VC)-$(MODE).lib
 
 DEPEND=$(PJLIB)
 LIBS=netapi32.lib mswsock.lib ws2_32.lib ole32.lib advapi32.lib \
-     /libpath:$(VCPKG_ROOT)\installed\x64-windows\lib \
-     /libpath:..\..\..\vcpkg\installed\x64-windows\lib \
+     /libpath:$(VCPKG_ROOT)\installed\x64-windows-static-md\lib \
+     /libpath:..\..\..\vcpkg\installed\x64-windows-static-md\lib \
      libssl.lib libcrypto.lib
 CL=cl.exe
 

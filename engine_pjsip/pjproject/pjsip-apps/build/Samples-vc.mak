@@ -66,8 +66,8 @@ CFLAGS 	= $(TARGET_FLAGS) \
 	  -I..\..\pjmedia\include \
 	  -I..\..\pjnath/include
 LDFLAGS = $(BUILD_FLAGS) $(LIBS) \
-	  /libpath:$(VCPKG_ROOT)\installed\x64-windows\lib \
-	  /libpath:..\..\..\vcpkg\installed\x64-windows\lib \
+	  /libpath:$(VCPKG_ROOT)\installed\x64-windows-static-md\lib \
+	  /libpath:..\..\..\vcpkg\installed\x64-windows-static-md\lib \
 	  Iphlpapi.lib ole32.lib user32.lib dsound.lib dxguid.lib netapi32.lib \
 	  mswsock.lib ws2_32.lib gdi32.lib advapi32.lib oleaut32.lib \
 	  libssl.lib libcrypto.lib
