@@ -120,7 +120,7 @@ $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyA
 $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppVersion ".*"$' -Replacement ('#define MyAppVersion "{0}"' -f $Version)
 $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppPublisher ".*"$' -Replacement ('#define MyAppPublisher "{0}"' -f $AppPublisher)
 $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^#define MyAppExeName ".*"$' -Replacement ('#define MyAppExeName "{0}"' -f $AppExe)
-$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputDir=.*$' -Replacement ('OutputDir=..\{0}' -f $OutputDir)
+$InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputDir=.*$' -Replacement ('OutputDir=..\..\{0}' -f $OutputDir)
 $InnoContent = Update-InnoValue -Content $InnoContent -Pattern '(?m)^OutputBaseFilename=.*$' -Replacement ('OutputBaseFilename=PacketDial-Setup-{0}' -f $Version)
 Set-Content -Path $InnoScript -Value $InnoContent
 
@@ -147,15 +147,12 @@ if ($InnoCompiler) {
         throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
     }
 
-    # Inno Setup outputs to assets/dist/, copy to project dist/
-    $SourcePath = Join-Path $InstallerDir "dist\PacketDial-Setup-$Version.exe"
-    $DestPath = Join-Path $OutputDir "PacketDial-Setup-$Version.exe"
-    if (Test-Path $SourcePath) {
-        if (!(Test-Path $OutputDir)) {
-            New-Item -ItemType Directory -Path $OutputDir | Out-Null
-        }
-        Move-Item -Path $SourcePath -Destination $DestPath -Force
-        Remove-Item -Path (Join-Path $InstallerDir "dist") -Recurse -Force
+    # Inno Setup outputs directly to project dist/
+    $InstallerPath = Join-Path $OutputDir "PacketDial-Setup-$Version.exe"
+    if (Test-Path $InstallerPath) {
+        Write-Host "Installer created at: $InstallerPath" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Installer not found at expected location" -ForegroundColor Yellow
     }
 
     Write-Host ""

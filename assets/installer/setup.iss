@@ -20,7 +20,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=
-OutputDir=..\dist
+OutputDir=..\..\dist
 OutputBaseFilename=PacketDial-Setup-0.1.0
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -64,4 +64,7 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
+
+
+
 
