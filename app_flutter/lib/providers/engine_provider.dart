@@ -45,6 +45,12 @@ final activeAccountProvider = Provider<Account?>((ref) {
       orElse: () => accounts.first);
 });
 
+/// Provider for a specific engine account by UUID, listening to engine events.
+final engineAccountProvider = Provider.family<Account?, String>((ref, uuid) {
+  ref.watch(engineEventsProvider);
+  return EngineChannel.instance.accounts[uuid];
+});
+
 /// Model to store aggregate registration statistics across all accounts.
 class RegistrationSummary {
   final int totalRegistered;

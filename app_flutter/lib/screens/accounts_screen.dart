@@ -6,6 +6,7 @@ import '../core/engine_channel.dart';
 import '../models/account.dart';
 import '../models/account_schema.dart';
 import '../widgets/empty_state.dart';
+import '../providers/engine_provider.dart';
 import 'account_setup_page.dart';
 
 final accountRegisteringProvider =
@@ -313,11 +314,29 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Listen for engine-level registration changes
+    final engineAccount = ref.watch(engineAccountProvider(widget.account.uuid));
+    final registrationState =
+        engineAccount?.registrationState ?? RegistrationState.unregistered;
+
+    // 2. Listen for local persistence updates
     final isSelected = widget.account.isSelected;
     final isEnabled = widget.account.isEnabled;
-    final registrationState = EngineChannel
-            .instance.accounts[widget.account.uuid]?.registrationState ??
-        RegistrationState.unregistered;
+
+    // 3. Determine dynamic colors and status text
+    final statusColor = switch (registrationState) {
+      RegistrationState.registered => AppTheme.callGreen,
+      RegistrationState.registering => AppTheme.warningAmber,
+      RegistrationState.failed => AppTheme.errorRed,
+      _ => AppTheme.textTertiary,
+    };
+
+    String statusLabel = registrationState.label;
+    if (registrationState == RegistrationState.failed &&
+        engineAccount?.failureReason != null &&
+        engineAccount!.failureReason.isNotEmpty) {
+      statusLabel = 'Failed: ${engineAccount.failureReason}';
+    }
 
     return GestureDetector(
       onTap: () => widget.parent._showAccountSetup(widget.account),
@@ -371,6 +390,27 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                         ),
                       ),
                     ),
+                    if (isEnabled)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: AppTheme.surfaceCard, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: statusColor.withValues(alpha: 0.4),
+                                blurRadius: 4,
+                              )
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(width: 12),
@@ -389,7 +429,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       Text(
                         '${widget.account.username}@${widget.account.server}',
                         style: const TextStyle(
@@ -398,6 +438,18 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (isEnabled) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -412,7 +464,8 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                             registrationState == RegistrationState.registering)
                         ? null
                         : _toggleRegistration,
-                    activeThumbColor: AppTheme.callGreen,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: statusColor,
                   ),
                 ),
               ],
