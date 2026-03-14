@@ -15,6 +15,9 @@
  * Platform: Windows x64, MSVC toolchain
  * ----------------------------------------------------------------------- */
 
+/* IOQueue settings - must be defined before pj/ioqueue.h is included */
+#define PJ_IOQUEUE_MAX_HANDLES          64
+
 /* Enable IPv6 support */
 #define PJ_HAS_IPV6                     1
 
