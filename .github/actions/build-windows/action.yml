@@ -43,12 +43,15 @@ runs:
         Write-Host "Bootstrapping vcpkg..."
         Set-Location vcpkg
         .\bootstrap-vcpkg.bat -disableMetrics
+        .\bootstrap-vcpkg.bat -disableMetrics
         # Restore custom triplets
         Write-Host "Restoring custom triplets..."
-        X:
-        Copy-Item -Path "X:\vcpkg_triplets\*.cmake" -Destination ".\triplets\" -Force
+        Copy-Item -Path "$env:GITHUB_WORKSPACE\vcpkg_triplets\*.cmake" -Destination "$env:GITHUB_WORKSPACE\vcpkg\triplets\" -Force
+        # Integrate vcpkg with MSBuild
+        Write-Host "Integrating vcpkg with MSBuild..."
+        .\vcpkg.exe integrate install
         # Verify triplet exists
-        if (-not (Test-Path ".\triplets\x64-windows-static-md.cmake")) {
+        if (-not (Test-Path "$env:GITHUB_WORKSPACE\vcpkg\triplets\x64-windows-static-md.cmake")) {
           Write-Error "x64-windows-static-md triplet not found"
           exit 1
         }
@@ -68,17 +71,16 @@ runs:
       shell: pwsh
       env:
         VCPKG_ROOT: ${{ github.workspace }}\vcpkg
-        VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
       run: |
         X:
         cd vcpkg
-        Write-Host "Installing OpenSSL and Opus..."
-        .\vcpkg.exe install openssl opus --recurse
+        Write-Host "Installing OpenSSL and Opus for x64-windows-static-md..."
+        .\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md --recurse
         Write-Host "Verifying installation..."
-        if (Test-Path ".\installed\x64-windows-static-md\include\openssl\ssl.h") {
+        if (Test-Path "$env:VCPKG_ROOT\installed\x64-windows-static-md\include\openssl\ssl.h") {
           Write-Host "OpenSSL installed successfully"
         } else {
-          Write-Error "OpenSSL installation verification failed"
+          Write-Error "OpenSSL installation verification failed at $env:VCPKG_ROOT\installed\x64-windows-static-md\include\openssl\ssl.h"
           exit 1
         }
 

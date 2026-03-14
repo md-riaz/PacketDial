@@ -200,6 +200,13 @@ if (Test-Path $LocalTripletsDir) {
     }
 }
 
+# Integrate vcpkg with MSBuild if vcpkg exists
+$VcpkgExe = Join-Path $env:VCPKG_ROOT 'vcpkg.exe'
+if (Test-Path $VcpkgExe) {
+    Write-Info "Integrating vcpkg with MSBuild..."
+    & $VcpkgExe integrate install | Out-Null
+}
+
 # Set up vcpkg paths for OpenSSL and other dependencies
 $VcpkgLibDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib"
 $VcpkgIncDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
@@ -236,7 +243,8 @@ $MsBuildArgs = @(
     '/clp:Summary',
     "/p:AdditionalLibraryDirectories=$VcpkgLibDir",
     "/p:AdditionalIncludeDirectories=$VcpkgIncDir",
-    "/p:LibraryPath=$VcpkgLibDir"
+    "/p:LibraryPath=$VcpkgLibDir",
+    "/p:IncludePath=$VcpkgIncDir"
 )
 
 Push-Location $PjProjectDir
