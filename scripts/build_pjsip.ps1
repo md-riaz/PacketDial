@@ -199,8 +199,8 @@ $MsBuildArgs = @(
     '/nologo',
     '/verbosity:minimal',
     '/clp:Summary',
-    "/p:AdditionalLibraryDirectories=$(VCPKG_ROOT)\installed\x64-windows-static-md\lib",
-    "/p:AdditionalIncludeDirectories=$(VCPKG_ROOT)\installed\x64-windows-static-md\include"
+    "/p:AdditionalLibraryDirectories=$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib",
+    "/p:AdditionalIncludeDirectories=$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
 )
 
 Push-Location $PjProjectDir
