@@ -17,6 +17,23 @@ runs:
         }
         Write-Host "Mapped workspace to X:"
 
+    - name: Cache vcpkg installed packages
+      uses: actions/cache@v4
+      with:
+        path: vcpkg/installed
+        key: vcpkg-x64-windows-${{ hashFiles('.github/actions/build-windows/action.yml') }}
+        restore-keys: |
+          vcpkg-x64-windows-
+
+    - name: Install vcpkg dependencies (openssl, opus)
+      shell: pwsh
+      run: |
+        X:
+        cd vcpkg
+        .\vcpkg.exe install openssl:x64-windows opus:x64-windows
+        # Set VCPKG_ROOT for subsequent steps
+        echo "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -38,7 +55,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: engine_pjsip/build/out
-        key: pjsip-windows-v2142-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1') }}
+        key: pjsip-windows-v2143-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1', 'engine_pjsip/pjproject/pjsip-apps/build/Samples-vc.mak') }}
 
     - name: Build pjproject (Release x64)
       if: steps.cache-pjsip.outputs.cache-hit != 'true'

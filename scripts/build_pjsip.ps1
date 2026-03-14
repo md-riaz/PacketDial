@@ -147,8 +147,8 @@ if (Test-Path $ProjectConfigSite) {
 #define PJMEDIA_HAS_VIDEO               0
 #define PJSUA_HAS_VIDEO                 0
 
-/* TLS disabled for now */
-#define PJSIP_HAS_TLS_TRANSPORT         0
+/* Enable TLS transport for SIP over TLS (SIPS) */
+#define PJSIP_HAS_TLS_TRANSPORT         1
 
 /* Logging */
 #define PJ_LOG_MAX_LEVEL                5

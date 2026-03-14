@@ -18,7 +18,10 @@ CFLAGS=/nologo /W4 $(MODE_CFLAGS) /DPJ_WIN32=1 /DPJ_M_I386=1 /I../include
 PJLIB=../lib/pjlib-i386-win32-$(VC)-$(MODE).lib
 
 DEPEND=$(PJLIB)
-LIBS=netapi32.lib mswsock.lib ws2_32.lib ole32.lib advapi32.lib
+LIBS=netapi32.lib mswsock.lib ws2_32.lib ole32.lib advapi32.lib \
+     /libpath:$(VCPKG_ROOT)\installed\x64-windows\lib \
+     /libpath:..\..\..\vcpkg\installed\x64-windows\lib \
+     libssl.lib libcrypto.lib
 CL=cl.exe
 
 all: "$(OUTDIR)" $(SAMPLES)
