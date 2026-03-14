@@ -21,7 +21,32 @@ runs:
       shell: pwsh
       run: |
         echo "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        echo "VCPKG_DEFAULT_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Setup vcpkg (fresh clone)
+      shell: pwsh
+      run: |
+        X:
+        # Save existing installed packages if any
+        $hasInstalled = Test-Path ".\vcpkg\installed"
+        if ($hasInstalled) {
+          Move-Item -Path ".\vcpkg\installed" -Destination ".\vcpkg_installed_backup" -Force
+        }
+        # Remove old vcpkg and clone fresh
+        Remove-Item -Recurse -Force ".\vcpkg" -ErrorAction SilentlyContinue
+        git clone --depth 1 https://github.com/microsoft/vcpkg
+        # Restore installed packages
+        if ($hasInstalled) {
+          Move-Item -Path ".\vcpkg_installed_backup" -Destination ".\vcpkg\installed" -Force
+        }
+        Write-Host "vcpkg cloned successfully"
+        # Verify triplet exists
+        if (-not (Test-Path ".\vcpkg\triplets\x64-windows-static-md.cmake")) {
+          Write-Error "x64-windows-static-md triplet not found"
+          exit 1
+        }
+        Write-Host "vcpkg ready with x64-windows-static-md triplet"
+      env:
+        GIT_TERMINAL_PROMPT: 0
 
     - name: Cache vcpkg installed packages
       uses: actions/cache@v4
