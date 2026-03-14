@@ -96,6 +96,8 @@ runs:
     - name: Build pjproject (Release x64)
       if: steps.cache-pjsip.outputs.cache-hit != 'true'
       shell: pwsh
+      env:
+        VCPKG_ROOT: ${{ github.workspace }}\vcpkg
       run: |
         X:
         .\scripts\build_pjsip.ps1

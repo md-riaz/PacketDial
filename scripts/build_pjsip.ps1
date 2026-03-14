@@ -185,6 +185,11 @@ Write-OK "Solution: $($SlnFile.FullName)"
 Write-Step "Building pjproject Release x64 with $Jobs parallel job(s)"
 Write-Info "This may take 5-20 minutes on first run…"
 
+# Set VCPKG_ROOT if not already set
+if (-not $env:VCPKG_ROOT) {
+    $env:VCPKG_ROOT = Join-Path $RepoRoot 'vcpkg'
+}
+
 $MsBuildArgs = @(
     $SlnFile.FullName,
     '/p:Configuration=Release',
@@ -193,7 +198,9 @@ $MsBuildArgs = @(
     "/m:$Jobs",
     '/nologo',
     '/verbosity:minimal',
-    '/clp:Summary'
+    '/clp:Summary',
+    "/p:AdditionalLibraryDirectories=$(VCPKG_ROOT)\installed\x64-windows-static-md\lib",
+    "/p:AdditionalIncludeDirectories=$(VCPKG_ROOT)\installed\x64-windows-static-md\include"
 )
 
 Push-Location $PjProjectDir
