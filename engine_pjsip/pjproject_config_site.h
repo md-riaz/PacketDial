@@ -44,8 +44,9 @@
 #define PJSIP_HAS_TLS_TRANSPORT         1
 
 /* Enable SSL socket support using OpenSSL */
+#ifndef PJ_HAS_SSL_SOCK
 #define PJ_HAS_SSL_SOCK                 1
-#define PJ_SSL_SOCK_IMP                 "ssl_sock_ossl.c"
+#endif
 
 /* -----------------------------------------------------------------------
  * Logging (pjlib level)

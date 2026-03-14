@@ -91,7 +91,26 @@ runs:
       uses: actions/cache@v4
       with:
         path: engine_pjsip/build/out
-        key: pjsip-windows-v2143-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1', 'engine_pjsip/pjproject/pjsip-apps/build/Samples-vc.mak') }}
+        key: pjsip-windows-v2144-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1', 'engine_pjsip/pjproject/pjsip-apps/build/Samples-vc.mak') }}
+
+    - name: Clean stale PJSIP build artifacts
+      shell: pwsh
+      run: |
+        X:
+        # Remove stale build directories that might cause issues
+        $stalePaths = @(
+          "engine_pjsip\pjproject\pjlib\build\output",
+          "engine_pjsip\pjproject\pjsip\build\output",
+          "engine_pjsip\pjproject\pjmedia\build\output",
+          "engine_pjsip\pjproject\pjnath\build\output",
+          "engine_pjsip\pjproject\pjlib-util\build\output"
+        )
+        foreach ($path in $stalePaths) {
+          if (Test-Path $path) {
+            Remove-Item -Recurse -Force $path
+            Write-Host "Cleaned $path"
+          }
+        }
 
     - name: Build pjproject (Release x64)
       if: steps.cache-pjsip.outputs.cache-hit != 'true'
