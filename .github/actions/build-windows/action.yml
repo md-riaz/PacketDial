@@ -68,7 +68,15 @@ runs:
       run: |
         X:
         cd vcpkg
-        .\vcpkg.exe install openssl opus
+        Write-Host "Installing OpenSSL and Opus..."
+        .\vcpkg.exe install openssl opus --recurse
+        Write-Host "Verifying installation..."
+        if (Test-Path ".\installed\x64-windows-static-md\include\openssl\ssl.h") {
+          Write-Host "OpenSSL installed successfully"
+        } else {
+          Write-Error "OpenSSL installation verification failed"
+          exit 1
+        }
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable

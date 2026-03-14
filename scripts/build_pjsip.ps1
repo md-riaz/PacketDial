@@ -194,9 +194,26 @@ if (-not $env:VCPKG_ROOT) {
 $VcpkgLibDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib"
 $VcpkgIncDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
 
+# Verify OpenSSL is installed
+$OpenSslInc = Join-Path $VcpkgIncDir "openssl\ssl.h"
+if (-not (Test-Path $OpenSslInc)) {
+    Write-Fail "OpenSSL not found at $OpenSslInc"
+    Write-Info "Run vcpkg install openssl:x64-windows-static-md"
+    Write-Info "VCPKG_ROOT: $($env:VCPKG_ROOT)"
+    Write-Info "Contents of installed dir:"
+    if (Test-Path "$($env:VCPKG_ROOT)\installed") {
+        Get-ChildItem "$($env:VCPKG_ROOT)\installed" -Recurse -Filter "ssl.h" | ForEach-Object { Write-Host $_.FullName }
+    }
+    exit 1
+}
+Write-OK "OpenSSL found at $OpenSslInc"
+
 # Prepend vcpkg paths to environment variables so they're found during build
 $env:LIB = "$VcpkgLibDir;$env:LIB"
 $env:INCLUDE = "$VcpkgIncDir;$env:INCLUDE"
+
+Write-Info "VCPKG_LIB_DIR: $VcpkgLibDir"
+Write-Info "VCPKG_INC_DIR: $VcpkgIncDir"
 
 $MsBuildArgs = @(
     $SlnFile.FullName,
