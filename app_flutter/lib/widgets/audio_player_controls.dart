@@ -17,8 +17,6 @@ class AudioPlayerControls extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(recordingsProvider);
-
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
@@ -123,8 +121,8 @@ class AudioPlayerControls extends ConsumerWidget {
 
     // Show loading indicator when buffering
     if (isBuffering) {
-      return Padding(
-        padding: const EdgeInsets.all(24),
+      return const Padding(
+        padding: EdgeInsets.all(24),
         child: CircularProgressIndicator(
           strokeWidth: 3,
           valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
@@ -198,12 +196,6 @@ class AudioPlayerControls extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  static String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds.remainder(60);
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }
 

@@ -187,11 +187,11 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppTheme.surfaceCard,
               shape: BoxShape.circle,
             ),
-            child: Icon(
+            child: const Icon(
               Icons.mic_none,
               size: 64,
               color: AppTheme.textTertiary,

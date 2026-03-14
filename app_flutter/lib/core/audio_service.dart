@@ -1,6 +1,4 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:media_kit/media_kit.dart';
 import 'call_event_service.dart';
 

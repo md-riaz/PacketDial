@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
 import '../core/account_service.dart';
-import '../core/engine_channel.dart';
 import '../models/account.dart';
 import '../models/account_schema.dart';
 import '../widgets/empty_state.dart';

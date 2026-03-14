@@ -54,7 +54,7 @@ class RecordingsState {
 /// Notifier for managing recordings state and playback using media_kit.
 class RecordingsNotifier extends StateNotifier<RecordingsState> {
   final Player _player = Player();
-  List<StreamSubscription> _subscriptions = [];
+  final List<StreamSubscription> _subscriptions = [];
 
   RecordingsNotifier() : super(RecordingsState()) {
     _init();

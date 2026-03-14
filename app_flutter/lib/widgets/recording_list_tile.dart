@@ -1,12 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../core/app_theme.dart';
-import '../core/recording_service.dart';
 import '../models/recording_item.dart';
 import '../providers/recordings_provider.dart';
-import 'audio_player_controls.dart';
 
 /// List tile widget for displaying a recording item.
 class RecordingListTile extends ConsumerStatefulWidget {
@@ -193,7 +190,7 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
         Row(
           children: [
             // Date
-            Icon(
+            const Icon(
               Icons.calendar_today,
               size: 12,
               color: AppTheme.textTertiary,
@@ -208,7 +205,7 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
             ),
             const SizedBox(width: 12),
             // Duration
-            Icon(
+            const Icon(
               Icons.access_time,
               size: 12,
               color: AppTheme.textTertiary,
@@ -223,7 +220,7 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
             ),
             const SizedBox(width: 12),
             // File size
-            Icon(
+            const Icon(
               Icons.folder,
               size: 12,
               color: AppTheme.textTertiary,
