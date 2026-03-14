@@ -43,6 +43,10 @@ runs:
         Write-Host "Bootstrapping vcpkg..."
         Set-Location vcpkg
         .\bootstrap-vcpkg.bat -disableMetrics
+        # Restore custom triplets
+        Write-Host "Restoring custom triplets..."
+        X:
+        Copy-Item -Path "X:\vcpkg_triplets\*.cmake" -Destination ".\triplets\" -Force
         # Verify triplet exists
         if (-not (Test-Path ".\triplets\x64-windows-static-md.cmake")) {
           Write-Error "x64-windows-static-md triplet not found"

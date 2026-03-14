@@ -190,6 +190,16 @@ if (-not $env:VCPKG_ROOT) {
     $env:VCPKG_ROOT = Join-Path $RepoRoot 'vcpkg'
 }
 
+# Ensure custom triplets are present in vcpkg
+$LocalTripletsDir = Join-Path $RepoRoot 'vcpkg_triplets'
+if (Test-Path $LocalTripletsDir) {
+    $VcpkgTripletsDir = Join-Path $env:VCPKG_ROOT 'triplets'
+    if (Test-Path $VcpkgTripletsDir) {
+        Write-Info "Ensuring custom triplets are synchronized to vcpkg..."
+        Copy-Item "$LocalTripletsDir\*.cmake" -Destination $VcpkgTripletsDir -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Set up vcpkg paths for OpenSSL and other dependencies
 $VcpkgLibDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib"
 $VcpkgIncDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
