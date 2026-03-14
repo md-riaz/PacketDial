@@ -47,6 +47,55 @@ jobs:
           }
           Write-Host "Mapped workspace to X:"
 
+      - name: Set VCPKG_ROOT environment variable
+        shell: pwsh
+        run: |
+          echo "VCPKG_ROOT=X:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Setup vcpkg (fresh clone)
+        shell: pwsh
+        run: |
+          X:
+          # Remove old vcpkg and clone fresh
+          Remove-Item -Recurse -Force ".\vcpkg" -ErrorAction SilentlyContinue
+          git clone --depth 1 https://github.com/microsoft/vcpkg
+          Write-Host "vcpkg cloned successfully"
+          # Bootstrap vcpkg
+          Write-Host "Bootstrapping vcpkg..."
+          cd vcpkg
+          .\bootstrap-vcpkg.bat -disableMetrics
+          # Restore custom triplets
+          Write-Host "Restoring custom triplets..."
+          Copy-Item -Path "X:\vcpkg_triplets\*.cmake" -Destination "X:\vcpkg\triplets\" -Force
+          # Integrate vcpkg
+          Write-Host "Integrating vcpkg with MSBuild..."
+          .\vcpkg.exe integrate install
+        env:
+          GIT_TERMINAL_PROMPT: 0
+
+      - name: Cache vcpkg installed packages
+        uses: actions/cache@v4
+        with:
+          path: vcpkg/installed
+          key: vcpkg-rust-ci-x64-windows-static-md-${{ hashFiles('.github/workflows/rust-ci.yml') }}
+          restore-keys: |
+            vcpkg-rust-ci-x64-windows-static-md-
+
+      - name: Install vcpkg dependencies (openssl, opus)
+        shell: pwsh
+        run: |
+          X:
+          cd vcpkg
+          Write-Host "Installing OpenSSL and Opus for x64-windows-static-md..."
+          .\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md --recurse
+          Write-Host "Verifying installation..."
+          if (Test-Path "X:\vcpkg\installed\x64-windows-static-md\include\openssl\ssl.h") {
+            Write-Host "OpenSSL installed successfully"
+          } else {
+            Write-Error "OpenSSL installation verification failed"
+            exit 1
+          }
+
       - name: Build pjproject (Release x64)
         if: steps.cache-pjsip.outputs.cache-hit != 'true'
         shell: pwsh
