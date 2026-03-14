@@ -39,8 +39,12 @@ runs:
           Move-Item -Path ".\vcpkg_installed_backup" -Destination ".\vcpkg\installed" -Force
         }
         Write-Host "vcpkg cloned successfully"
+        # Bootstrap vcpkg to create vcpkg.exe
+        Write-Host "Bootstrapping vcpkg..."
+        Set-Location vcpkg
+        .\bootstrap-vcpkg.bat -disableMetrics
         # Verify triplet exists
-        if (-not (Test-Path ".\vcpkg\triplets\x64-windows-static-md.cmake")) {
+        if (-not (Test-Path ".\triplets\x64-windows-static-md.cmake")) {
           Write-Error "x64-windows-static-md triplet not found"
           exit 1
         }
