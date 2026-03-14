@@ -56,6 +56,7 @@ static pj_bool_t g_dnd_enabled = PJ_FALSE;
 /* Transport ids created at init time */
 static pjsua_transport_id g_udp_tp = PJSUA_INVALID_ID;
 static pjsua_transport_id g_tcp_tp = PJSUA_INVALID_ID;
+static pjsua_transport_id g_tls_tp = PJSUA_INVALID_ID;
 
 /* Tone generator for playing dialpad sounds locally */
 static pjmedia_port *g_tone_port = NULL;
@@ -709,6 +710,16 @@ int pd_init(const char *user_agent,
         g_tcp_tp = PJSUA_INVALID_ID; /* TCP unavailable — UDP only */
     }
 
+    /* Create TLS transport (optional — ignore failure) */
+    pjsua_transport_config tls_cfg;
+    pjsua_transport_config_default(&tls_cfg);
+    tls_cfg.port = 0;
+    /* TLS default port is 5061, but we use 0 to let OS assign */
+    status = pjsua_transport_create(PJSIP_TRANSPORT_TLS, &tls_cfg, &g_tls_tp);
+    if (status != PJ_SUCCESS) {
+        g_tls_tp = PJSUA_INVALID_ID; /* TLS unavailable */
+    }
+
     /* Start */
     status = pjsua_start();
     if (status != PJ_SUCCESS) {
@@ -811,6 +822,7 @@ int pd_shutdown(void)
     pj_status_t status = pjsua_destroy();
     g_udp_tp = PJSUA_INVALID_ID;
     g_tcp_tp = PJSUA_INVALID_ID;
+    g_tls_tp = PJSUA_INVALID_ID;
     return (int)status;
 }
 
@@ -821,7 +833,7 @@ int pd_shutdown(void)
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
                const char *auth_username, const char *sip_proxy,
-               int use_tcp, const char *stun_server)
+               int transport_id, const char *stun_server)
 {
     pd_ensure_thread();
     pjsua_acc_config cfg;
@@ -851,11 +863,35 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
      * STUN must be enabled globally in pd_init for it to take effect. */
     (void)stun_server;  /* Suppress unused parameter warning */
 
-    /* Transport selection */
-    if (use_tcp && g_tcp_tp != PJSUA_INVALID_ID) {
-        cfg.transport_id = g_tcp_tp;
-    } else {
-        cfg.transport_id = g_udp_tp;
+    /* Transport selection:
+     * 0 = UDP (use UDP transport)
+     * 1 = TCP (use TCP transport)
+     * 2 = TLS (use TLS transport)
+     * 3 = UDP+TCP (auto-select, prefer UDP, fallback to TCP)
+     */
+    switch (transport_id) {
+        case 2: /* TLS */
+            if (g_tls_tp != PJSUA_INVALID_ID) {
+                cfg.transport_id = g_tls_tp;
+            } else {
+                cfg.transport_id = g_udp_tp; /* Fallback to UDP if TLS unavailable */
+            }
+            break;
+        case 1: /* TCP */
+            if (g_tcp_tp != PJSUA_INVALID_ID) {
+                cfg.transport_id = g_tcp_tp;
+            } else {
+                cfg.transport_id = g_udp_tp; /* Fallback to UDP if TCP unavailable */
+            }
+            break;
+        case 3: /* UDP+TCP (auto) - leave transport_id as default (PJSUA_INVALID_ID)
+                 * PJSIP will auto-select based on destination and availability */
+            cfg.transport_id = PJSUA_INVALID_ID;
+            break;
+        case 0: /* UDP (default) */
+        default:
+            cfg.transport_id = g_udp_tp;
+            break;
     }
 
     /* Registration options */

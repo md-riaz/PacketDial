@@ -128,17 +128,17 @@ int pd_shutdown(void);
 /**
  * Add a SIP account and start registration.
  *
- * @param sip_uri    AOR: "sip:username@server" or "sips:username@server"
- * @param registrar  Registrar URI: "sip:server[:port]"
- * @param username   Authentication username
- * @param password   Authentication password
- * @param use_tcp    0 = UDP transport, 1 = TCP transport
+ * @param sip_uri       AOR: "sip:username@server" or "sips:username@server"
+ * @param registrar     Registrar URI: "sip:server[:port]"
+ * @param username      Authentication username
+ * @param password      Authentication password
+ * @param transport_id  Transport selection: 0=UDP, 1=TCP, 2=TLS, 3=UDP+TCP (auto)
  * @return pjsua_acc_id (>= 0) on success, -1 on error.
  */
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
                const char *auth_username, const char *sip_proxy,
-               int use_tcp, const char *stun_server);
+               int transport_id, const char *stun_server);
 
 /**
  * Remove a previously added account (triggers SIP unregistration).

@@ -252,6 +252,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                         items: const [
                           DropdownMenuItem(value: 'udp', child: Text('UDP')),
                           DropdownMenuItem(value: 'tcp', child: Text('TCP')),
+                          DropdownMenuItem(value: 'udp_tcp', child: Text('UDP+TCP')),
                           DropdownMenuItem(value: 'tls', child: Text('TLS')),
                         ],
                         onChanged: state.isRegistering

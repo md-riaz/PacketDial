@@ -40,8 +40,8 @@
 /* -----------------------------------------------------------------------
  * Security
  * ----------------------------------------------------------------------- */
-/* Disable OpenSSL linking for now; TLS will be added in a later milestone */
-#define PJSIP_HAS_TLS_TRANSPORT         0
+/* Enable TLS transport for SIP over TLS (SIPS) */
+#define PJSIP_HAS_TLS_TRANSPORT         1
 
 /* -----------------------------------------------------------------------
  * Logging (pjlib level)

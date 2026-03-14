@@ -10,7 +10,7 @@ class AccountSchema {
   String authUsername; // Login ID (often same as username)
   String domain; // SIP Domain
   String password;
-  String transport; // 'udp', 'tcp', 'tls'
+  String transport; // 'udp', 'tcp', 'udp_tcp', 'tls'
   String stunServer;
   String turnServer;
   bool tlsEnabled;

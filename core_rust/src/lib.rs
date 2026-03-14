@@ -1270,7 +1270,8 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         existing.transport = p["transport"].as_str().unwrap_or("udp").to_owned();
         existing.stun_server = p["stun_server"].as_str().unwrap_or("").to_owned();
         existing.turn_server = p["turn_server"].as_str().unwrap_or("").to_owned();
-        existing.tls_enabled = p["tls_enabled"].as_bool().unwrap_or(existing.tls_enabled);
+        existing.tls_enabled = p["tls_enabled"].as_bool().unwrap_or(existing.tls_enabled)
+            || existing.transport.eq_ignore_ascii_case("tls");
         existing.srtp_enabled = p["srtp_enabled"].as_bool().unwrap_or(existing.srtp_enabled);
     } else {
         let acct = Account {
@@ -1286,7 +1287,8 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
             transport: p["transport"].as_str().unwrap_or("udp").to_owned(),
             stun_server: p["stun_server"].as_str().unwrap_or("").to_owned(),
             turn_server: p["turn_server"].as_str().unwrap_or("").to_owned(),
-            tls_enabled: p["tls_enabled"].as_bool().unwrap_or(false),
+            tls_enabled: p["tls_enabled"].as_bool().unwrap_or(false)
+                || p["transport"].as_str().unwrap_or("udp").eq_ignore_ascii_case("tls"),
             srtp_enabled: p["srtp_enabled"].as_bool().unwrap_or(false),
             reg_state: RegistrationState::Unregistered,
             pjsip_acc_id: None,
@@ -1319,21 +1321,11 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
         }
     };
 
-    if acct_snapshot.tls_enabled {
-        let fail =
-            RegistrationState::Failed("TLS transport is not enabled in this build".to_owned());
-        {
-            let mut accts = ACCOUNTS.lock().unwrap();
-            if let Some(a) = accts.get_mut(&id) {
-                a.reg_state = fail.clone();
-            }
-        }
-        push_reg_state(&id, &fail);
+    if acct_snapshot.tls_enabled && acct_snapshot.transport != "tls" {
         log_engine(
             LogLevel::Warn,
-            &format!("Account '{id}': TLS requested but this PJSIP build has TLS disabled"),
+            &format!("Account '{id}': tls_enabled is true but transport is not 'tls'. Forcing TLS transport."),
         );
-        return EngineErrorCode::InternalError;
     }
 
     // Transition to Registering state and remove any existing PJSIP account
@@ -1365,14 +1357,20 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
 
     // --- PJSIP registration ---
     {
-        let use_tcp = if acct_snapshot.transport.eq_ignore_ascii_case("tcp") {
-            1i32
+        // Transport selection:
+        // 0 = UDP, 1 = TCP, 2 = TLS, 3 = UDP+TCP (auto)
+        let transport_id = if acct_snapshot.transport.eq_ignore_ascii_case("tls") || acct_snapshot.tls_enabled {
+            2i32  // TLS
+        } else if acct_snapshot.transport.eq_ignore_ascii_case("tcp") {
+            1i32  // TCP
+        } else if acct_snapshot.transport.eq_ignore_ascii_case("udp_tcp") {
+            3i32  // UDP+TCP auto
         } else {
-            0i32
+            0i32  // UDP (default)
         };
 
         // Build SIP URI: sip:username@server  (use sips: if TLS enabled)
-        let scheme = if acct_snapshot.tls_enabled {
+        let scheme = if acct_snapshot.tls_enabled || acct_snapshot.transport.eq_ignore_ascii_case("tls") {
             "sips"
         } else {
             "sip"
@@ -1466,7 +1464,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 password.as_ptr(),
                 auth_username.as_ptr(),
                 sip_proxy.as_ptr(),
-                use_tcp,
+                transport_id,
                 stun_server.as_ptr(),
             )
         };
