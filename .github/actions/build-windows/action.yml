@@ -37,7 +37,7 @@ runs:
       run: |
         X:
         cd vcpkg
-        .\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md
+        .\vcpkg.exe install openssl opus --triplet x64-windows-static-md
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
