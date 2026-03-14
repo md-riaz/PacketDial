@@ -116,7 +116,7 @@ if (Test-Path $AppSoSrc) {
     Write-Host "  app.so copied successfully" -ForegroundColor Green
 }
 
-# Copy voip_core.dll from the built target
+# Copy voip_core.dll and icon from the root
 $DllSrc = Join-Path $ProjectRoot "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
 if (Test-Path $DllSrc) {
     Copy-Item -Path $DllSrc -Destination $StagingDir -Force
@@ -127,9 +127,8 @@ if (Test-Path $DllSrc) {
 
 $IconSource = Join-Path $InstallerDir "icon.ico"
 if (Test-Path $IconSource) {
-    Write-Host "  Icon ready: $IconSource" -ForegroundColor Gray
-} else {
-    Write-Host "  No custom installer icon found, using default" -ForegroundColor Gray
+    Copy-Item -Path $IconSource -Destination $StagingDir -Force
+    Write-Host "  Icon bundled with executable: icon.ico" -ForegroundColor Green
 }
 
 Write-Host "[3/5] Updating Inno Setup script..." -ForegroundColor Yellow

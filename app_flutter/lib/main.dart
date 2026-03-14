@@ -36,19 +36,6 @@ import 'core/tray_controller.dart';
 
 const String _startupLaunchArg = '--startup-launch';
 
-String _resolveRuntimeIconPath() {
-  const candidates = [
-    'assets/app_icon.png',
-    'data/flutter_assets/assets/app_icon.png',
-    'assets/app_icon.ico',
-    'data/flutter_assets/assets/app_icon.ico',
-  ];
-  for (final path in candidates) {
-    if (File(path).existsSync()) return path;
-  }
-  return 'assets/app_icon.png';
-}
-
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -106,7 +93,7 @@ void main(List<String> args) async {
     appWindow.alignment = Alignment.center;
     appWindow.title = "PacketDial";
 
-    final iconPath = _resolveRuntimeIconPath();
+    final iconPath = TrayController.instance.getBestIconPath();
     try {
       await windowManager.setIcon(iconPath);
     } catch (e) {
