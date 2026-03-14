@@ -17,6 +17,11 @@ runs:
         }
         Write-Host "Mapped workspace to X:"
 
+    - name: Set VCPKG_ROOT environment variable
+      shell: pwsh
+      run: |
+        echo "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
     - name: Cache vcpkg installed packages
       uses: actions/cache@v4
       with:
@@ -27,12 +32,12 @@ runs:
 
     - name: Install vcpkg dependencies (openssl, opus)
       shell: pwsh
+      env:
+        VCPKG_ROOT: ${{ github.workspace }}\vcpkg
       run: |
         X:
         cd vcpkg
         .\vcpkg.exe install openssl:x64-windows opus:x64-windows
-        # Set VCPKG_ROOT for subsequent steps
-        echo "VCPKG_ROOT=$env:GITHUB_WORKSPACE\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
