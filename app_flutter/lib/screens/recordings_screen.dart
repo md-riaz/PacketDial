@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_theme.dart';
-import '../core/app_settings_service.dart';
 import '../providers/recordings_provider.dart';
 import '../widgets/recording_list_tile.dart';
 import '../widgets/audio_player_controls.dart';
+import '../widgets/title_bar.dart';
+import 'app_settings_page.dart';
+import '../providers/window_prefs_provider.dart';
 
 /// Screen for viewing and playing call recordings.
 class RecordingsScreen extends ConsumerStatefulWidget {
@@ -35,6 +37,13 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
       backgroundColor: AppTheme.surface,
       body: Column(
         children: [
+          TitleBar(
+            title: '', // Keep title in the header body instead
+            alwaysOnTop: ref.watch(windowPrefsProvider),
+            onToggleAlwaysOnTop: () =>
+                ref.read(windowPrefsProvider.notifier).toggleAlwaysOnTop(),
+            showBackButton: false, // Use the back button in the header
+          ),
           // Header
           _buildHeader(state),
 
@@ -72,12 +81,10 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
           children: [
             Row(
               children: [
-                // Back button
                 IconButton(
                   icon: const Icon(Icons.arrow_back),
                   color: AppTheme.textPrimary,
                   onPressed: () => Navigator.of(context).pop(),
-                  tooltip: 'Back',
                 ),
                 const SizedBox(width: 8),
                 // Title
@@ -131,7 +138,8 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppTheme.primary),
                     ),
                   ),
                 ],
@@ -224,14 +232,9 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
   }
 
   void _showRecordingSettings() {
-    Navigator.of(context).pop(); // Close recordings screen
-    // Navigate to Settings page - we'll use a simple approach
-    // In a real app, you might want to navigate directly to the recording settings section
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Go to Settings > Local Call Recording'),
-        backgroundColor: AppTheme.primary,
-        behavior: SnackBarBehavior.floating,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const AppSettingsPage(initialTab: 3),
       ),
     );
   }

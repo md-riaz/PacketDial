@@ -8,6 +8,11 @@ import 'path_provider_service.dart';
 
 /// Persists window position, size, and always-on-top preference.
 class WindowPrefs {
+  static final WindowPrefs _instance = WindowPrefs._internal();
+  factory WindowPrefs() => _instance;
+  WindowPrefs._internal();
+
+  static WindowPrefs get instance => _instance;
   static const _kX = 'window_x';
   static const _kY = 'window_y';
   static const _kW = 'window_w';

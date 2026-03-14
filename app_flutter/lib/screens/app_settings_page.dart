@@ -20,7 +20,8 @@ import '../providers/app_settings_provider.dart';
 
 /// Unified app-wide settings page.
 class AppSettingsPage extends ConsumerStatefulWidget {
-  const AppSettingsPage({super.key});
+  final int? initialTab;
+  const AppSettingsPage({super.key, this.initialTab});
 
   @override
   ConsumerState<AppSettingsPage> createState() => _AppSettingsPageState();
@@ -35,7 +36,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(
+      length: 5,
+      vsync: this,
+      initialIndex: widget.initialTab ?? 0,
+    );
     _recordingDirController = TextEditingController();
     _packageInfoFuture = PackageInfo.fromPlatform();
   }

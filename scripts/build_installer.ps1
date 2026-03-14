@@ -87,6 +87,17 @@ try {
     Pop-Location
 }
 
+Write-Host "[1.5/5] Building Rust core (Release)..." -ForegroundColor Yellow
+try {
+    & (Join-Path $ScriptDir "build_core.ps1") -Configuration Release
+    if ($LASTEXITCODE -ne 0) {
+        throw "Rust core build failed with exit code $LASTEXITCODE"
+    }
+} catch {
+    Write-Host "  Error building Rust core: $_" -ForegroundColor Red
+    throw
+}
+
 Write-Host "[2/5] Copying build files..." -ForegroundColor Yellow
 if (Test-Path $StagingDir) {
     Remove-Item -Recurse -Force $StagingDir
@@ -103,8 +114,15 @@ if (Test-Path $AppSoSrc) {
     }
     Copy-Item -Path $AppSoSrc -Destination $AppSoDest -Force
     Write-Host "  app.so copied successfully" -ForegroundColor Green
+}
+
+# Copy voip_core.dll from the built target
+$DllSrc = Join-Path $ProjectRoot "core_rust\target\x86_64-pc-windows-msvc\release\voip_core.dll"
+if (Test-Path $DllSrc) {
+    Copy-Item -Path $DllSrc -Destination $StagingDir -Force
+    Write-Host "  voip_core.dll copied to staging" -ForegroundColor Green
 } else {
-    throw "app.so not found at $AppSoSrc"
+    throw "voip_core.dll not found at $DllSrc after build"
 }
 
 $IconSource = Join-Path $InstallerDir "icon.ico"
