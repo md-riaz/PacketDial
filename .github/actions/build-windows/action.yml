@@ -26,9 +26,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: vcpkg/installed
-        key: vcpkg-x64-windows-${{ hashFiles('.github/actions/build-windows/action.yml') }}
+        key: vcpkg-x64-windows-static-md-${{ hashFiles('.github/actions/build-windows/action.yml') }}
         restore-keys: |
-          vcpkg-x64-windows-
+          vcpkg-x64-windows-static-md-
 
     - name: Install vcpkg dependencies (openssl, opus)
       shell: pwsh
@@ -37,7 +37,7 @@ runs:
       run: |
         X:
         cd vcpkg
-        .\vcpkg.exe install openssl:x64-windows opus:x64-windows
+        .\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
