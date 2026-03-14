@@ -217,9 +217,9 @@ if (-not (Test-Path $OpenSslInc)) {
     Write-Fail "OpenSSL not found at $OpenSslInc"
     Write-Info "Run vcpkg install openssl:x64-windows-static-md"
     Write-Info "VCPKG_ROOT: $($env:VCPKG_ROOT)"
-    Write-Info "Contents of installed dir:"
+    Write-Info "Searching for ssl.h in $($env:VCPKG_ROOT)..."
     if (Test-Path "$($env:VCPKG_ROOT)\installed") {
-        Get-ChildItem "$($env:VCPKG_ROOT)\installed" -Recurse -Filter "ssl.h" | ForEach-Object { Write-Host $_.FullName }
+        Get-ChildItem "$($env:VCPKG_ROOT)\installed" -Recurse -Filter "ssl.h" | ForEach-Object { Write-Host "    Found at: $($_.FullName)" }
     }
     exit 1
 }
@@ -243,8 +243,8 @@ $MsBuildArgs = @(
     '/clp:Summary',
     "/p:AdditionalLibraryDirectories=$VcpkgLibDir",
     "/p:AdditionalIncludeDirectories=$VcpkgIncDir",
-    "/p:LibraryPath=$VcpkgLibDir",
-    "/p:IncludePath=$VcpkgIncDir"
+    "/p:LibraryPath=$VcpkgLibDir;`$(LibraryPath)",
+    "/p:IncludePath=$VcpkgIncDir;`$(IncludePath)"
 )
 
 Push-Location $PjProjectDir

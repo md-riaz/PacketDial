@@ -43,16 +43,15 @@ runs:
         Write-Host "Bootstrapping vcpkg..."
         Set-Location vcpkg
         .\bootstrap-vcpkg.bat -disableMetrics
-        .\bootstrap-vcpkg.bat -disableMetrics
         # Restore custom triplets
         Write-Host "Restoring custom triplets..."
-        Copy-Item -Path "$env:GITHUB_WORKSPACE\vcpkg_triplets\*.cmake" -Destination "$env:GITHUB_WORKSPACE\vcpkg\triplets\" -Force
+        Copy-Item -Path "X:\vcpkg_triplets\*.cmake" -Destination "X:\vcpkg\triplets\" -Force
         # Integrate vcpkg with MSBuild
         Write-Host "Integrating vcpkg with MSBuild..."
         .\vcpkg.exe integrate install
         # Verify triplet exists
-        if (-not (Test-Path "$env:GITHUB_WORKSPACE\vcpkg\triplets\x64-windows-static-md.cmake")) {
-          Write-Error "x64-windows-static-md triplet not found"
+        if (-not (Test-Path "X:\vcpkg\triplets\x64-windows-static-md.cmake")) {
+          Write-Error "x64-windows-static-md triplet not found at X:\vcpkg\triplets\"
           exit 1
         }
         Write-Host "vcpkg ready with x64-windows-static-md triplet"
@@ -70,17 +69,22 @@ runs:
     - name: Install vcpkg dependencies (openssl, opus)
       shell: pwsh
       env:
-        VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+        VCPKG_ROOT: X:\vcpkg
       run: |
         X:
         cd vcpkg
         Write-Host "Installing OpenSSL and Opus for x64-windows-static-md..."
         .\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md --recurse
+        Write-Host "VCPKG List:"
+        .\vcpkg.exe list
         Write-Host "Verifying installation..."
-        if (Test-Path "$env:VCPKG_ROOT\installed\x64-windows-static-md\include\openssl\ssl.h") {
-          Write-Host "OpenSSL installed successfully"
+        $SslH = "X:\vcpkg\installed\x64-windows-static-md\include\openssl\ssl.h"
+        if (Test-Path $SslH) {
+          Write-Host "OpenSSL installed successfully at $SslH"
         } else {
-          Write-Error "OpenSSL installation verification failed at $env:VCPKG_ROOT\installed\x64-windows-static-md\include\openssl\ssl.h"
+          Write-Warning "OpenSSL NOT found at $SslH. Searching for it..."
+          Get-ChildItem -Path "X:\vcpkg\installed" -Recurse -Filter "ssl.h" | ForEach-Object { Write-Host "Found at: $($_.FullName)" }
+          Write-Error "OpenSSL installation verification failed"
           exit 1
         }
 
