@@ -208,8 +208,8 @@ if (Test-Path $VcpkgExe) {
 }
 
 # Set up vcpkg paths for OpenSSL and other dependencies
-$VcpkgLibDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib"
-$VcpkgIncDir = "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include"
+$VcpkgLibDir = if ($env:VCPKG_LIB) { $env:VCPKG_LIB } else { "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\lib" }
+$VcpkgIncDir = if ($env:VCPKG_INCLUDE) { $env:VCPKG_INCLUDE } else { "$($env:VCPKG_ROOT)\installed\x64-windows-static-md\include" }
 
 # Verify OpenSSL is installed
 $OpenSslInc = Join-Path $VcpkgIncDir "openssl\ssl.h"

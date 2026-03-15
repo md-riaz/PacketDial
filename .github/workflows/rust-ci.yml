@@ -51,6 +51,8 @@ jobs:
         shell: pwsh
         run: |
           echo "VCPKG_ROOT=X:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VCPKG_INCLUDE=X:\vcpkg\installed\x64-windows-static-md\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "VCPKG_LIB=X:\vcpkg\installed\x64-windows-static-md\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup vcpkg (fresh clone)
         shell: pwsh
