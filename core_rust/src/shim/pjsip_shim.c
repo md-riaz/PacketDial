@@ -91,6 +91,15 @@ static struct {
 /* DTMF method per account */
 static int g_acc_dtmf_method[MAX_ACCOUNTS];
 
+/* -----------------------------------------------------------------------
+ * Global (App-Wide) Settings — declared here so they are visible to all
+ * functions below (avoids forward-reference C2065 errors).
+ * ----------------------------------------------------------------------- */
+static int g_global_dtmf_method    = 3; /* Default: Auto (RFC2833 → in-band fallback) */
+static int g_global_auto_answer    = 0;
+static int g_global_auto_answer_delay = 0;
+static char g_global_codec_priority[1024] = "[]";
+
 /* Recording state per call */
 static int g_is_recording[MAX_CALLS] = { 0 };
 static char g_rec_path[MAX_CALLS][512] = { {0} };
@@ -1332,11 +1341,6 @@ static pj_bool_t _remote_has_telephone_event(pjsua_call_id call_id)
         if (ci.media[i].status != PJSUA_CALL_MEDIA_ACTIVE)
             continue;
 
-        pjmedia_stream_info si;
-        pjmedia_stream *stream = pjsua_call_get_media_session(call_id)
-            ? NULL : NULL; /* we use stream_info instead */
-
-        /* Get stream info which contains the remote codec list */
         pjsua_stream_info psi;
         if (pjsua_call_get_stream_info(call_id, i, &psi) != PJ_SUCCESS)
             continue;
@@ -1344,9 +1348,8 @@ static pj_bool_t _remote_has_telephone_event(pjsua_call_id call_id)
             continue;
 
         /* Check each format in the remote codec list */
-        const pjmedia_sdp_media *rem_m = psi.info.aud.rem_sdp
-            ? psi.info.aud.rem_sdp : NULL;
-        (void)rem_m; /* fallback: scan fmt list from stream info */
+        /* rem_sdp is not directly accessible via pjmedia_stream_info in this
+         * PJSIP version — we rely on the optimistic probe approach below. */
 
         /* pjmedia_stream_info.fmt is the negotiated codec — not enough.
          * Instead scan the codec_info list via the stream's SDP.
@@ -2205,12 +2208,6 @@ int pd_acc_delete_profile(const char *uuid)
 /* -----------------------------------------------------------------------
  * Global (App-Wide) Settings Implementation
  * ----------------------------------------------------------------------- */
-
-/* Global settings storage */
-static int g_global_dtmf_method = 3; /* Default Auto (RFC2833 preferred, in-band fallback) */
-static int g_global_auto_answer = 0;
-static int g_global_auto_answer_delay = 0;
-static char g_global_codec_priority[1024] = "[]";
 
 int pd_set_global_codec_priority(const char *codec_priorities)
 {
