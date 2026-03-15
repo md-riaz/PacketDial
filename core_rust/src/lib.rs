@@ -1285,7 +1285,9 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         existing.tls_enabled = p["tls_enabled"].as_bool().unwrap_or(existing.tls_enabled)
             || existing.transport.eq_ignore_ascii_case("tls");
         existing.srtp_enabled = p["srtp_enabled"].as_bool().unwrap_or(existing.srtp_enabled);
-        existing.publish_presence = p["publish_presence"].as_bool().unwrap_or(existing.publish_presence);
+        existing.publish_presence = p["publish_presence"]
+            .as_bool()
+            .unwrap_or(existing.publish_presence);
     } else {
         let acct = Account {
             uuid: uuid.clone(),
@@ -3107,10 +3109,7 @@ fn cmd_set_ec_enabled(p: &serde_json::Value) -> EngineErrorCode {
     if rc != 0 {
         return EngineErrorCode::InternalError;
     }
-    push_event(
-        "EcUpdated",
-        serde_json::json!({ "enabled": enabled }),
-    );
+    push_event("EcUpdated", serde_json::json!({ "enabled": enabled }));
     EngineErrorCode::Ok
 }
 
