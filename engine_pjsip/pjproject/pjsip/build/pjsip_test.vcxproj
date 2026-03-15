@@ -305,6 +305,11 @@
     <Lib>
       <OutputFile>..\lib\pjsip-test-$(TargetCPU)-$(Platform)-vc$(VSVer)-$(Configuration).lib</OutputFile>
     </Lib>
+    <Link>
+      <!-- crypt32.lib required by OpenSSL static builds (CertOpenStore, CertCloseStore, etc.) -->
+      <AdditionalDependencies>crypt32.lib;libssl.lib;libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(VCPKG_LIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>

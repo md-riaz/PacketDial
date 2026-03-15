@@ -246,6 +246,10 @@ $MsBuildArgs = @(
     "/p:VCPKG_LIB=`"$VcpkgLibDir`""
 )
 
+# Export as env vars so NMAKE-based sub-builds (e.g. Samples-vc.mak) can read them
+$env:VCPKG_LIB_DIR = $VcpkgLibDir
+$env:VCPKG_INC_DIR = $VcpkgIncDir
+
 Push-Location $PjProjectDir
 try {
     & $MsBuild @MsBuildArgs
