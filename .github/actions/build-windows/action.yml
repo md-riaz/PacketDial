@@ -62,9 +62,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: vcpkg/installed
-        key: vcpkg-x64-windows-static-md-${{ hashFiles('.github/actions/build-windows/action.yml') }}
+        key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg_dependencies.txt', 'vcpkg_triplets/*.cmake') }}
         restore-keys: |
-          vcpkg-x64-windows-static-md-
+          vcpkg-${{ runner.os }}-
 
     - name: Install vcpkg dependencies (openssl, opus)
       shell: pwsh
@@ -109,7 +109,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: engine_pjsip/build/out
-        key: pjsip-windows-v2144-${{ hashFiles('engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1', 'engine_pjsip/pjproject/pjsip-apps/build/Samples-vc.mak') }}
+        key: pjsip-${{ runner.os }}-v2144-${{ hashFiles('vcpkg_dependencies.txt', 'engine_pjsip/pjproject_config_site.h', 'scripts/build_pjsip.ps1') }}
 
     - name: Clean stale PJSIP build artifacts
       shell: pwsh
