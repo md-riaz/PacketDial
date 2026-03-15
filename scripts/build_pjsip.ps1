@@ -241,10 +241,10 @@ $MsBuildArgs = @(
     '/nologo',
     '/verbosity:minimal',
     '/clp:Summary',
-    "/p:AdditionalLibraryDirectories=$VcpkgLibDir",
-    "/p:AdditionalIncludeDirectories=$VcpkgIncDir",
-    "/p:LibraryPath=$VcpkgLibDir;`$(LibraryPath)",
-    "/p:IncludePath=$VcpkgIncDir;`$(IncludePath)"
+    "/p:AdditionalLibraryDirectories=`"$VcpkgLibDir`"",
+    "/p:AdditionalIncludeDirectories=`"$VcpkgIncDir`"",
+    "/p:LibraryPath=`"$VcpkgLibDir`"",
+    "/p:IncludePath=`"$VcpkgIncDir`""
 )
 
 Push-Location $PjProjectDir
