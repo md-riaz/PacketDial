@@ -1288,7 +1288,10 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
             stun_server: p["stun_server"].as_str().unwrap_or("").to_owned(),
             turn_server: p["turn_server"].as_str().unwrap_or("").to_owned(),
             tls_enabled: p["tls_enabled"].as_bool().unwrap_or(false)
-                || p["transport"].as_str().unwrap_or("udp").eq_ignore_ascii_case("tls"),
+                || p["transport"]
+                    .as_str()
+                    .unwrap_or("udp")
+                    .eq_ignore_ascii_case("tls"),
             srtp_enabled: p["srtp_enabled"].as_bool().unwrap_or(false),
             reg_state: RegistrationState::Unregistered,
             pjsip_acc_id: None,
@@ -1359,22 +1362,24 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
     {
         // Transport selection:
         // 0 = UDP, 1 = TCP, 2 = TLS, 3 = UDP+TCP (auto)
-        let transport_id = if acct_snapshot.transport.eq_ignore_ascii_case("tls") || acct_snapshot.tls_enabled {
-            2i32  // TLS
-        } else if acct_snapshot.transport.eq_ignore_ascii_case("tcp") {
-            1i32  // TCP
-        } else if acct_snapshot.transport.eq_ignore_ascii_case("udp_tcp") {
-            3i32  // UDP+TCP auto
-        } else {
-            0i32  // UDP (default)
-        };
+        let transport_id =
+            if acct_snapshot.transport.eq_ignore_ascii_case("tls") || acct_snapshot.tls_enabled {
+                2i32 // TLS
+            } else if acct_snapshot.transport.eq_ignore_ascii_case("tcp") {
+                1i32 // TCP
+            } else if acct_snapshot.transport.eq_ignore_ascii_case("udp_tcp") {
+                3i32 // UDP+TCP auto
+            } else {
+                0i32 // UDP (default)
+            };
 
         // Build SIP URI: sip:username@server  (use sips: if TLS enabled)
-        let scheme = if acct_snapshot.tls_enabled || acct_snapshot.transport.eq_ignore_ascii_case("tls") {
-            "sips"
-        } else {
-            "sip"
-        };
+        let scheme =
+            if acct_snapshot.tls_enabled || acct_snapshot.transport.eq_ignore_ascii_case("tls") {
+                "sips"
+            } else {
+                "sip"
+            };
         // Use domain for SIP URI if provided, otherwise use server
         let uri_domain = if !acct_snapshot.domain.is_empty() {
             &acct_snapshot.domain

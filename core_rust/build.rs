@@ -76,17 +76,14 @@ fn main() {
         // Also search the vcpkg lib dir for OpenSSL (libssl, libcrypto) and
         // any other vcpkg-provided static libs that PJSIP was built against.
         // Resolution order: VCPKG_LIB env var → VCPKG_ROOT-derived path.
-        let vcpkg_lib = env::var("VCPKG_LIB")
-            .ok()
-            .map(PathBuf::from)
-            .or_else(|| {
-                env::var("VCPKG_ROOT").ok().map(|r| {
-                    PathBuf::from(r)
-                        .join("installed")
-                        .join("x64-windows-static-md")
-                        .join("lib")
-                })
-            });
+        let vcpkg_lib = env::var("VCPKG_LIB").ok().map(PathBuf::from).or_else(|| {
+            env::var("VCPKG_ROOT").ok().map(|r| {
+                PathBuf::from(r)
+                    .join("installed")
+                    .join("x64-windows-static-md")
+                    .join("lib")
+            })
+        });
         if let Some(vlib) = &vcpkg_lib {
             if vlib.is_dir() {
                 println!("cargo:rustc-link-search=native={}", vlib.display());
