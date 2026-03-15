@@ -89,7 +89,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         title: const Text('Integration Settings'),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
           labelColor: AppTheme.primary,
           unselectedLabelColor: AppTheme.textSecondary,
           indicatorColor: AppTheme.primary,
