@@ -234,6 +234,12 @@ class _AppState extends ConsumerState<App>
           debugPrint('[APP] Failed to sync global DND on boot: rc=$dndRc');
         }
 
+        final ecEnabled = AppSettingsService.instance.ecEnabled;
+        engine.sendCommand('SetEcEnabled', '{"enabled":$ecEnabled}');
+
+        final micAmpLevel = AppSettingsService.instance.micAmplificationLevel;
+        engine.sendCommand('SetMicAmplification', '{"level":$micAmpLevel}');
+
         await widget.accountService.autoRegisterAll();
 
         // Listen for registration failures → auto-show edit page

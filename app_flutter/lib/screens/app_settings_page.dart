@@ -405,6 +405,44 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
 
           const SizedBox(height: 16),
 
+          // Echo Cancellation
+          SettingCard(
+            icon: Icons.hearing,
+            title: 'Echo Cancellation',
+            subtitle: ref.watch(appSettingsProvider).ecEnabled
+                ? 'Enabled — removes acoustic echo from microphone input'
+                : 'Disabled',
+            trailing: Switch(
+              value: ref.watch(appSettingsProvider).ecEnabled,
+              onChanged: (value) async {
+                await ref.read(appSettingsProvider.notifier).setEcEnabled(value);
+              },
+              activeThumbColor: AppTheme.callGreen,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Microphone Amplification
+          SettingCard(
+            icon: Icons.mic,
+            title: 'Microphone Amplification',
+            subtitle: ref.watch(appSettingsProvider).micAmplificationEnabled
+                ? 'Enabled — 2× software gain on top of system mic level'
+                : 'Disabled — system mic level only',
+            trailing: Switch(
+              value: ref.watch(appSettingsProvider).micAmplificationEnabled,
+              onChanged: (value) async {
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setMicAmplificationEnabled(value);
+              },
+              activeThumbColor: AppTheme.callGreen,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           // DTMF Method
           SettingCard(
             icon: Icons.dialpad,
@@ -416,6 +454,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               dropdownColor: AppTheme.surfaceCard,
               underline: const SizedBox(),
               items: const [
+                DropdownMenuItem(
+                    value: 3,
+                    child: Text('Auto',
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13))),
                 DropdownMenuItem(
                     value: 0,
                     child: Text('In-band',
@@ -581,9 +624,11 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       case 0:
         return 'In-band Audio';
       case 1:
-        return 'RFC2833 (Recommended)';
+        return 'RFC2833';
       case 2:
         return 'SIP INFO';
+      case 3:
+        return 'Auto (RFC2833 → In-band)';
       default:
         return 'Unknown';
     }

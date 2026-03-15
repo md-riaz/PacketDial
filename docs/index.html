@@ -346,9 +346,19 @@
         <p>Encrypted signalling over TLS and encrypted media over SRTP. Works with any standards-compliant PBX.</p>
       </div>
       <div class="feature-card">
+        <div class="feature-icon">🟢</div>
+        <h3>Call Quality Indicator</h3>
+        <p>A green/amber/red dot during active calls shows audio quality at a glance. Hover for MOS score, jitter, and packet loss.</p>
+      </div>
+      <div class="feature-card">
         <div class="feature-icon">📡</div>
         <h3>BLF Presence</h3>
-        <p>Real-time busy lamp field monitoring. See who is available, on a call, or offline at a glance.</p>
+        <p>Real-time busy lamp field monitoring with 7 states: Available, Busy, Ringing, Away, Offline, Error, and Unknown. Per-contact domain selection for multi-server setups. Double-click a ringing contact for directed call pickup.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📢</div>
+        <h3>Publish Presence</h3>
+        <p>Per-account SIP PUBLISH toggle. When enabled, subscribed contacts can see your status via BLF. Requires server-side support (Asterisk, FreeSWITCH, 3CX).</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🔀</div>
@@ -382,8 +392,8 @@
       </div>
       <div class="feature-card">
         <div class="feature-icon">🎵</div>
-        <h3>Codec Control</h3>
-        <p>Drag-to-reorder codec priority. Enable or disable individual codecs globally across all accounts.</p>
+        <h3>Codec &amp; DTMF Control</h3>
+        <p>Drag-to-reorder codec priority. Enable or disable individual codecs globally across all accounts. DTMF method: Auto (RFC2833 → in-band fallback), RFC2833, SIP INFO, or In-band.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">📋</div>
@@ -514,7 +524,29 @@
     <h2 class="section-title">What's new</h2>
 
     <div class="changelog-card">
-      <div class="changelog-version">Latest — Unreleased</div>
+      <div class="changelog-version">Unreleased</div>
+
+      <h3>Added</h3>
+      <ul>
+        <li>Microphone amplification toggle — disabled by default; enables 2× software gain on top of system mic level</li>
+        <li>Echo cancellation toggle — enabled by default; applies immediately without restart</li>
+        <li>DTMF method "Auto" — RFC2833 preferred, falls back to in-band if remote rejects it; now the default</li>
+        <li>BLF call pickup — Ringing contacts blink; double-click or use "Call Pickup" in the context menu to dial <code style="background:var(--surface);padding:.1rem .3rem;border-radius:4px;font-size:.8rem;">**ext</code> for directed pickup (Asterisk/FreeSWITCH compatible)</li>
+        <li>BLF presence per-contact domain — pick an account when adding/editing a contact to set the subscribe domain</li>
+        <li>Full BLF presence state set: Available, Busy, Ringing, Away, Offline, Error</li>
+        <li>Call quality indicator — green/amber/red dot during active calls based on MOS (jitter + packet loss); hover for raw metrics</li>
+        <li>Publish Presence (SIP PUBLISH) — per-account toggle so subscribed contacts can see your status via BLF; requires server support (Asterisk, FreeSWITCH, etc.)</li>
+      </ul>
+
+      <h3>Fixed</h3>
+      <ul>
+        <li>BLF presence notifications were silently dropped due to event name mismatch in Rust callback</li>
+        <li>BLF subscriptions now capture early presence state on PENDING as well as ACTIVE</li>
+      </ul>
+    </div>
+
+    <div class="changelog-card" style="margin-top:1.2rem;">
+      <div class="changelog-version" style="background:rgba(108,143,255,.1);border-color:rgba(108,143,255,.25);color:var(--primary);">Previous release</div>
 
       <h3>Fixed</h3>
       <ul>

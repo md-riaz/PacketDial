@@ -7,12 +7,14 @@ class AccountSetupState {
   final String? registrationError;
   final String transport;
   final bool srtpEnabled;
+  final bool publishPresence;
 
   const AccountSetupState({
     this.isRegistering = false,
     this.registrationError,
     this.transport = 'udp',
     this.srtpEnabled = false,
+    this.publishPresence = false,
   });
 
   AccountSetupState copyWith({
@@ -20,6 +22,7 @@ class AccountSetupState {
     String? registrationError,
     String? transport,
     bool? srtpEnabled,
+    bool? publishPresence,
     bool clearError = false,
   }) {
     return AccountSetupState(
@@ -28,6 +31,7 @@ class AccountSetupState {
           clearError ? null : (registrationError ?? this.registrationError),
       transport: transport ?? this.transport,
       srtpEnabled: srtpEnabled ?? this.srtpEnabled,
+      publishPresence: publishPresence ?? this.publishPresence,
     );
   }
 }
@@ -43,6 +47,7 @@ class AccountSetupNotifier extends AutoDisposeNotifier<AccountSetupState> {
       state = state.copyWith(
         transport: existing.transport,
         srtpEnabled: existing.srtpEnabled,
+        publishPresence: existing.publishPresence,
       );
     } else {
       state = const AccountSetupState(); // Reset
@@ -55,6 +60,10 @@ class AccountSetupNotifier extends AutoDisposeNotifier<AccountSetupState> {
 
   void setSrtpEnabled(bool enabled) {
     state = state.copyWith(srtpEnabled: enabled);
+  }
+
+  void setPublishPresence(bool enabled) {
+    state = state.copyWith(publishPresence: enabled);
   }
 
   void setRegistering(bool registering) {
@@ -127,6 +136,7 @@ class AccountSetupNotifier extends AutoDisposeNotifier<AccountSetupState> {
         turnServer: turnServer,
         tlsEnabled: state.transport == 'tls',
         srtpEnabled: state.srtpEnabled,
+        publishPresence: state.publishPresence,
         autoRegister: true,
         isSelected: existing?.isSelected ?? false,
       );

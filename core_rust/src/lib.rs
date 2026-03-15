@@ -155,6 +155,8 @@ struct Account {
     tls_enabled: bool,
     /// Require SRTP for media encryption.
     srtp_enabled: bool,
+    /// Send SIP PUBLISH to advertise own presence to the server.
+    publish_presence: bool,
     reg_state: RegistrationState,
     /// PJSIP account id assigned by pjsua_acc_add (None before registration).
     pjsip_acc_id: Option<i32>,
@@ -314,6 +316,7 @@ extern "C" {
         sip_proxy: *const c_char,
         use_tcp: i32,
         stun_server: *const c_char,
+        publish_presence: i32,
     ) -> i32;
     fn pd_acc_remove(acc_id: i32) -> i32;
     fn pd_call_make(acc_id: i32, dst_uri: *const c_char) -> i32;
@@ -369,6 +372,10 @@ extern "C" {
     fn pd_get_global_dtmf_method(method_out: *mut i32) -> i32;
     fn pd_set_global_auto_answer(enabled: i32, delay_ms: i32) -> i32;
     fn pd_get_global_auto_answer(enabled_out: *mut i32, delay_ms_out: *mut i32) -> i32;
+    fn pd_set_ec_enabled(enabled: i32) -> i32;
+    fn pd_get_ec_enabled(enabled_out: *mut i32) -> i32;
+    fn pd_set_mic_amplification(level: f32) -> i32;
+    fn pd_get_mic_amplification(level_out: *mut f32) -> i32;
     fn pd_aud_play_dtmf(digits: *const c_char) -> i32;
     /* Call Recording */
     fn pd_call_start_recording(call_id: i32, file_path: *const c_char) -> i32;
@@ -1240,6 +1247,8 @@ fn dispatch_command(cmd_type: &str, payload: &serde_json::Value) -> EngineErrorC
         "GetGlobalDtmfMethod" => cmd_get_global_dtmf_method(payload),
         "SetGlobalAutoAnswer" => cmd_set_global_auto_answer(payload),
         "GetGlobalAutoAnswer" => cmd_get_global_auto_answer(payload),
+        "SetEcEnabled" => cmd_set_ec_enabled(payload),
+        "SetMicAmplification" => cmd_set_mic_amplification(payload),
         "BlfSubscribe" => cmd_blf_subscribe(payload),
         "BlfUnsubscribe" => cmd_blf_unsubscribe(payload),
         "AudioListDevices" => cmd_audio_list_devices(payload),
@@ -1276,6 +1285,7 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
         existing.tls_enabled = p["tls_enabled"].as_bool().unwrap_or(existing.tls_enabled)
             || existing.transport.eq_ignore_ascii_case("tls");
         existing.srtp_enabled = p["srtp_enabled"].as_bool().unwrap_or(existing.srtp_enabled);
+        existing.publish_presence = p["publish_presence"].as_bool().unwrap_or(existing.publish_presence);
     } else {
         let acct = Account {
             uuid: uuid.clone(),
@@ -1296,6 +1306,7 @@ fn cmd_account_upsert(p: &serde_json::Value) -> EngineErrorCode {
                     .unwrap_or("udp")
                     .eq_ignore_ascii_case("tls"),
             srtp_enabled: p["srtp_enabled"].as_bool().unwrap_or(false),
+            publish_presence: p["publish_presence"].as_bool().unwrap_or(false),
             reg_state: RegistrationState::Unregistered,
             pjsip_acc_id: None,
         };
@@ -1474,6 +1485,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 sip_proxy.as_ptr(),
                 transport_id,
                 stun_server.as_ptr(),
+                if acct_snapshot.publish_presence { 1 } else { 0 },
             )
         };
 
@@ -3082,6 +3094,38 @@ fn cmd_get_global_auto_answer(_p: &serde_json::Value) -> EngineErrorCode {
             "enabled": enabled,
             "delay_ms": delay,
         }),
+    );
+    EngineErrorCode::Ok
+}
+
+fn cmd_set_ec_enabled(p: &serde_json::Value) -> EngineErrorCode {
+    let enabled = match p["enabled"].as_bool() {
+        Some(v) => v,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let rc = unsafe { pd_set_ec_enabled(if enabled { 1 } else { 0 }) };
+    if rc != 0 {
+        return EngineErrorCode::InternalError;
+    }
+    push_event(
+        "EcUpdated",
+        serde_json::json!({ "enabled": enabled }),
+    );
+    EngineErrorCode::Ok
+}
+
+fn cmd_set_mic_amplification(p: &serde_json::Value) -> EngineErrorCode {
+    let level = match p["level"].as_f64() {
+        Some(v) => v as f32,
+        None => return EngineErrorCode::InvalidJson,
+    };
+    let rc = unsafe { pd_set_mic_amplification(level) };
+    if rc != 0 {
+        return EngineErrorCode::InternalError;
+    }
+    push_event(
+        "MicAmplificationUpdated",
+        serde_json::json!({ "level": level }),
     );
     EngineErrorCode::Ok
 }

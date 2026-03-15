@@ -128,17 +128,19 @@ int pd_shutdown(void);
 /**
  * Add a SIP account and start registration.
  *
- * @param sip_uri       AOR: "sip:username@server" or "sips:username@server"
- * @param registrar     Registrar URI: "sip:server[:port]"
- * @param username      Authentication username
- * @param password      Authentication password
- * @param transport_id  Transport selection: 0=UDP, 1=TCP, 2=TLS, 3=UDP+TCP (auto)
+ * @param sip_uri           AOR: "sip:username@server" or "sips:username@server"
+ * @param registrar         Registrar URI: "sip:server[:port]"
+ * @param username          Authentication username
+ * @param password          Authentication password
+ * @param transport_id      Transport selection: 0=UDP, 1=TCP, 2=TLS, 3=UDP+TCP (auto)
+ * @param publish_presence  1 = send SIP PUBLISH to advertise own presence, 0 = disabled.
  * @return pjsua_acc_id (>= 0) on success, -1 on error.
  */
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
                const char *auth_username, const char *sip_proxy,
-               int transport_id, const char *stun_server);
+               int transport_id, const char *stun_server,
+               int publish_presence);
 
 /**
  * Remove a previously added account (triggers SIP unregistration).
@@ -343,7 +345,7 @@ int pd_acc_get_auto_answer(int acc_id, int *enabled_out, int *delay_ms_out);
 /**
  * Set DTMF transmission method for an account.
  * @param acc_id            pjsua_acc_id.
- * @param dtmf_method       Method: 0=In-band, 1=RFC2833, 2=SIP INFO.
+ * @param dtmf_method       Method: 0=In-band, 1=RFC2833, 2=SIP INFO, 3=Auto.
  * @return 0 on success, non-zero on error.
  */
 int pd_acc_set_dtmf_method(int acc_id, int dtmf_method);
@@ -384,7 +386,7 @@ int pd_get_global_codec_priority(char *json_buf, int json_len);
 
 /**
  * Set global DTMF transmission method (applies to all accounts).
- * @param dtmf_method       Method: 0=In-band, 1=RFC2833, 2=SIP INFO.
+ * @param dtmf_method       Method: 0=In-band, 1=RFC2833, 2=SIP INFO, 3=Auto.
  * @return 0 on success, non-zero on error.
  */
 int pd_set_global_dtmf_method(int dtmf_method);
@@ -411,6 +413,43 @@ int pd_set_global_auto_answer(int enabled, int delay_ms);
  * @return 0 on success, non-zero on error.
  */
 int pd_get_global_auto_answer(int *enabled_out, int *delay_ms_out);
+
+/* -----------------------------------------------------------------------
+ * Echo Cancellation
+ * ----------------------------------------------------------------------- */
+
+/**
+ * Enable or disable acoustic echo cancellation.
+ * @param enabled  1 to enable (200 ms tail), 0 to disable.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_set_ec_enabled(int enabled);
+
+/**
+ * Get current echo cancellation state.
+ * @param enabled_out  Receives 1 if enabled, 0 if disabled.
+ * @return 0 on success.
+ */
+int pd_get_ec_enabled(int *enabled_out);
+
+/* -----------------------------------------------------------------------
+ * Microphone Amplification
+ * ----------------------------------------------------------------------- */
+
+/**
+ * Set software microphone amplification level.
+ * Applied via pjsua_conf_adjust_tx_level on port 0 (sound device).
+ * @param level  Gain multiplier: 1.0 = no amplification, 2.0 = double, max 8.0.
+ * @return 0 on success, non-zero on error.
+ */
+int pd_set_mic_amplification(float level);
+
+/**
+ * Get current microphone amplification level.
+ * @param level_out  Receives current gain multiplier.
+ * @return 0 on success.
+ */
+int pd_get_mic_amplification(float *level_out);
 
 /* -----------------------------------------------------------------------
  * Audio device management

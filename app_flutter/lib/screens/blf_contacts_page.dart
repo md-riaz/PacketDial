@@ -5,7 +5,10 @@ import 'package:file_picker/file_picker.dart';
 
 import '../core/app_theme.dart';
 import '../core/contacts_service.dart';
+import '../core/engine_channel.dart';
+import '../models/account.dart';
 import '../providers/contacts_provider.dart';
+import '../core/account_service.dart';
 
 /// BLF Contacts management page.
 class BlfContactsPage extends ConsumerStatefulWidget {
@@ -267,9 +270,45 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
       itemBuilder: (context, index) {
         final contact = contacts[index];
         return _ContactTile(
-            contact: contact, onEdit: () => _showEditContactDialog(contact));
+            contact: contact,
+            onEdit: () => _showEditContactDialog(contact),
+            onPickup: contact.extension != null && contact.extension!.trim().isNotEmpty
+                ? () => _pickupContact(contact)
+                : null,
+        );
       },
     );
+  }
+
+  Future<void> _pickupContact(BlfContact contact) async {
+    final service = ref.read(accountServiceProvider);
+    AccountSchema? account;
+    final selected = service.getSelectedAccount();
+    if (selected != null &&
+        EngineChannel.instance.accounts[selected.uuid]?.registrationState ==
+            RegistrationState.registered) {
+      account = selected;
+    } else {
+      for (final a in service.getAllAccounts()) {
+        if (EngineChannel.instance.accounts[a.uuid]?.registrationState ==
+            RegistrationState.registered) {
+          account = a;
+          break;
+        }
+      }
+    }
+    if (account == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No registered account for pickup'),
+          backgroundColor: AppTheme.warningAmber,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      return;
+    }
+    final ext = contact.extension!.trim();
+    EngineChannel.instance.engine.makeCall(account.uuid, '**$ext');
   }
 
   void _showAddContactDialog() {
@@ -553,11 +592,55 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
   }
 }
 
-class _ContactTile extends StatelessWidget {
+class _ContactTile extends StatefulWidget {
   final BlfContact contact;
   final VoidCallback onEdit;
+  final VoidCallback? onPickup;
 
-  const _ContactTile({required this.contact, required this.onEdit});
+  const _ContactTile({required this.contact, required this.onEdit, this.onPickup});
+
+  @override
+  State<_ContactTile> createState() => _ContactTileState();
+}
+
+class _ContactTileState extends State<_ContactTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blinkCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _blinkCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _updateBlink();
+  }
+
+  @override
+  void didUpdateWidget(_ContactTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contact.presenceState != widget.contact.presenceState) {
+      _updateBlink();
+    }
+  }
+
+  void _updateBlink() {
+    if (widget.contact.presenceState == 'Ringing') {
+      _blinkCtrl.repeat(reverse: true);
+    } else {
+      _blinkCtrl.stop();
+      _blinkCtrl.value = 1.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _blinkCtrl.dispose();
+    super.dispose();
+  }
+
+  BlfContact get contact => widget.contact;
 
   Color get _presenceColor {
     switch (contact.presenceState) {
@@ -580,63 +663,97 @@ class _ContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: AppTheme.surfaceCard,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: _presenceColor.withValues(alpha: 0.2),
-          child: Icon(
-            Icons.person,
-            color: _presenceColor,
-            size: 20,
-          ),
-        ),
-        title: Text(
-          contact.name,
-          style: const TextStyle(
-              color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              contact.sipUri,
-              style: const TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 11,
-                fontFamily: 'monospace',
-              ),
+    final isRinging = contact.presenceState == 'Ringing';
+    return GestureDetector(
+      onDoubleTap: isRinging ? widget.onPickup : null,
+      child: Card(
+        color: AppTheme.surfaceCard,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          leading: AnimatedBuilder(
+            animation: _blinkCtrl,
+            builder: (_, child) => Opacity(
+              opacity: isRinging ? 0.4 + _blinkCtrl.value * 0.6 : 1.0,
+              child: child,
             ),
-            if (contact.extension != null) ...[
-              const SizedBox(height: 2),
+            child: CircleAvatar(
+              backgroundColor: _presenceColor.withValues(alpha: 0.2),
+              child: Icon(Icons.person, color: _presenceColor, size: 20),
+            ),
+          ),
+          title: Text(
+            contact.name,
+            style: const TextStyle(
+                color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
               Text(
-                'Ext: ${contact.extension}',
-                style: TextStyle(
-                  color: AppTheme.primary.withValues(alpha: 0.8),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-            if (contact.activity != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                contact.activity!,
+                contact.sipUri,
                 style: const TextStyle(
                   color: AppTheme.textTertiary,
-                  fontSize: 10,
-                  fontStyle: FontStyle.italic,
+                  fontSize: 11,
+                  fontFamily: 'monospace',
                 ),
               ),
+              if (contact.extension != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'Ext: ${contact.extension}',
+                  style: TextStyle(
+                    color: AppTheme.primary.withValues(alpha: 0.8),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+              if (contact.activity != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  contact.activity!,
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
+          trailing: PopupMenuButton<String>(
+            color: AppTheme.surfaceCard,
+            icon: const Icon(Icons.more_vert, color: AppTheme.textTertiary, size: 20),
+            onSelected: (value) {
+              if (value == 'pickup') widget.onPickup?.call();
+              if (value == 'edit') widget.onEdit();
+            },
+            itemBuilder: (context) {
+              final items = <PopupMenuEntry<String>>[];
+              if (isRinging) {
+                items.add(const PopupMenuItem(
+                  value: 'pickup',
+                  child: Row(children: [
+                    Icon(Icons.call_received, size: 18, color: AppTheme.warningAmber),
+                    SizedBox(width: 12),
+                    Text('Call Pickup', style: TextStyle(color: AppTheme.warningAmber)),
+                  ]),
+                ));
+                items.add(const PopupMenuDivider());
+              }
+              items.add(const PopupMenuItem(
+                value: 'edit',
+                child: Row(children: [
+                  Icon(Icons.edit_outlined, size: 18, color: AppTheme.textPrimary),
+                  SizedBox(width: 12),
+                  Text('Edit contact'),
+                ]),
+              ));
+              return items;
+            },
+          ),
+          onTap: widget.onEdit,
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.edit, color: AppTheme.textTertiary, size: 20),
-          onPressed: onEdit,
-        ),
-        onTap: onEdit,
       ),
     );
   }

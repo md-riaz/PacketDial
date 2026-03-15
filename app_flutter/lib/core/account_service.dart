@@ -313,6 +313,7 @@ class AccountService extends ChangeNotifier {
       'turn_server': schema.turnServer,
       'tls_enabled': schema.tlsEnabled,
       'srtp_enabled': schema.srtpEnabled,
+      'publish_presence': schema.publishPresence,
     };
 
     final safePayload = Map<String, dynamic>.from(payload);

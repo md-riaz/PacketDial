@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added
+- Publish Presence (SIP PUBLISH) — per-account toggle; when enabled the app sends SIP PUBLISH so subscribed contacts can see your status via BLF; requires server-side support (e.g. Asterisk `res_pjsip_publish_asterisk`, FreeSWITCH `mod_presence`)
+- Microphone amplification toggle — disabled by default; when enabled applies 2× software gain via `pjsua_conf_adjust_tx_level` on the conference bridge mic port
+- Echo cancellation toggle in app settings — enabled by default (200 ms tail); calls `pjsua_set_ec` at runtime so no restart needed
+- DTMF method "Auto" — uses RFC2833 by default, automatically falls back to in-band audio if the remote side rejects RFC2833; now the default setting (previously RFC2833)
+- BLF call pickup — when a contact is Ringing, its avatar blinks; double-click or use the "Call Pickup" context menu item to dial `**<extension>` (directed call pickup, compatible with Asterisk `Pickup()` and FreeSWITCH)
+- BLF presence per-contact domain selection — pick an account when adding/editing a contact to set the subscribe domain; domain is used for event matching, not account ID
+- Full BLF presence state set: Available, Busy, Ringing, Away, Offline, Error (previously only Unknown/Available/Busy)
+- Call quality indicator — a small green/amber/red dot shown during active calls, derived from an E-model MOS approximation using jitter and packet loss; hover for MOS score, jitter, and loss values
+
+### Fixed
+- BLF presence notifications were silently dropped — Rust callback fired `BlfStatus` but the event router expected `BlfStatusChanged`; renamed to match
+- BLF subscriptions now also fire on `PJSIP_EVSUB_STATE_PENDING` so early presence state is captured
+
+---
+
 ### Fixed
 - TLS transport now initialises correctly at startup — accounts configured with TLS no longer silently fall back to UDP
 - Webhook and CRM lookup URLs with leading/trailing whitespace no longer cause a `FormatException` on first use

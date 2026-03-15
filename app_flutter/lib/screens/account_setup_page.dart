@@ -279,6 +279,20 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                         activeThumbColor: AppTheme.primary,
                         contentPadding: EdgeInsets.zero,
                       ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        title: const Text('Publish Presence',
+                            style: TextStyle(color: AppTheme.textPrimary)),
+                        subtitle: const Text(
+                            'Send SIP PUBLISH so others can see your status via BLF',
+                            style: TextStyle(color: AppTheme.textTertiary)),
+                        value: state.publishPresence,
+                        onChanged: state.isRegistering
+                            ? null
+                            : (v) => notifier.setPublishPresence(v),
+                        activeThumbColor: AppTheme.primary,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                       const SizedBox(height: 24),
                     ],
                   ),

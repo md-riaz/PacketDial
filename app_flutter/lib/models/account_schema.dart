@@ -18,6 +18,7 @@ class AccountSchema {
   bool autoRegister;
   bool isSelected;
   bool isEnabled;
+  bool publishPresence;
 
   AccountSchema({
     required this.uuid,
@@ -37,6 +38,7 @@ class AccountSchema {
     this.autoRegister = true,
     this.isSelected = false,
     this.isEnabled = true,
+    this.publishPresence = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -59,6 +61,7 @@ class AccountSchema {
       'autoRegister': autoRegister,
       'isSelected': isSelected,
       'isEnabled': isEnabled,
+      'publishPresence': publishPresence,
     };
   }
 
@@ -87,6 +90,7 @@ class AccountSchema {
       autoRegister: json['autoRegister'] as bool? ?? true,
       isSelected: json['isSelected'] as bool? ?? false,
       isEnabled: json['isEnabled'] as bool? ?? true,
+      publishPresence: json['publishPresence'] as bool? ?? false,
     );
   }
 }

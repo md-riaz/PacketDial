@@ -16,7 +16,14 @@ class AppSettingsService {
   List<Map<String, dynamic>> _codecPriorities = [];
 
   // DTMF settings
-  int _dtmfMethod = 1; // 0=In-band, 1=RFC2833 (default), 2=SIP INFO
+  int _dtmfMethod = 3; // 0=In-band, 1=RFC2833, 2=SIP INFO, 3=Auto (default)
+
+  // Echo Cancellation
+  bool _ecEnabled = true; // Default: enabled
+
+  // Microphone Amplification
+  bool _micAmplificationEnabled = false; // Default: disabled (1.0x)
+  static const double _micAmplificationLevel = 2.0; // boost when enabled
 
   // Auto Answer settings
   bool _autoAnswerEnabled = false;
@@ -59,6 +66,9 @@ class AppSettingsService {
   List<Map<String, dynamic>> get codecPriorities =>
       List.unmodifiable(_codecPriorities);
   int get dtmfMethod => _dtmfMethod;
+  bool get ecEnabled => _ecEnabled;
+  bool get micAmplificationEnabled => _micAmplificationEnabled;
+  double get micAmplificationLevel => _micAmplificationEnabled ? _micAmplificationLevel : 1.0;
   bool get autoAnswerEnabled => _autoAnswerEnabled;
   bool get dndEnabled => _dndEnabled;
   bool get blfEnabled => _blfEnabled;
@@ -104,7 +114,9 @@ class AppSettingsService {
         _codecPriorities = List<Map<String, dynamic>>.from(
           data['codec_priorities'] as List? ?? [],
         );
-        _dtmfMethod = data['dtmf_method'] as int? ?? 1;
+        _dtmfMethod = data['dtmf_method'] as int? ?? 3;
+        _ecEnabled = data['ec_enabled'] as bool? ?? true;
+        _micAmplificationEnabled = data['mic_amplification_enabled'] as bool? ?? false;
         _autoAnswerEnabled = data['auto_answer_enabled'] as bool? ?? false;
         _dndEnabled = data['dnd_enabled'] as bool? ?? false;
         _blfEnabled = data['blf_enabled'] as bool? ?? true;
@@ -197,6 +209,8 @@ class AppSettingsService {
       final data = {
         'codec_priorities': _codecPriorities,
         'dtmf_method': _dtmfMethod,
+        'ec_enabled': _ecEnabled,
+        'mic_amplification_enabled': _micAmplificationEnabled,
         'auto_answer_enabled': _autoAnswerEnabled,
         'dnd_enabled': _dndEnabled,
         'blf_enabled': _blfEnabled,
@@ -235,6 +249,18 @@ class AppSettingsService {
   /// Update DTMF method.
   Future<void> setDtmfMethod(int method) async {
     _dtmfMethod = method;
+    await saveSettings();
+  }
+
+  /// Update echo cancellation.
+  Future<void> setEcEnabled(bool enabled) async {
+    _ecEnabled = enabled;
+    await saveSettings();
+  }
+
+  /// Update microphone amplification.
+  Future<void> setMicAmplificationEnabled(bool enabled) async {
+    _micAmplificationEnabled = enabled;
     await saveSettings();
   }
 

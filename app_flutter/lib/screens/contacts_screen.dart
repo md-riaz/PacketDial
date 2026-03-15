@@ -290,6 +290,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   contact.extension!.trim().isNotEmpty
               ? () => _callContact(contact, useExtension: true)
               : null,
+          onPickup: contact.extension != null && contact.extension!.trim().isNotEmpty
+              ? () => _pickupContact(contact)
+              : null,
           onEdit: () => _showEditContactDialog(contact),
           onDelete: () => _confirmDeleteContact(contact),
         );
@@ -395,6 +398,24 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
         ),
       );
     });
+  }
+
+  Future<void> _pickupContact(BlfContact contact) async {
+    final account = _resolveBlfAccount();
+    if (account == null) {
+      _showFeedback('No registered account to pick up call.', color: AppTheme.warningAmber);
+      return;
+    }
+    final ext = contact.extension?.trim() ?? '';
+    if (ext.isEmpty) {
+      _showFeedback('Contact has no extension for pickup.', color: AppTheme.warningAmber);
+      return;
+    }
+    final pickupTarget = '**$ext';
+    final rc = EngineChannel.instance.engine.makeCall(account.uuid, pickupTarget);
+    if (rc != 0) {
+      _showFeedback('Pickup failed (rc=$rc)', color: AppTheme.errorRed);
+    }
   }
 
   Future<void> _callContact(BlfContact contact, {bool useExtension = false}) async {
@@ -669,10 +690,11 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 }
 
-class _ContactTile extends StatelessWidget {
+class _ContactTile extends StatefulWidget {
   final BlfContact contact;
   final VoidCallback onCallPrimary;
   final VoidCallback? onCallExtension;
+  final VoidCallback? onPickup;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -680,9 +702,53 @@ class _ContactTile extends StatelessWidget {
     required this.contact,
     required this.onCallPrimary,
     required this.onCallExtension,
+    this.onPickup,
     required this.onEdit,
     required this.onDelete,
   });
+
+  @override
+  State<_ContactTile> createState() => _ContactTileState();
+}
+
+class _ContactTileState extends State<_ContactTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _blinkCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _blinkCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _updateBlink();
+  }
+
+  @override
+  void didUpdateWidget(_ContactTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.contact.presenceState != widget.contact.presenceState) {
+      _updateBlink();
+    }
+  }
+
+  void _updateBlink() {
+    if (widget.contact.presenceState == 'Ringing') {
+      _blinkCtrl.repeat(reverse: true);
+    } else {
+      _blinkCtrl.stop();
+      _blinkCtrl.value = 1.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _blinkCtrl.dispose();
+    super.dispose();
+  }
+
+  BlfContact get contact => widget.contact;
 
   Color get _presenceColor {
     switch (contact.presenceState) {
@@ -724,7 +790,10 @@ class _ContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final isRinging = contact.presenceState == 'Ringing';
+    return GestureDetector(
+      onDoubleTap: isRinging ? widget.onPickup : null,
+      child: Card(
       color: AppTheme.surfaceCard,
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -735,13 +804,20 @@ class _ContactTile extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: _presenceColor.withValues(alpha: 0.16),
-                child: Icon(
-                  Icons.person,
-                  color: _presenceColor,
-                  size: 20,
+              AnimatedBuilder(
+                animation: _blinkCtrl,
+                builder: (_, child) => Opacity(
+                  opacity: isRinging ? 0.4 + _blinkCtrl.value * 0.6 : 1.0,
+                  child: child,
+                ),
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: _presenceColor.withValues(alpha: 0.16),
+                  child: Icon(
+                    Icons.person,
+                    color: _presenceColor,
+                    size: 20,
+                  ),
                 ),
               ),
               Positioned(
@@ -841,17 +917,20 @@ class _ContactTile extends StatelessWidget {
               icon: const Icon(Icons.more_vert, color: AppTheme.textTertiary),
               onSelected: (value) {
                 switch (value) {
+                  case 'pickup':
+                    widget.onPickup?.call();
+                    break;
                   case 'call_extension':
-                    onCallExtension?.call();
+                    widget.onCallExtension?.call();
                     break;
                   case 'call_primary':
-                    onCallPrimary();
+                    widget.onCallPrimary();
                     break;
                   case 'edit':
-                    onEdit();
+                    widget.onEdit();
                     break;
                   case 'delete':
-                    onDelete();
+                    widget.onDelete();
                     break;
                 }
               },
@@ -859,6 +938,24 @@ class _ContactTile extends StatelessWidget {
                 final items = <PopupMenuEntry<String>>[];
                 final extension = contact.extension?.trim() ?? '';
                 final sipTarget = contact.sipUri.trim();
+
+                if (contact.presenceState == 'Ringing') {
+                  items.add(
+                    const PopupMenuItem(
+                      value: 'pickup',
+                      child: Row(
+                        children: [
+                          Icon(Icons.call_received,
+                              size: 18, color: AppTheme.warningAmber),
+                          SizedBox(width: 12),
+                          Text('Call Pickup',
+                              style: TextStyle(color: AppTheme.warningAmber)),
+                        ],
+                      ),
+                    ),
+                  );
+                  items.add(const PopupMenuDivider());
+                }
 
                 if (extension.isNotEmpty) {
                   items.add(
@@ -931,6 +1028,7 @@ class _ContactTile extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

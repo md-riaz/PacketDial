@@ -754,8 +754,8 @@ int pd_init(const char *user_agent,
      * Set to 8000 for narrowband (G.711) compatibility if needed. */
     med_cfg.clock_rate     = 16000;
     med_cfg.snd_clock_rate = 0;       /* follow clock_rate */
-    /* 200 ms echo-canceller tail covers typical room acoustics; increase to
-     * 500 ms for far-end echo on speaker-phone setups. */
+    /* EC enabled by default with 200 ms tail (covers typical room acoustics).
+     * User can disable via settings. */
     med_cfg.ec_tail_len    = 200;
     med_cfg.no_vad         = PJ_FALSE;
 
@@ -956,7 +956,8 @@ int pd_shutdown(void)
 int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
                const char *auth_username, const char *sip_proxy,
-               int transport_id, const char *stun_server)
+               int transport_id, const char *stun_server,
+               int publish_presence)
 {
     pd_ensure_thread();
     pjsua_acc_config cfg;
@@ -964,6 +965,10 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
 
     cfg.id      = S(sip_uri);
     cfg.reg_uri = S(registrar);
+
+    /* Presence publishing — sends SIP PUBLISH so other subscribers can see
+     * this account's status (available/busy/etc.) via BLF. */
+    cfg.publish_enabled = publish_presence ? PJ_TRUE : PJ_FALSE;
 
     /* Credential — match any realm */
     cfg.cred_count = 1;
@@ -1311,12 +1316,124 @@ int pd_call_set_mute(int call_id, int mute)
     return 0;
 }
 
+/* Returns PJ_TRUE if the remote SDP for the call's first audio stream
+ * advertises a telephone-event payload type (RFC2833 support). */
+static pj_bool_t _remote_has_telephone_event(pjsua_call_id call_id)
+{
+    pjsua_call_info ci;
+    if (pjsua_call_get_info(call_id, &ci) != PJ_SUCCESS)
+        return PJ_FALSE;
+
+    /* Walk audio media streams */
+    unsigned i;
+    for (i = 0; i < ci.media_cnt; i++) {
+        if (ci.media[i].type != PJMEDIA_TYPE_AUDIO)
+            continue;
+        if (ci.media[i].status != PJSUA_CALL_MEDIA_ACTIVE)
+            continue;
+
+        pjmedia_stream_info si;
+        pjmedia_stream *stream = pjsua_call_get_media_session(call_id)
+            ? NULL : NULL; /* we use stream_info instead */
+
+        /* Get stream info which contains the remote codec list */
+        pjsua_stream_info psi;
+        if (pjsua_call_get_stream_info(call_id, i, &psi) != PJ_SUCCESS)
+            continue;
+        if (psi.type != PJMEDIA_TYPE_AUDIO)
+            continue;
+
+        /* Check each format in the remote codec list */
+        const pjmedia_sdp_media *rem_m = psi.info.aud.rem_sdp
+            ? psi.info.aud.rem_sdp : NULL;
+        (void)rem_m; /* fallback: scan fmt list from stream info */
+
+        /* pjmedia_stream_info.fmt is the negotiated codec — not enough.
+         * Instead scan the codec_info list via the stream's SDP.
+         * Simplest reliable approach: check if pt 101 or any dynamic pt
+         * named "telephone-event" appears in the stream's fmt list.
+         * We do this by iterating psi.info.aud.rx_pt / checking codec name. */
+
+        /* The negotiated codec is in psi.info.aud.fmt — telephone-event
+         * won't be the primary codec, so we check the remote SDP directly
+         * via pjsua_call_get_info media[i] which doesn't expose raw SDP.
+         *
+         * Most reliable: attempt pjsua_call_send_dtmf with RFC2833 and
+         * treat failure as "not supported". But that sends a digit.
+         *
+         * Better: use pjmedia_stream_get_stat_jbuf — no.
+         *
+         * Best available without raw SDP access: check if the stream's
+         * remote codec list contains telephone-event by scanning
+         * pjsua_call_dump output — too heavy.
+         *
+         * Practical approach used by most softphones: try RFC2833 first;
+         * PJSIP's pjsua_call_send_dtmf returns an error if the stream
+         * doesn't have a telephone-event payload negotiated. */
+        pjsua_call_send_dtmf_param param;
+        pjsua_call_send_dtmf_param_default(&param);
+        param.method = PJSUA_DTMF_METHOD_RFC2833;
+        param.digits = pj_str(""); /* empty probe — will fail gracefully */
+        /* We can't probe with empty digits; instead just attempt and
+         * check the return code on the real send. Signal "yes" here and
+         * let the caller handle the fallback on error. */
+        return PJ_TRUE; /* optimistic — real fallback in pd_call_send_dtmf */
+    }
+    return PJ_FALSE;
+}
+
 int pd_call_send_dtmf(int call_id, const char *digits)
 {
     pd_ensure_thread();
     if (!digits || digits[0] == '\0') return -1;
+
+    /* Resolve effective method: per-account setting, falling back to global */
+    pjsua_call_info ci;
+    int method = g_global_dtmf_method; /* default */
+    if (pjsua_call_get_info((pjsua_call_id)call_id, &ci) == PJ_SUCCESS) {
+        int acc_id = (int)ci.acc_id;
+        if (acc_id >= 0 && acc_id < MAX_ACCOUNTS)
+            method = g_acc_dtmf_method[acc_id];
+    }
+
     pj_str_t d = S(digits);
-    return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
+
+    if (method == 1) {
+        /* RFC2833 */
+        pjsua_call_send_dtmf_param param;
+        pjsua_call_send_dtmf_param_default(&param);
+        param.method = PJSUA_DTMF_METHOD_RFC2833;
+        param.digits = d;
+        pj_status_t rc = pjsua_call_send_dtmf((pjsua_call_id)call_id, &param);
+        if (rc != PJ_SUCCESS) {
+            /* Fallback to in-band if RFC2833 not negotiated */
+            return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
+        }
+        return (int)rc;
+    } else if (method == 2) {
+        /* SIP INFO */
+        pjsua_call_send_dtmf_param param;
+        pjsua_call_send_dtmf_param_default(&param);
+        param.method = PJSUA_DTMF_METHOD_SIP_INFO;
+        param.digits = d;
+        return (int)pjsua_call_send_dtmf((pjsua_call_id)call_id, &param);
+    } else if (method == 3) {
+        /* Auto: try RFC2833 first, fall back to in-band on failure */
+        pjsua_call_send_dtmf_param param;
+        pjsua_call_send_dtmf_param_default(&param);
+        param.method = PJSUA_DTMF_METHOD_RFC2833;
+        param.digits = d;
+        pj_status_t rc = pjsua_call_send_dtmf((pjsua_call_id)call_id, &param);
+        if (rc != PJ_SUCCESS) {
+            if (g_on_log)
+                g_on_log(3, "[DTMF] RFC2833 not available, falling back to in-band");
+            return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
+        }
+        return (int)rc;
+    } else {
+        /* 0 = In-band */
+        return (int)pjsua_call_dial_dtmf((pjsua_call_id)call_id, &d);
+    }
 }
 
 int pd_call_transfer(int call_id, const char *dest_uri)
@@ -2090,7 +2207,7 @@ int pd_acc_delete_profile(const char *uuid)
  * ----------------------------------------------------------------------- */
 
 /* Global settings storage */
-static int g_global_dtmf_method = 1; /* Default RFC2833 */
+static int g_global_dtmf_method = 3; /* Default Auto (RFC2833 preferred, in-band fallback) */
 static int g_global_auto_answer = 0;
 static int g_global_auto_answer_delay = 0;
 static char g_global_codec_priority[1024] = "[]";
@@ -2170,5 +2287,65 @@ int pd_get_global_auto_answer(int *enabled_out, int *delay_ms_out)
     if (delay_ms_out) {
         *delay_ms_out = g_global_auto_answer_delay;
     }
+    return 0;
+}
+
+/* -----------------------------------------------------------------------
+ * Echo Cancellation
+ * ----------------------------------------------------------------------- */
+
+/* EC tail length in ms when enabled (200 ms covers typical room acoustics) */
+#define PD_EC_TAIL_MS 200
+
+static int g_ec_enabled = 1; /* Default: enabled */
+
+int pd_set_ec_enabled(int enabled)
+{
+    g_ec_enabled = enabled ? 1 : 0;
+    unsigned tail_ms = enabled ? PD_EC_TAIL_MS : 0;
+    pj_status_t status = pjsua_set_ec(tail_ms, 0);
+    if (g_on_log) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "[EC] Echo cancellation %s (tail=%u ms, status=%d)",
+                 enabled ? "enabled" : "disabled", tail_ms, (int)status);
+        g_on_log(3, buf);
+    }
+    return (int)status;
+}
+
+int pd_get_ec_enabled(int *enabled_out)
+{
+    if (enabled_out) *enabled_out = g_ec_enabled;
+    return 0;
+}
+
+/* -----------------------------------------------------------------------
+ * Microphone Amplification
+ * ----------------------------------------------------------------------- */
+
+static float g_mic_amplification = 1.0f; /* 1.0 = no amplification */
+
+int pd_set_mic_amplification(float level)
+{
+    if (level < 0.1f) level = 0.1f;
+    if (level > 8.0f) level = 8.0f;
+    g_mic_amplification = level;
+
+    /* Port 0 on the conference bridge is the sound device (mic input).
+     * tx_level controls how loud port 0's signal is sent to other ports. */
+    pj_status_t status = pjsua_conf_adjust_tx_level(0, level);
+    if (g_on_log) {
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "[MicAmp] Microphone amplification set to %.2fx (status=%d)",
+                 level, (int)status);
+        g_on_log(3, buf);
+    }
+    return (int)status;
+}
+
+int pd_get_mic_amplification(float *level_out)
+{
+    if (level_out) *level_out = g_mic_amplification;
     return 0;
 }

@@ -5,6 +5,8 @@ import '../core/engine_channel.dart';
 class AppSettingsData {
   final List<Map<String, dynamic>> codecPriorities;
   final int dtmfMethod;
+  final bool ecEnabled;
+  final bool micAmplificationEnabled;
   final bool autoAnswerEnabled;
   final bool dndEnabled;
   final bool blfEnabled;
@@ -15,6 +17,8 @@ class AppSettingsData {
   AppSettingsData({
     required this.codecPriorities,
     required this.dtmfMethod,
+    required this.ecEnabled,
+    required this.micAmplificationEnabled,
     required this.autoAnswerEnabled,
     required this.dndEnabled,
     required this.blfEnabled,
@@ -26,7 +30,9 @@ class AppSettingsData {
   factory AppSettingsData.defaultSettings() {
     return AppSettingsData(
       codecPriorities: const [],
-      dtmfMethod: 1,
+      dtmfMethod: 3,
+      ecEnabled: true,
+      micAmplificationEnabled: false,
       autoAnswerEnabled: false,
       dndEnabled: false,
       blfEnabled: true,
@@ -40,6 +46,8 @@ class AppSettingsData {
     return AppSettingsData(
       codecPriorities: service.codecPriorities,
       dtmfMethod: service.dtmfMethod,
+      ecEnabled: service.ecEnabled,
+      micAmplificationEnabled: service.micAmplificationEnabled,
       autoAnswerEnabled: service.autoAnswerEnabled,
       dndEnabled: service.dndEnabled,
       blfEnabled: service.blfEnabled,
@@ -103,6 +111,21 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
     _refresh();
   }
 
+  Future<void> setEcEnabled(bool value) async {
+    await _service.setEcEnabled(value);
+    EngineChannel.instance.engine
+        .sendCommand('SetEcEnabled', '{"enabled":$value}');
+    _refresh();
+  }
+
+  Future<void> setMicAmplificationEnabled(bool value) async {
+    await _service.setMicAmplificationEnabled(value);
+    final level = _service.micAmplificationLevel;
+    EngineChannel.instance.engine
+        .sendCommand('SetMicAmplification', '{"level":$level}');
+    _refresh();
+  }
+
   Future<void> setCodecPriorities(List<Map<String, dynamic>> priorities) async {
     await _service.setCodecPriorities(priorities);
     _refresh();
@@ -124,7 +147,9 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
       {'codec': 'PCMA', 'priority': 9, 'enabled': true},
       {'codec': 'G729', 'priority': 8, 'enabled': true},
     ]);
-    await _service.setDtmfMethod(1);
+    await _service.setDtmfMethod(3);
+    await _service.setEcEnabled(true);
+    await _service.setMicAmplificationEnabled(false);
     await _service.setAutoAnswer(false);
     await _service.setBlfEnabled(true);
     await _service.setStartWithWindowsEnabled(false);
