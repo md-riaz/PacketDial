@@ -8,8 +8,6 @@ import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
-import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:flutter/services.dart';
 import 'dart:io';
 import 'core/app_theme.dart';
 import 'core/sip_uri_utils.dart';
@@ -30,8 +28,6 @@ import 'screens/history_screen.dart';
 import 'screens/app_settings_page.dart';
 import 'screens/incoming_call_banner.dart';
 import 'core/cli_service.dart';
-import 'core/clipboard_service.dart';
-import 'widgets/clipboard_popup.dart';
 import 'core/tray_controller.dart';
 
 const String _startupLaunchArg = '--startup-launch';
@@ -122,26 +118,6 @@ void main(List<String> args) async {
   final container = ProviderContainer();
   final accountService = container.read(accountServiceProvider);
   await accountService.init();
-
-  // Register Global Hotkey (Alt + D) to dial from clipboard
-  HotKey dialHotkey = HotKey(
-    key: PhysicalKeyboardKey.keyD,
-    modifiers: [HotKeyModifier.alt],
-    scope: HotKeyScope.system,
-  );
-  await hotKeyManager.register(
-    dialHotkey,
-    keyDownHandler: (hotKey) async {
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      final number = clipboardData?.text?.trim() ?? '';
-      if (number.isNotEmpty) {
-        // Show window and trigger dialer (simplified for now)
-        await TrayController.instance.showWindow();
-        // In a real app, we'd navigate to Dialer and pre-fill or auto-call
-        log("Hotkey triggered: Dialing $number from clipboard");
-      }
-    },
-  );
 
   // Pre-process protocol URIs (tel:, sip:, callto:)
   final processedArgs = <String>[
@@ -272,17 +248,6 @@ class _AppState extends ConsumerState<App>
           }
         });
 
-        // Initialize clipboard monitoring
-        ClipboardService.instance.init();
-
-        // Listen for clipboard phone number detections
-        _clipboardSub =
-            ClipboardService.instance.onPhoneDetected.listen((number) {
-          if (mounted) {
-            ClipboardPopupOverlay.show(context, number);
-          }
-        });
-
         // Handle CLI arguments
         CliService.instance.handleArgs(widget.args);
       }
@@ -295,7 +260,6 @@ class _AppState extends ConsumerState<App>
   }
 
   StreamSubscription? _regFailureSub;
-  StreamSubscription? _clipboardSub;
 
   Future<void> _handleIncomingWindowBehavior(Map<String, dynamic> event) async {
     final type = event['type'] as String? ?? '';
@@ -450,9 +414,7 @@ class _AppState extends ConsumerState<App>
   void dispose() {
     windowManager.removeListener(this);
     _regFailureSub?.cancel();
-    _clipboardSub?.cancel();
     _splashCtrl.dispose();
-    ClipboardService.instance.dispose();
     EngineChannel.instance.dispose();
     super.dispose();
   }

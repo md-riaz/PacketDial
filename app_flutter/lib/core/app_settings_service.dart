@@ -47,10 +47,6 @@ class AppSettingsService {
   bool _screenPopOpenBrowser = true;
   bool _screenPopSuppressWindow = false;
 
-  // Integration settings - Clipboard
-  bool _clipboardMonitoringEnabled = false;
-  int _clipboardPollIntervalMs = 500;
-
   // Integration settings - Recording Upload
   bool _localCallRecordingEnabled = false;
   String _localRecordingDirectory = '';
@@ -92,10 +88,6 @@ class AppSettingsService {
   String get screenPopEvent => _screenPopEvent;
   bool get screenPopOpenBrowser => _screenPopOpenBrowser;
   bool get screenPopSuppressWindow => _screenPopSuppressWindow;
-
-  // Getters - Clipboard
-  bool get clipboardMonitoringEnabled => _clipboardMonitoringEnabled;
-  int get clipboardPollIntervalMs => _clipboardPollIntervalMs;
 
   // Getters - Recording Upload
   bool get localCallRecordingEnabled => _localCallRecordingEnabled;
@@ -150,10 +142,6 @@ class AppSettingsService {
             data['screen_pop_open_browser'] as bool? ?? true;
         _screenPopSuppressWindow =
             data['screen_pop_suppress_window'] as bool? ?? false;
-        _clipboardMonitoringEnabled =
-            data['clipboard_monitoring_enabled'] as bool? ?? false;
-        _clipboardPollIntervalMs =
-            data['clipboard_poll_interval_ms'] as int? ?? 500;
         _localCallRecordingEnabled =
             data['local_call_recording_enabled'] as bool? ?? false;
         _localRecordingDirectory =
@@ -253,8 +241,6 @@ class AppSettingsService {
         'screen_pop_event': _screenPopEvent,
         'screen_pop_open_browser': _screenPopOpenBrowser,
         'screen_pop_suppress_window': _screenPopSuppressWindow,
-        'clipboard_monitoring_enabled': _clipboardMonitoringEnabled,
-        'clipboard_poll_interval_ms': _clipboardPollIntervalMs,
         'local_call_recording_enabled': _localCallRecordingEnabled,
         'local_recording_directory': _localRecordingDirectory,
         'local_recording_format': _localRecordingFormat,
@@ -360,16 +346,6 @@ class AppSettingsService {
 
   Future<void> setScreenPopSuppressWindow(bool suppress) async {
     _screenPopSuppressWindow = suppress;
-    await saveSettings();
-  }
-
-  Future<void> setClipboardMonitoringEnabled(bool enabled) async {
-    _clipboardMonitoringEnabled = enabled;
-    await saveSettings();
-  }
-
-  Future<void> setClipboardPollIntervalMs(int ms) async {
-    _clipboardPollIntervalMs = ms;
     await saveSettings();
   }
 

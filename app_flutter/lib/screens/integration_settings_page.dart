@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/app_settings_service.dart';
-import '../core/clipboard_service.dart';
 import '../core/customer_lookup_service.dart';
 import '../core/recording_service.dart';
 import '../models/dialing_rule.dart';
@@ -40,13 +39,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   final _recordingUploadUrlController = TextEditingController();
   final _recordingFieldNameController = TextEditingController();
 
-  // Controllers for clipboard
-  final _clipboardIntervalController = TextEditingController();
-
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadSettings();
   }
 
@@ -66,8 +62,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     _localRecordingDirController.text = recordingDir;
     _recordingUploadUrlController.text = _settings.recordingUploadUrl;
     _recordingFieldNameController.text = _settings.recordingFileFieldName;
-    _clipboardIntervalController.text =
-        (_settings.clipboardPollIntervalMs / 1000).toString();
     if (mounted) {
       setState(() {});
     }
@@ -84,7 +78,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     _localRecordingDirController.dispose();
     _recordingUploadUrlController.dispose();
     _recordingFieldNameController.dispose();
-    _clipboardIntervalController.dispose();
     super.dispose();
   }
 
@@ -107,7 +100,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             Tab(icon: Icon(Icons.person_search), text: 'CRM Lookup'),
             Tab(icon: Icon(Icons.open_in_browser), text: 'Screen Pop'),
             Tab(icon: Icon(Icons.mic), text: 'Recording'),
-            Tab(icon: Icon(Icons.content_paste), text: 'Clipboard'),
             Tab(icon: Icon(Icons.rule), text: 'Dialing Rules'),
           ],
         ),
@@ -119,7 +111,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           _buildCrmLookupTab(),
           _buildScreenPopTab(),
           _buildRecordingTab(),
-          _buildClipboardTab(),
           _buildDialingRulesTab(),
         ],
       ),
@@ -440,56 +431,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               .setRecordingUploadUrl(_recordingUploadUrlController.text);
           await _settings
               .setRecordingFileFieldName(_recordingFieldNameController.text);
-          _showSavedSnackbar();
-        }),
-      ],
-    );
-  }
-
-  Widget _buildClipboardTab() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const SectionTitle('Clipboard Monitoring'),
-        const SizedBox(height: 8),
-        const InfoBanner(
-          icon: Icons.content_paste_search,
-          text:
-              'Automatically detect phone numbers copied to clipboard. A popup will appear to confirm dialing.',
-        ),
-        const SizedBox(height: 24),
-        SwitchListTile(
-          title: const Text('Enable Clipboard Monitoring',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Watch clipboard for phone numbers',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
-          value: _settings.clipboardMonitoringEnabled,
-          activeThumbColor: AppTheme.primary,
-          contentPadding: EdgeInsets.zero,
-          onChanged: (value) async {
-            await _settings.setClipboardMonitoringEnabled(value);
-            if (value) {
-              ClipboardService.instance.startMonitoring();
-            } else {
-              ClipboardService.instance.stopMonitoring();
-            }
-            setState(() {});
-          },
-        ),
-        const SizedBox(height: 18),
-        _buildField(
-          controller: _clipboardIntervalController,
-          label: 'Polling Interval (seconds)',
-          hint: '1',
-          icon: Icons.timer_outlined,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        ),
-        const SizedBox(height: 24),
-        _buildSaveButton(() async {
-          final intervalSec =
-              int.tryParse(_clipboardIntervalController.text) ?? 1;
-          await _settings.setClipboardPollIntervalMs(intervalSec * 1000);
           _showSavedSnackbar();
         }),
       ],

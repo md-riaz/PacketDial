@@ -10,7 +10,6 @@ import '../widgets/setting_card.dart';
 
 import '../widgets/info_banner.dart';
 import '../core/app_settings_service.dart';
-import '../core/clipboard_service.dart';
 import '../core/recording_service.dart';
 
 import 'diagnostics_screen.dart';
@@ -789,7 +788,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   const SizedBox(height: 8),
                   const Text(
                     'Configure webhooks, CRM customer lookup, screen pop, '
-                    'recording upload, clipboard monitoring, and dialing rules.',
+                    'recording upload, and dialing rules.',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
@@ -822,31 +821,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           ),
 
           const SizedBox(height: 24),
-
-          // Quick toggles
-          const SectionTitle('Quick Toggles'),
-          const SizedBox(height: 16),
-
-          // Clipboard monitoring quick toggle
-          SettingCard(
-            icon: Icons.content_paste_search,
-            title: 'Clipboard Monitoring',
-            subtitle: 'Detect phone numbers in clipboard and offer to dial.',
-            trailing: Switch(
-              value: AppSettingsService.instance.clipboardMonitoringEnabled,
-              onChanged: (value) async {
-                await AppSettingsService.instance
-                    .setClipboardMonitoringEnabled(value);
-                if (value) {
-                  ClipboardService.instance.startMonitoring();
-                } else {
-                  ClipboardService.instance.stopMonitoring();
-                }
-                setState(() {});
-              },
-              activeThumbColor: AppTheme.primary,
-            ),
-          ),
         ],
       ),
     );
