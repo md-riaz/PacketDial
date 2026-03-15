@@ -139,11 +139,18 @@ class IntegrationService {
         extid: extid,
         didNumber: didNumber,
       );
-      debugPrint('[IntegrationService] Triggering Ring Webhook: $url');
+      debugPrint('[Webhook] Ring  → ${url.trim()}');
       try {
-        await _client.get(Uri.parse(url));
+        final sw = Stopwatch()..start();
+        final response = await _client.get(Uri.parse(url.trim()));
+        sw.stop();
+        final ok = response.statusCode >= 200 && response.statusCode < 300;
+        debugPrint(
+          '[Webhook] Ring  ${ok ? "OK" : "FAIL"} '
+          '${response.statusCode} (${sw.elapsedMilliseconds}ms)',
+        );
       } catch (e) {
-        debugPrint('[IntegrationService] Ring Webhook Error: $e');
+        debugPrint('[Webhook] Ring  ERROR $e');
       }
     }
 
@@ -185,11 +192,18 @@ class IntegrationService {
         call,
         recordingPath: recordingPath,
       );
-      debugPrint('[IntegrationService] Triggering End Webhook: $url');
+      debugPrint('[Webhook] End   → ${url.trim()}');
       try {
-        await _client.get(Uri.parse(url));
+        final sw = Stopwatch()..start();
+        final response = await _client.get(Uri.parse(url.trim()));
+        sw.stop();
+        final ok = response.statusCode >= 200 && response.statusCode < 300;
+        debugPrint(
+          '[Webhook] End   ${ok ? "OK" : "FAIL"} '
+          '${response.statusCode} (${sw.elapsedMilliseconds}ms)',
+        );
       } catch (e) {
-        debugPrint('[IntegrationService] End Webhook Error: $e');
+        debugPrint('[Webhook] End   ERROR $e');
       }
     }
 
@@ -205,7 +219,8 @@ class IntegrationService {
   Future<void> _uploadRecording(
       String url, String path, ActiveCall call) async {
     final fieldName = AppSettingsService.instance.recordingFileFieldName;
-    debugPrint('[IntegrationService] Uploading recording to $url');
+    final filename = Uri.parse(path).pathSegments.last;
+    debugPrint('[Recording] Upload → ${url.trim()}  file=$filename');
 
     try {
       final request = http.MultipartRequest('POST', Uri.parse(url));
@@ -223,15 +238,16 @@ class IntegrationService {
         request.fields['company'] = _lastCustomerData!.company;
       }
 
+      final sw = Stopwatch()..start();
       final response = await request.send();
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        debugPrint('[IntegrationService] Recording upload successful');
-      } else {
-        debugPrint(
-            '[IntegrationService] Recording upload failed: ${response.statusCode}');
-      }
+      sw.stop();
+      final ok = response.statusCode >= 200 && response.statusCode < 300;
+      debugPrint(
+        '[Recording] Upload ${ok ? "OK" : "FAIL"} '
+        '${response.statusCode} (${sw.elapsedMilliseconds}ms)',
+      );
     } catch (e) {
-      debugPrint('[IntegrationService] Recording upload error: $e');
+      debugPrint('[Recording] Upload ERROR $e');
     }
   }
 

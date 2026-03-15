@@ -125,18 +125,18 @@ class AppSettingsService {
         _blfEnabled = data['blf_enabled'] as bool? ?? true;
         _startWithWindowsEnabled =
             data['start_with_windows_enabled'] as bool? ?? true;
-        _ringWebhookUrl = data['ring_webhook_url'] as String? ?? '';
+        _ringWebhookUrl = (data['ring_webhook_url'] as String? ?? '').trim();
         _ringWebhookEnabled =
             data['ring_webhook_enabled'] as bool? ?? _ringWebhookUrl.isNotEmpty;
-        _endWebhookUrl = data['end_webhook_url'] as String? ?? '';
+        _endWebhookUrl = (data['end_webhook_url'] as String? ?? '').trim();
         _callEndWebhookEnabled =
             data['call_end_webhook_enabled'] as bool? ?? true;
-        _customerLookupUrl = data['customer_lookup_url'] as String? ?? '';
+        _customerLookupUrl = (data['customer_lookup_url'] as String? ?? '').trim();
         _customerLookupTimeoutMs =
             data['customer_lookup_timeout_ms'] as int? ?? 5000;
         _customerLookupEnabled =
             data['customer_lookup_enabled'] as bool? ?? false;
-        _screenPopUrl = data['screen_pop_url'] as String? ?? '';
+        _screenPopUrl = (data['screen_pop_url'] as String? ?? '').trim();
         _screenPopEvent = data['screen_pop_event'] as String? ?? 'ring';
         _screenPopOpenBrowser =
             data['screen_pop_open_browser'] as bool? ?? true;
@@ -295,7 +295,7 @@ class AppSettingsService {
   }
 
   Future<void> setRingWebhookUrl(String url) async {
-    _ringWebhookUrl = url;
+    _ringWebhookUrl = url.trim();
     await saveSettings();
   }
 
@@ -305,7 +305,7 @@ class AppSettingsService {
   }
 
   Future<void> setEndWebhookUrl(String url) async {
-    _endWebhookUrl = url;
+    _endWebhookUrl = url.trim();
     await saveSettings();
   }
 
@@ -315,7 +315,7 @@ class AppSettingsService {
   }
 
   Future<void> setCustomerLookupUrl(String url) async {
-    _customerLookupUrl = url;
+    _customerLookupUrl = url.trim();
     await saveSettings();
   }
 

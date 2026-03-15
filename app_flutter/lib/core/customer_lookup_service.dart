@@ -42,9 +42,10 @@ class CustomerLookupService {
       return _cache[cacheKey];
     }
 
-    debugPrint('[CustomerLookup] Looking up customer: $url');
+    debugPrint('[CRM] Lookup → $url');
 
     try {
+      final sw = Stopwatch()..start();
       final response = await _client.get(
         Uri.parse(url),
         headers: {
@@ -53,22 +54,26 @@ class CustomerLookupService {
       ).timeout(
         Duration(milliseconds: settings.customerLookupTimeoutMs),
       );
+      sw.stop();
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         final customerData = CustomerData.fromJson(json);
-        
-        // Cache the result
         _cache[cacheKey] = customerData;
-        
-        debugPrint('[CustomerLookup] Found customer: ${customerData.contactName}');
+        debugPrint(
+          '[CRM] OK ${response.statusCode} (${sw.elapsedMilliseconds}ms)'
+          ' name="${customerData.contactName}"'
+          ' company="${customerData.company}"',
+        );
         return customerData;
       } else {
-        debugPrint('[CustomerLookup] HTTP error: ${response.statusCode}');
+        debugPrint(
+          '[CRM] FAIL ${response.statusCode} (${sw.elapsedMilliseconds}ms)',
+        );
         return null;
       }
     } catch (e) {
-      debugPrint('[CustomerLookup] Error: $e');
+      debugPrint('[CRM] ERROR $e');
       return null;
     }
   }

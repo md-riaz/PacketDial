@@ -115,25 +115,29 @@ class ScreenPopService {
       didNumber: didNumber,
     );
 
-    debugPrint('[ScreenPop] Triggering: $url (openBrowser: $openBrowser)');
+    debugPrint('[ScreenPop] → $url  browser=$openBrowser');
 
     try {
       if (openBrowser) {
-        // Open in default browser
         final uri = Uri.parse(url);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
-          debugPrint('[ScreenPop] Opened in browser');
+          debugPrint('[ScreenPop] OK  opened in browser');
         } else {
-          debugPrint('[ScreenPop] Cannot launch URL');
+          debugPrint('[ScreenPop] FAIL  cannot launch URL');
         }
       } else {
-        // Send background HTTP GET request
+        final sw = Stopwatch()..start();
         final response = await _client.get(Uri.parse(url));
-        debugPrint('[ScreenPop] HTTP response: ${response.statusCode}');
+        sw.stop();
+        final ok = response.statusCode >= 200 && response.statusCode < 300;
+        debugPrint(
+          '[ScreenPop] ${ok ? "OK" : "FAIL"} '
+          '${response.statusCode} (${sw.elapsedMilliseconds}ms)',
+        );
       }
     } catch (e) {
-      debugPrint('[ScreenPop] Error: $e');
+      debugPrint('[ScreenPop] ERROR $e');
     }
   }
 
