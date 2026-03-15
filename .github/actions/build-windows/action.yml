@@ -150,6 +150,9 @@ runs:
 
     - name: Cargo test (Rust core)
       shell: pwsh
+      env:
+        PJSIP_LIB_DIR: X:\engine_pjsip\build\out\lib
+        PJSIP_INCLUDE_DIR: X:\engine_pjsip\build\out\include
       run: |
         X:
         cd core_rust

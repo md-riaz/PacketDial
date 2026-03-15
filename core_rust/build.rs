@@ -73,6 +73,26 @@ fn main() {
     if let Some(lib) = &lib_dir {
         println!("cargo:rustc-link-search=native={}", lib.display());
 
+        // Also search the vcpkg lib dir for OpenSSL (libssl, libcrypto) and
+        // any other vcpkg-provided static libs that PJSIP was built against.
+        // Resolution order: VCPKG_LIB env var → VCPKG_ROOT-derived path.
+        let vcpkg_lib = env::var("VCPKG_LIB")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| {
+                env::var("VCPKG_ROOT").ok().map(|r| {
+                    PathBuf::from(r)
+                        .join("installed")
+                        .join("x64-windows-static-md")
+                        .join("lib")
+                })
+            });
+        if let Some(vlib) = &vcpkg_lib {
+            if vlib.is_dir() {
+                println!("cargo:rustc-link-search=native={}", vlib.display());
+            }
+        }
+
         // Link every *.lib found in the output directory.
         // pjproject names libs like: pjlib-x86_64-x64-vc14-Release.lib
         if let Ok(entries) = std::fs::read_dir(lib) {
@@ -89,12 +109,18 @@ fn main() {
             }
         }
 
+        // OpenSSL static libs (required by PJSIP TLS transport).
+        // These live in the vcpkg lib dir, not the PJSIP out/lib dir.
+        println!("cargo:rustc-link-lib=static=libssl");
+        println!("cargo:rustc-link-lib=static=libcrypto");
+
         // Windows system libs required by pjproject
         println!("cargo:rustc-link-lib=ws2_32");
         println!("cargo:rustc-link-lib=ole32");
         println!("cargo:rustc-link-lib=uuid");
         println!("cargo:rustc-link-lib=winmm");
         println!("cargo:rustc-link-lib=Avrt");
+        println!("cargo:rustc-link-lib=crypt32");
 
         // Signal to the rest of the crate that PJSIP is available so that
         // real SIP code paths are compiled in (M7 integration).
@@ -141,4 +167,6 @@ fn main() {
     println!("cargo:rerun-if-changed={}", stamp.display());
     println!("cargo:rerun-if-env-changed=PJSIP_LIB_DIR");
     println!("cargo:rerun-if-env-changed=PJSIP_INCLUDE_DIR");
+    println!("cargo:rerun-if-env-changed=VCPKG_LIB");
+    println!("cargo:rerun-if-env-changed=VCPKG_ROOT");
 }
