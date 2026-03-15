@@ -76,9 +76,16 @@ runs:
         X:
         cd vcpkg
         Write-Host "Installing OpenSSL and Opus for x64-windows-static-md..."
-        .\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md --recurse
+        if (-not (.\vcpkg.exe install openssl:x64-windows-static-md opus:x64-windows-static-md --recurse)) {
+            throw "vcpkg install failed"
+        }
         Write-Host "VCPKG List:"
         .\vcpkg.exe list
+        Write-Host "Listing OpenSSL headers for debugging..."
+        $OslDir = "X:\vcpkg\installed\x64-windows-static-md\include\openssl"
+        if (Test-Path $OslDir) {
+            Get-ChildItem $OslDir
+        }
         Write-Host "Verifying installation..."
         $SslH = "X:\vcpkg\installed\x64-windows-static-md\include\openssl\ssl.h"
         if (Test-Path $SslH) {
