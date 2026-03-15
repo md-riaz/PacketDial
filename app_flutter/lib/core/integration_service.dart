@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'app_settings_service.dart';
 import 'customer_lookup_service.dart';
 import 'screen_pop_service.dart';
-import 'dialing_rules_service.dart';
+import 'recording_service.dart';
 import 'sip_uri_utils.dart';
 import 'call_event_service.dart';
 import '../models/call.dart';
@@ -218,24 +219,62 @@ class IntegrationService {
 
   Future<void> _uploadRecording(
       String url, String path, ActiveCall call) async {
-    final fieldName = AppSettingsService.instance.recordingFileFieldName;
-    final filename = Uri.parse(path).pathSegments.last;
-    debugPrint('[Recording] Upload → ${url.trim()}  file=$filename');
+    final settings = AppSettingsService.instance;
+    final fieldName = settings.recordingFileFieldName;
+
+    // Verify the file actually exists before attempting upload
+    final file = File(path);
+    if (!await file.exists()) {
+      debugPrint('[Recording] Upload SKIP - file not found: $path');
+      return;
+    }
+
+    final fileSize = await file.length();
+    final filename = path.split(RegExp(r'[/\\]')).last;
+
+    // Pull session metadata for richer upload fields
+    final session = RecordingService.instance.sessionForCall(call.callId);
+    final durationMs = session?.durationMs;
+    final startedAt = session?.startedAt;
+    final endedAt = session?.endedAt;
+
+    debugPrint(
+      '[Recording] Upload -> ${url.trim()}'
+      '  file=$filename  size=${(fileSize / 1024).toStringAsFixed(1)}KB'
+      '${durationMs != null ? "  duration=${(durationMs / 1000).toStringAsFixed(1)}s" : ""}',
+    );
 
     try {
-      final request = http.MultipartRequest('POST', Uri.parse(url));
+      final request = http.MultipartRequest('POST', Uri.parse(url.trim()));
       request.files.add(await http.MultipartFile.fromPath(fieldName, path));
 
-      // Add metadata fields
-      final normalizedNumber = DialingRulesService.instance.transform(
-        (SipUriUtils.extractNumber(call.uri) ?? call.uri).trim(),
-      );
+      // Call metadata
+      final callerNumber = SipUriUtils.extractNumber(call.uri) ?? call.uri;
       request.fields['call_id'] = call.callId.toString();
-      request.fields['number'] = normalizedNumber;
+      request.fields['number'] = callerNumber.trim();
       request.fields['direction'] = call.direction.name;
+      request.fields['account_id'] = call.accountId;
+
+      // Duration and timestamps from session
+      if (durationMs != null) {
+        request.fields['duration_seconds'] =
+            (durationMs / 1000).toStringAsFixed(1);
+      }
+      if (startedAt != null) {
+        request.fields['started_at'] = startedAt.toIso8601String();
+      }
+      if (endedAt != null) {
+        request.fields['ended_at'] = endedAt.toIso8601String();
+      }
+
+      // CRM contact info if available
       if (_lastCustomerData != null) {
-        request.fields['contact_name'] = _lastCustomerData!.contactName;
-        request.fields['company'] = _lastCustomerData!.company;
+        if (_lastCustomerData!.contactName.isNotEmpty) {
+          request.fields['contact_name'] = _lastCustomerData!.contactName;
+        }
+        if (_lastCustomerData!.company.isNotEmpty) {
+          request.fields['company'] = _lastCustomerData!.company;
+        }
       }
 
       final sw = Stopwatch()..start();
@@ -261,10 +300,8 @@ class IntegrationService {
   }) {
     var result = template;
 
-    // Parse SIP URI first so placeholders never leak raw display-uri format.
+    // Parse SIP URI so placeholders always get clean values.
     final extractedNumber = SipUriUtils.extractNumber(call.uri) ?? call.uri;
-    final transformedNumber =
-        DialingRulesService.instance.transform(extractedNumber.trim());
     final fallbackName = SipUriUtils.friendlyName(call.uri);
     final resolvedName = (customerData?.contactName.trim().isNotEmpty ?? false)
         ? customerData!.contactName.trim()
@@ -272,7 +309,7 @@ class IntegrationService {
     final resolvedCompany = customerData?.company.trim() ?? '';
 
     result =
-        result.replaceAll('%NUMBER%', Uri.encodeComponent(transformedNumber));
+        result.replaceAll('%NUMBER%', Uri.encodeComponent(extractedNumber.trim()));
     result = result.replaceAll('%NAME%', Uri.encodeComponent(resolvedName));
     result =
         result.replaceAll('%COMPANY%', Uri.encodeComponent(resolvedCompany));

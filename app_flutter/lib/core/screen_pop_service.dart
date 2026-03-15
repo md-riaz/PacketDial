@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/call.dart';
 import '../models/customer_data.dart';
 import 'app_settings_service.dart';
-import 'dialing_rules_service.dart';
 import 'sip_uri_utils.dart';
 
 /// Service for triggering screen pop on incoming calls
@@ -14,7 +13,6 @@ class ScreenPopService {
   static final ScreenPopService instance = ScreenPopService._();
 
   final _client = http.Client();
-  final _dialingRules = DialingRulesService.instance;
 
   /// Trigger screen pop based on settings
   Future<void> onIncomingCall(
@@ -151,9 +149,9 @@ class ScreenPopService {
   }) {
     var result = template;
 
-    // Parse SIP URI first so placeholders are always usable values.
+    // Parse SIP URI so placeholders always get clean values.
     final extractedNumber = SipUriUtils.extractNumber(call.uri) ?? call.uri;
-    final transformedNumber = _dialingRules.transform(extractedNumber.trim());
+    final transformedNumber = extractedNumber.trim();
     final fallbackName = SipUriUtils.friendlyName(call.uri);
     final resolvedName = (customerData?.contactName.trim().isNotEmpty ?? false)
         ? customerData!.contactName.trim()

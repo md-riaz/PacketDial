@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/customer_data.dart';
 import 'app_settings_service.dart';
-import 'dialing_rules_service.dart';
 
 /// Service for looking up customer data from CRM web services
 class CustomerLookupService {
@@ -12,7 +11,6 @@ class CustomerLookupService {
   static final CustomerLookupService instance = CustomerLookupService._();
 
   final _client = http.Client();
-  final _dialingRules = DialingRulesService.instance;
 
   /// Cache for customer data (phone number -> customer data)
   final Map<String, CustomerData> _cache = {};
@@ -25,10 +23,8 @@ class CustomerLookupService {
       return null;
     }
 
-    // Transform number using dialing rules
-    final transformedNumber = _dialingRules.transform(phoneNumber);
-    
-    // Build URL with placeholders
+    // Build URL with placeholders — use the number as-is from the SIP URI
+    final transformedNumber = phoneNumber.trim();
     String url = settings.customerLookupUrl;
     url = url.replaceAll('%NUMBER%', Uri.encodeComponent(transformedNumber));
     if (extid != null && extid.isNotEmpty) {

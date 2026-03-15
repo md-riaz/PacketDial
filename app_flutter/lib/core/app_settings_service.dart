@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'path_provider_service.dart';
-import '../models/dialing_rule.dart';
-import '../models/caller_id_transformation.dart';
 
 /// App-wide settings with file-based persistence.
 class AppSettingsService {
@@ -55,12 +53,6 @@ class AppSettingsService {
   String _recordingFileFieldName = 'recording';
   bool _recordingUploadEnabled = false;
 
-  // Dialing Rules
-  List<DialingRule> _dialingRules = [];
-
-  // Caller ID Transformations
-  List<CallerIdTransformation> _callerIdTransformations = [];
-
   bool _isLoaded = false;
 
   // Getters - Core SIP
@@ -96,13 +88,6 @@ class AppSettingsService {
   String get recordingUploadUrl => _recordingUploadUrl;
   String get recordingFileFieldName => _recordingFileFieldName;
   bool get recordingUploadEnabled => _recordingUploadEnabled;
-
-  // Getters - Dialing Rules
-  List<DialingRule> get dialingRules => List.unmodifiable(_dialingRules);
-
-  // Getters - Caller ID Transformations
-  List<CallerIdTransformation> get callerIdTransformations =>
-      List.unmodifiable(_callerIdTransformations);
 
   /// Load settings from file on app startup.
   Future<void> loadSettings() async {
@@ -155,20 +140,6 @@ class AppSettingsService {
             data['recording_file_field_name'] as String? ?? 'recording';
         _recordingUploadEnabled =
             data['recording_upload_enabled'] as bool? ?? false;
-
-        // Load dialing rules
-        final dialingRulesJson = data['dialing_rules'] as List? ?? [];
-        _dialingRules = dialingRulesJson
-            .map((r) => DialingRule.fromJson(r as Map<String, dynamic>))
-            .toList();
-
-        // Load caller ID transformations
-        final transformationsJson =
-            data['caller_id_transformations'] as List? ?? [];
-        _callerIdTransformations = transformationsJson
-            .map((t) =>
-                CallerIdTransformation.fromJson(t as Map<String, dynamic>))
-            .toList();
 
         shouldEnableDefaultAutoStart =
             !data.containsKey('start_with_windows_enabled');
@@ -247,9 +218,6 @@ class AppSettingsService {
         'recording_upload_url': _recordingUploadUrl,
         'recording_file_field_name': _recordingFileFieldName,
         'recording_upload_enabled': _recordingUploadEnabled,
-        'dialing_rules': _dialingRules.map((r) => r.toJson()).toList(),
-        'caller_id_transformations':
-            _callerIdTransformations.map((t) => t.toJson()).toList(),
       };
       await file.writeAsString(jsonEncode(data), flush: true);
       debugPrint('[AppSettings] Saved settings to file');
@@ -377,81 +345,6 @@ class AppSettingsService {
   Future<void> setRecordingUploadEnabled(bool enabled) async {
     _recordingUploadEnabled = enabled;
     await saveSettings();
-  }
-
-  // Dialing Rules methods
-  Future<void> addDialingRule(DialingRule rule) async {
-    _dialingRules.add(rule);
-    _dialingRules.sort((a, b) => b.priority.compareTo(a.priority));
-    await saveSettings();
-  }
-
-  Future<void> removeDialingRule(String id) async {
-    _dialingRules.removeWhere((r) => r.id == id);
-    await saveSettings();
-  }
-
-  Future<void> updateDialingRule(DialingRule rule) async {
-    final index = _dialingRules.indexWhere((r) => r.id == rule.id);
-    if (index >= 0) {
-      _dialingRules[index] = rule;
-      _dialingRules.sort((a, b) => b.priority.compareTo(a.priority));
-      await saveSettings();
-    }
-  }
-
-  Future<void> reorderDialingRules(List<DialingRule> orderedRules) async {
-    _dialingRules = orderedRules;
-    await saveSettings();
-  }
-
-  // Caller ID Transformations methods
-  Future<void> addCallerIdTransformation(
-      CallerIdTransformation transformation) async {
-    _callerIdTransformations.add(transformation);
-    _callerIdTransformations.sort((a, b) => b.priority.compareTo(a.priority));
-    await saveSettings();
-  }
-
-  Future<void> removeCallerIdTransformation(String id) async {
-    _callerIdTransformations.removeWhere((t) => t.id == id);
-    await saveSettings();
-  }
-
-  Future<void> updateCallerIdTransformation(
-      CallerIdTransformation transformation) async {
-    final index =
-        _callerIdTransformations.indexWhere((t) => t.id == transformation.id);
-    if (index >= 0) {
-      _callerIdTransformations[index] = transformation;
-      _callerIdTransformations.sort((a, b) => b.priority.compareTo(a.priority));
-      await saveSettings();
-    }
-  }
-
-  /// Transform a phone number using dialing rules
-  String transformNumber(String number) {
-    String result = number;
-    for (final rule in _dialingRules.where((r) => r.enabled)) {
-      final transformed = rule.apply(result);
-      if (transformed != null) {
-        result = transformed;
-      }
-    }
-    return result;
-  }
-
-  /// Transform a caller ID using transformation rules
-  String transformCallerId(String callerId) {
-    String result = callerId;
-    for (final transformation
-        in _callerIdTransformations.where((t) => t.enabled)) {
-      final transformed = transformation.apply(result);
-      if (transformed != null) {
-        result = transformed;
-      }
-    }
-    return result;
   }
 
   /// Get settings file path.
