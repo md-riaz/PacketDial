@@ -771,17 +771,20 @@ extern "C" fn pjsip_on_blf_status(uri_ptr: *const c_char, state: i32, activity_p
         }
     };
 
-    // Map state: 0=Unknown, 1=Available, 2=Busy
+    // Map state: 0=Unknown, 1=Available, 2=Busy, 3=Ringing, 4=Away, 5=Offline, 6=Error
     let state_str = match state {
         1 => "Available",
         2 => "Busy",
         3 => "Ringing",
+        4 => "Away",
+        5 => "Offline",
+        6 => "Error",
         _ => "Unknown",
     };
 
     // Push BLF status event
     let event = serde_json::json!({
-        "type": "BlfStatus",
+        "type": "BlfStatusChanged",
         "payload": {
             "uri": uri,
             "state": state_str,

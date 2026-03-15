@@ -1509,6 +1509,10 @@ class _ActiveCallCard extends StatelessWidget {
                                     color:
                                         AppTheme.accent.withValues(alpha: 0.8),
                                     fontWeight: FontWeight.w500)),
+                            if (call.state == CallState.inCall) ...[
+                              const SizedBox(width: 6),
+                              _CallQualityDot(stats: stats),
+                            ],
                             if (call.onHold) ...[
                               const SizedBox(width: 6),
                               Container(
@@ -1867,6 +1871,43 @@ class _TimerWidgetState extends State<_TimerWidget> {
             fontWeight: FontWeight.w700,
             fontSize: 14,
             color: AppTheme.accentBright),
+      ),
+    );
+  }
+}
+
+// ── Call Quality Dot ─────────────────────────────────────────────────────
+/// A small colored circle indicating audio quality based on MOS score.
+/// Green ≥ 4.0, Yellow ≥ 3.0, Red < 3.0.
+class _CallQualityDot extends StatelessWidget {
+  final MediaStats? stats;
+  const _CallQualityDot({this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    if (stats == null) return const SizedBox.shrink();
+    final mos = stats!.mos;
+    final color = mos >= 4.0
+        ? const Color(0xFF4CAF50) // green
+        : mos >= 3.0
+            ? const Color(0xFFFFB300) // amber
+            : const Color(0xFFF44336); // red
+    final label = mos >= 4.0
+        ? 'Good'
+        : mos >= 3.0
+            ? 'Fair'
+            : 'Poor';
+    return Tooltip(
+      message:
+          '$label  MOS: ${mos.toStringAsFixed(1)}  Jitter: ${stats!.jitterMs.toStringAsFixed(1)}ms  Loss: ${stats!.packetLossPct.toStringAsFixed(1)}%',
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 4)],
+        ),
       ),
     );
   }

@@ -21,4 +21,21 @@ class MediaStats {
         codec: m['codec'] as String? ?? '',
         bitrateKbps: (m['bitrate_kbps'] as num?)?.toInt() ?? 0,
       );
+
+  /// Approximate MOS score (1–5) using a simplified E-model.
+  /// Based on jitter and packet loss — good enough for a color indicator.
+  double get mos {
+    // R-factor starts at 93.2 (ideal G.711)
+    double r = 93.2;
+    // Jitter penalty: ~0.5 per ms above 10ms threshold
+    final jitterPenalty = (jitterMs - 10.0).clamp(0.0, double.infinity) * 0.5;
+    // Loss penalty: ~2.5 per percent
+    final lossPenalty = packetLossPct * 2.5;
+    r -= jitterPenalty + lossPenalty;
+    r = r.clamp(0.0, 100.0);
+    // Convert R to MOS: MOS = 1 + 0.035R + R*(R-60)*(100-R)*7e-6
+    if (r <= 0) return 1.0;
+    final mos = 1.0 + 0.035 * r + r * (r - 60) * (100 - r) * 7e-6;
+    return mos.clamp(1.0, 5.0);
+  }
 }

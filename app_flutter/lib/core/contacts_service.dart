@@ -9,6 +9,10 @@ class BlfContact {
   final String name;
   final String sipUri;
   final String? extension;
+  /// SIP domain used to build the SUBSCRIBE URI and match incoming NOTIFY.
+  /// e.g. "pbx.example.com". Empty = derive from sipUri or fall back to
+  /// the first registered account's domain at subscribe time.
+  final String presenceDomain;
   String presenceState; // 'Unknown', 'Available', 'Busy', 'Ringing'
   String? activity;
 
@@ -17,6 +21,7 @@ class BlfContact {
     required this.name,
     required this.sipUri,
     this.extension,
+    this.presenceDomain = '',
     this.presenceState = 'Unknown',
     this.activity,
   });
@@ -26,6 +31,7 @@ class BlfContact {
         'name': name,
         'sip_uri': sipUri,
         'extension': extension,
+        'presence_domain': presenceDomain,
         'presence_state': presenceState,
         'activity': activity,
       };
@@ -35,6 +41,7 @@ class BlfContact {
         name: json['name'] ?? '',
         sipUri: json['sip_uri'] ?? '',
         extension: json['extension'],
+        presenceDomain: json['presence_domain'] as String? ?? '',
         presenceState: json['presence_state'] ?? 'Unknown',
         activity: json['activity'],
       );
@@ -127,21 +134,22 @@ class ContactsService {
   }
 
   /// Update presence state for a SIP URI.
-  void updatePresence(String sipUri, String state, String? activity) {
+  /// [domain] is the host extracted from the incoming NOTIFY URI — used to
+  /// disambiguate contacts that only store a bare extension number.
+  void updatePresence(String sipUri, String state, String? activity, {String? domain}) {
     debugPrint(
-      '[ContactsService] updatePresence target="$sipUri" state="$state" activity="${activity ?? ""}"',
+      '[ContactsService] updatePresence target="$sipUri" domain="${domain ?? ""}" state="$state" activity="${activity ?? ""}"',
     );
     final contact = _contacts.firstWhere(
-      (c) => _matchesPresenceTarget(c, sipUri),
+      (c) => _matchesPresenceTarget(c, sipUri, domain: domain),
       orElse: () => BlfContact(id: '', name: sipUri, sipUri: sipUri),
     );
     if (contact.id.isNotEmpty) {
       debugPrint(
-        '[ContactsService] matched contact id=${contact.id} name="${contact.name}" sipUri="${contact.sipUri}" ext="${contact.extension ?? ""}"',
+        '[ContactsService] matched contact id=${contact.id} name="${contact.name}"',
       );
       contact.presenceState = state;
       contact.activity = activity;
-      // Don't save presence to file - it's runtime state only
     } else {
       debugPrint(
         '[ContactsService] no contact matched target="$sipUri"; known contacts=${_contacts.length}',
@@ -210,7 +218,7 @@ class ContactsService {
     return File('${dir.path}/packetdial_contacts.json');
   }
 
-  bool _matchesPresenceTarget(BlfContact contact, String target) {
+  bool _matchesPresenceTarget(BlfContact contact, String target, {String? domain}) {
     final normalizedTarget = _normalizePresenceKey(target);
     if (normalizedTarget.isEmpty) return false;
 
@@ -219,13 +227,22 @@ class ContactsService {
       if (contact.extension != null) contact.extension!,
     ];
 
+    // Prefer the contact's own stored presenceDomain; fall back to caller-supplied domain.
+    final effectiveDomain = contact.presenceDomain.trim().isNotEmpty
+        ? contact.presenceDomain.trim().toLowerCase()
+        : (domain ?? '');
+
     for (final candidate in candidates) {
       final normalizedCandidate = _normalizePresenceKey(candidate);
-      debugPrint(
-        '[ContactsService] compare target="$normalizedTarget" candidate="$normalizedCandidate" raw="$candidate"',
-      );
-      if (normalizedCandidate == normalizedTarget) {
-        return true;
+      // Direct match (full URI or bare extension)
+      if (normalizedCandidate == normalizedTarget) return true;
+
+      // Try ext@domain against the normalised target (which already strips domain).
+      // normalizedTarget is just the user part, so compare normalizedCandidate directly.
+      // Also try building full URI and normalising again for safety.
+      if (effectiveDomain.isNotEmpty) {
+        final withDomain = _normalizePresenceKey('sip:$normalizedCandidate@$effectiveDomain');
+        if (withDomain == normalizedTarget) return true;
       }
     }
 

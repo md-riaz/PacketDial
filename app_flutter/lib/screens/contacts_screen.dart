@@ -28,6 +28,16 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   String _filterPresence = 'All';
   StreamSubscription<Map<String, dynamic>>? _blfSub;
 
+  static String _domainFromUri(String uri) {
+    var s = uri.trim().toLowerCase();
+    if (s.startsWith('sip:')) s = s.substring(4);
+    if (s.startsWith('<')) s = s.substring(1);
+    if (s.endsWith('>')) s = s.substring(0, s.length - 1);
+    final at = s.indexOf('@');
+    if (at >= 0) return s.substring(at + 1).split(':').first.trim();
+    return '';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,11 +47,11 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       final uri = payload['uri'] as String? ?? '';
       final state = payload['state'] as String? ?? 'Unknown';
       final activity = payload['activity'] as String?;
+      final domain = _domainFromUri(uri);
       debugPrint(
-        '[ContactsScreen] BLF event uri="$uri" state="$state" activity="${activity ?? ""}"',
+        '[ContactsScreen] BLF event uri="$uri" domain="$domain" state="$state" activity="${activity ?? ""}"',
       );
-      ref.read(contactsProvider.notifier).updatePresence(uri, state, activity);
-    });
+      ref.read(contactsProvider.notifier).updatePresence(uri, state, activity, domain: domain);    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_syncBlfSubscriptions());
     });
@@ -122,7 +132,13 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     const SizedBox(width: 8),
                     _buildFilterChip('Available', AppTheme.callGreen),
                     const SizedBox(width: 8),
-                    _buildFilterChip('Busy', AppTheme.warningAmber),
+                    _buildFilterChip('Busy', AppTheme.errorRed),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Ringing', AppTheme.warningAmber),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Away', const Color(0xFFFF9800)),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Offline', AppTheme.textTertiary),
                     const SizedBox(width: 8),
                     _buildFilterChip('Unknown', AppTheme.textTertiary),
                   ],
@@ -151,7 +167,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     icon: Icons.circle,
                     color: AppTheme.errorRed,
                     count: allContacts
-                        .where((c) => c.presenceState == 'Busy')
+                        .where((c) => c.presenceState == 'Busy' || c.presenceState == 'Ringing')
                         .length
                         .toString(),
                     label: 'Busy',
@@ -161,10 +177,13 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     icon: Icons.circle,
                     color: AppTheme.textTertiary,
                     count: allContacts
-                        .where((c) => c.presenceState == 'Unknown')
+                        .where((c) => c.presenceState == 'Offline' ||
+                            c.presenceState == 'Away' ||
+                            c.presenceState == 'Unknown' ||
+                            c.presenceState == 'Error')
                         .length
                         .toString(),
-                    label: 'Unknown',
+                    label: 'Offline',
                   ),
                 ],
               ),
@@ -282,87 +301,83 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     final nameCtrl = TextEditingController();
     final extCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
+    final accounts = ref.read(accountServiceProvider).getAllAccounts();
+    // selectedAccountUuid drives presenceDomain; null = no account chosen
+    String? selectedAccountUuid = accounts.isNotEmpty ? accounts.first.uuid : null;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        title: const Text('Add Contact',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Name',
-                labelStyle: const TextStyle(color: AppTheme.textTertiary),
-                filled: true,
-                fillColor: AppTheme.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surfaceCard,
+          title: const Text('Add Contact',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: _contactInputDecoration('Name'),
+                style: const TextStyle(color: AppTheme.textPrimary),
               ),
-              style: const TextStyle(color: AppTheme.textPrimary),
+              const SizedBox(height: 12),
+              TextField(
+                controller: extCtrl,
+                decoration: _contactInputDecoration('Extension (for BLF)'),
+                style: const TextStyle(color: AppTheme.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                decoration: _contactInputDecoration(
+                  'Phone / SIP URI',
+                  hintText: '+8801XXXXXXXXX',
+                ),
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(color: AppTheme.textPrimary),
+              ),
+              if (accounts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedAccountUuid,
+                  dropdownColor: AppTheme.surfaceCard,
+                  decoration: _contactInputDecoration('Account (for BLF domain)'),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  items: accounts.map((a) => DropdownMenuItem(
+                    value: a.uuid,
+                    child: Text(a.accountName),
+                  )).toList(),
+                  onChanged: (v) => setDialogState(() => selectedAccountUuid = v),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: extCtrl,
-              decoration: InputDecoration(
-                labelText: 'Extension (optional)',
-                labelStyle: const TextStyle(color: AppTheme.textTertiary),
-                filled: true,
-                fillColor: AppTheme.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneCtrl,
-              decoration: InputDecoration(
-                labelText: 'Phone number',
-                labelStyle: const TextStyle(color: AppTheme.textTertiary),
-                hintText: '+8801XXXXXXXXX',
-                filled: true,
-                fillColor: AppTheme.inputFill,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(color: AppTheme.textPrimary),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
+                  final domain = _domainForAccount(selectedAccountUuid);
+                  await ref.read(contactsProvider.notifier).addContact(BlfContact(
+                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        name: nameCtrl.text.trim(),
+                        sipUri: phoneCtrl.text.trim(),
+                        extension: extCtrl.text.trim().isNotEmpty ? extCtrl.text.trim() : null,
+                        presenceDomain: domain,
+                      ));
+                  await _syncBlfSubscriptions();
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Add'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (nameCtrl.text.isNotEmpty && phoneCtrl.text.isNotEmpty) {
-                await ref.read(contactsProvider.notifier).addContact(BlfContact(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      name: nameCtrl.text,
-                      sipUri: phoneCtrl.text,
-                      extension: extCtrl.text.isNotEmpty ? extCtrl.text : null,
-                    ));
-                await _syncBlfSubscriptions();
-                if (!context.mounted) return;
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
       ),
     );
   }
@@ -416,67 +431,89 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     final nameCtrl = TextEditingController(text: contact.name);
     final extCtrl = TextEditingController(text: contact.extension ?? '');
     final phoneCtrl = TextEditingController(text: contact.sipUri);
+    final accounts = ref.read(accountServiceProvider).getAllAccounts();
+    // Pre-select the account whose domain matches the contact's stored presenceDomain
+    String? selectedAccountUuid = accounts
+        .where((a) => _domainForAccount(a.uuid) == contact.presenceDomain)
+        .map((a) => a.uuid)
+        .firstOrNull ?? (accounts.isNotEmpty ? accounts.first.uuid : null);
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        title: const Text('Edit Contact',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: _contactInputDecoration('Name'),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: extCtrl,
-              decoration: _contactInputDecoration('Extension (optional)'),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneCtrl,
-              decoration: _contactInputDecoration(
-                'Phone or SIP URI',
-                hintText: '+8801XXXXXXXXX',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surfaceCard,
+          title: const Text('Edit Contact',
+              style: TextStyle(color: AppTheme.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: _contactInputDecoration('Name'),
+                style: const TextStyle(color: AppTheme.textPrimary),
               ),
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(color: AppTheme.textPrimary),
+              const SizedBox(height: 12),
+              TextField(
+                controller: extCtrl,
+                decoration: _contactInputDecoration('Extension (for BLF)'),
+                style: const TextStyle(color: AppTheme.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneCtrl,
+                decoration: _contactInputDecoration('Phone / SIP URI',
+                    hintText: '+8801XXXXXXXXX'),
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(color: AppTheme.textPrimary),
+              ),
+              if (accounts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedAccountUuid,
+                  dropdownColor: AppTheme.surfaceCard,
+                  decoration: _contactInputDecoration('Account (for BLF domain)'),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  items: accounts.map((a) => DropdownMenuItem(
+                    value: a.uuid,
+                    child: Text(a.accountName),
+                  )).toList(),
+                  onChanged: (v) => setDialogState(() => selectedAccountUuid = v),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) return;
+                final domain = _domainForAccount(selectedAccountUuid);
+                await ref.read(contactsProvider.notifier).updateContact(
+                      BlfContact(
+                        id: contact.id,
+                        name: nameCtrl.text.trim(),
+                        sipUri: phoneCtrl.text.trim(),
+                        extension: extCtrl.text.trim().isNotEmpty
+                            ? extCtrl.text.trim()
+                            : null,
+                        presenceDomain: domain,
+                        presenceState: contact.presenceState,
+                        activity: contact.activity,
+                      ),
+                    );
+                await _syncBlfSubscriptions();
+                if (!context.mounted) return;
+                Navigator.pop(context);
+              },
+              child: const Text('Save'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) return;
-              await ref.read(contactsProvider.notifier).updateContact(
-                    BlfContact(
-                      id: contact.id,
-                      name: nameCtrl.text.trim(),
-                      sipUri: phoneCtrl.text.trim(),
-                      extension: extCtrl.text.trim().isNotEmpty
-                          ? extCtrl.text.trim()
-                          : null,
-                      presenceState: contact.presenceState,
-                      activity: contact.activity,
-                    ),
-                  );
-              await _syncBlfSubscriptions();
-              if (!context.mounted) return;
-              Navigator.pop(context);
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
@@ -531,7 +568,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
         .map((contact) {
           final target = _buildBlfTarget(contact, account);
           debugPrint(
-            '[ContactsScreen] BLF target for "${contact.name}" sipUri="${contact.sipUri}" ext="${contact.extension ?? ""}" => "$target"',
+            '[ContactsScreen] BLF target for "${contact.name}" ext="${contact.extension ?? ""}" domain="${contact.presenceDomain}" => "$target"',
           );
           return target;
         })
@@ -562,7 +599,6 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
         return selected;
       }
     }
-
     for (final account in service.getAllAccounts()) {
       final state = EngineChannel.instance.accounts[account.uuid];
       if (state?.registrationState == RegistrationState.registered) {
@@ -572,21 +608,37 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     return null;
   }
 
-  String _buildBlfTarget(BlfContact contact, AccountSchema account) {
+  /// Returns the SIP domain for the given account UUID.
+  /// Prefers the explicit domain field, falls back to server hostname.
+  String _domainForAccount(String? uuid) {
+    if (uuid == null) return '';
+    final account = ref.read(accountServiceProvider).getAccountByUuid(uuid);
+    if (account == null) return '';
+    final d = account.domain.trim();
+    if (d.isNotEmpty) return d;
+    // Strip port from server if present
+    return account.server.trim().split(':').first;
+  }
+
+  /// Build the SUBSCRIBE target URI for a contact.
+  /// Uses the contact's stored presenceDomain; falls back to the fallback account's domain.
+  String _buildBlfTarget(BlfContact contact, AccountSchema fallbackAccount) {
     final extension = contact.extension?.trim() ?? '';
+    final domain = contact.presenceDomain.trim().isNotEmpty
+        ? contact.presenceDomain.trim()
+        : (fallbackAccount.domain.trim().isNotEmpty
+            ? fallbackAccount.domain.trim()
+            : fallbackAccount.server.trim().split(':').first);
+
     if (extension.isNotEmpty) {
       if (extension.contains('@') || extension.startsWith('sip:')) {
         return extension;
       }
-      final host = account.domain.trim().isNotEmpty
-          ? account.domain.trim()
-          : account.server.trim();
-      if (host.isNotEmpty) {
-        return 'sip:$extension@$host';
-      }
+      if (domain.isNotEmpty) return 'sip:$extension@$domain';
       return extension;
     }
 
+    // sipUri may already be a full SIP URI
     return contact.sipUri.trim();
   }
 
@@ -640,6 +692,12 @@ class _ContactTile extends StatelessWidget {
         return AppTheme.errorRed;
       case 'Ringing':
         return AppTheme.warningAmber;
+      case 'Away':
+        return const Color(0xFFFF9800); // orange
+      case 'Offline':
+        return AppTheme.textTertiary;
+      case 'Error':
+        return const Color(0xFFE040FB); // purple
       default:
         return AppTheme.textTertiary;
     }
@@ -653,6 +711,12 @@ class _ContactTile extends StatelessWidget {
         return Icons.do_not_disturb_on_outlined;
       case 'Ringing':
         return Icons.phone;
+      case 'Away':
+        return Icons.access_time;
+      case 'Offline':
+        return Icons.circle_outlined;
+      case 'Error':
+        return Icons.error_outline;
       default:
         return Icons.circle_outlined;
     }

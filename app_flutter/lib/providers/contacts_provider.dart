@@ -55,8 +55,8 @@ class ContactsNotifier extends Notifier<List<BlfContact>> {
     return success;
   }
 
-  void updatePresence(String sipUri, String presenceState, String? activity) {
-    _service.updatePresence(sipUri, presenceState, activity);
+  void updatePresence(String sipUri, String presenceState, String? activity, {String? domain}) {
+    _service.updatePresence(sipUri, presenceState, activity, domain: domain);
     _refresh();
   }
 }

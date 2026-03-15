@@ -141,7 +141,7 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
                     Icons.circle,
                     AppTheme.errorRed,
                     allContacts
-                        .where((c) => c.presenceState == 'Busy')
+                        .where((c) => c.presenceState == 'Busy' || c.presenceState == 'Ringing')
                         .length
                         .toString(),
                     'Busy',
@@ -149,12 +149,24 @@ class _BlfContactsPageState extends ConsumerState<BlfContactsPage> {
                   const SizedBox(width: 8),
                   _buildStatChip(
                     Icons.circle,
-                    AppTheme.textTertiary,
+                    const Color(0xFFFF9800),
                     allContacts
-                        .where((c) => c.presenceState == 'Unknown')
+                        .where((c) => c.presenceState == 'Away')
                         .length
                         .toString(),
-                    'Unknown',
+                    'Away',
+                  ),
+                  const SizedBox(width: 8),
+                  _buildStatChip(
+                    Icons.circle,
+                    AppTheme.textTertiary,
+                    allContacts
+                        .where((c) => c.presenceState == 'Offline' ||
+                            c.presenceState == 'Unknown' ||
+                            c.presenceState == 'Error')
+                        .length
+                        .toString(),
+                    'Offline',
                   ),
                 ],
               ),
@@ -555,6 +567,12 @@ class _ContactTile extends StatelessWidget {
         return AppTheme.errorRed;
       case 'Ringing':
         return AppTheme.warningAmber;
+      case 'Away':
+        return const Color(0xFFFF9800);
+      case 'Offline':
+        return AppTheme.textTertiary;
+      case 'Error':
+        return const Color(0xFFE040FB);
       default:
         return AppTheme.textTertiary;
     }

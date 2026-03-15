@@ -486,36 +486,85 @@ static void on_call_transfer_status(pjsua_call_id call_id,
 
 /**
  * PJSIP BLF/Presence notification callback.
- * Called when a subscribed presence state changes.
+ * Called when a subscribed buddy's evsub state or presence changes.
+ *
+ * State codes emitted:
+ *   0 = Unknown   (no active subscription or no data yet)
+ *   1 = Available (basic_open=true, no busy/away activity)
+ *   2 = Busy      (basic_open=true, rpid activity=BUSY)
+ *   3 = Ringing   (basic_open=true, rpid activity=BUSY, note contains "ring")
+ *   4 = Away      (basic_open=true, rpid activity=AWAY)
+ *   5 = Offline   (basic_open=false while subscription is active)
+ *   6 = Error     (subscription terminated/rejected)
  */
 static void on_blf_notify(pjsua_buddy_id buddy_id)
 {
     if (!g_on_blf_status) return;
 
-    /* Query buddy info to get presence status */
     pjsua_buddy_info info;
     pj_bzero(&info, sizeof(info));
     if (pjsua_buddy_get_info(buddy_id, &info) != PJ_SUCCESS) {
         return;
     }
 
-    /* Map PJSIP buddy state to our state */
-    int state = 0; /* Unknown */
-    const char *activity = "Unknown";
+    int state = 0;           /* Unknown */
+    const char *activity_str = "Unknown";
 
-    /* Use sub_state instead of state (PJSUA_BUDDY_STATE_* doesn't exist) */
-    if (info.sub_state == PJSIP_EVSUB_STATE_ACTIVE) {
-        /* Check presence status - use info[0].basic_open instead of online */
-        if (info.pres_status.info_cnt > 0 && info.pres_status.info[0].basic_open) {
-            state = 1; /* Available */
-            activity = "Available";
-        } else {
-            state = 2; /* Busy/Offline */
-            activity = "Offline";
+    if (info.sub_state == PJSIP_EVSUB_STATE_TERMINATED) {
+        /* Subscription ended — check reason */
+        char reason[64] = "";
+        if (info.sub_term_reason.slen > 0) {
+            pj_ssize_t rlen = info.sub_term_reason.slen;
+            if (rlen >= (pj_ssize_t)sizeof(reason)) rlen = (pj_ssize_t)sizeof(reason) - 1;
+            memcpy(reason, info.sub_term_reason.ptr, (size_t)rlen);
+            reason[rlen] = '\0';
         }
-    } else if (info.sub_state == PJSIP_EVSUB_STATE_TERMINATED) {
-        state = 0; /* Unknown */
-        activity = "Subscription terminated";
+        state = 6;
+        activity_str = (reason[0] != '\0') ? reason : "Subscription ended";
+
+    } else if (info.sub_state == PJSIP_EVSUB_STATE_ACTIVE ||
+               info.sub_state == PJSIP_EVSUB_STATE_PENDING) {
+
+        if (info.pres_status.info_cnt > 0) {
+            pj_bool_t basic_open = info.pres_status.info[0].basic_open;
+            pjrpid_activity rpid_act = info.pres_status.info[0].rpid.activity;
+
+            /* Extract optional RPID note text */
+            char note[128] = "";
+            if (info.pres_status.info[0].rpid.note.slen > 0) {
+                pj_ssize_t nlen = info.pres_status.info[0].rpid.note.slen;
+                if (nlen >= (pj_ssize_t)sizeof(note)) nlen = (pj_ssize_t)sizeof(note) - 1;
+                memcpy(note, info.pres_status.info[0].rpid.note.ptr, (size_t)nlen);
+                note[nlen] = '\0';
+                /* lowercase for comparison */
+                for (int k = 0; note[k]; k++) note[k] = (char)pj_tolower(note[k]);
+            }
+
+            if (!basic_open) {
+                state = 5;  /* Offline */
+                activity_str = "Offline";
+            } else if (rpid_act == PJRPID_ACTIVITY_BUSY) {
+                /* Distinguish ringing from in-call: FreeSWITCH puts "ring" in note */
+                if (strstr(note, "ring") != NULL) {
+                    state = 3;  /* Ringing */
+                    activity_str = "Ringing";
+                } else {
+                    state = 2;  /* Busy / On Call */
+                    activity_str = "Busy";
+                }
+            } else if (rpid_act == PJRPID_ACTIVITY_AWAY) {
+                state = 4;  /* Away */
+                activity_str = "Away";
+            } else {
+                state = 1;  /* Available */
+                activity_str = "Available";
+            }
+        } else if (info.sub_state == PJSIP_EVSUB_STATE_ACTIVE) {
+            /* Active subscription but no PIDF body yet — treat as available */
+            state = 1;
+            activity_str = "Available";
+        }
+        /* PENDING with no info_cnt stays Unknown (0) */
     }
 
     /* Get URI from buddy info */
@@ -525,7 +574,20 @@ static void on_blf_notify(pjsua_buddy_id buddy_id)
     memcpy(uri, info.uri.ptr, (size_t)len);
     uri[len] = '\0';
 
-    g_on_blf_status(uri, state, activity);
+    if (g_on_log) {
+        char buf[320];
+        snprintf(buf, sizeof(buf),
+                 "[BLF] buddy_id=%d sub_state=%d basic_open=%d rpid_act=%d note=\"%s\" => state=%d (%s) uri=%s",
+                 (int)buddy_id,
+                 (int)info.sub_state,
+                 (info.pres_status.info_cnt > 0 ? (int)info.pres_status.info[0].basic_open : -1),
+                 (info.pres_status.info_cnt > 0 ? (int)info.pres_status.info[0].rpid.activity : -1),
+                 (info.pres_status.info_cnt > 0 ? "" : ""),
+                 state, activity_str, uri);
+        g_on_log(4, buf);
+    }
+
+    g_on_blf_status(uri, state, activity_str);
 }
 
 /* PJSIP log writer — forwards to the Rust log callback */
@@ -1725,10 +1787,14 @@ int pd_blf_subscribe(int acc_id, const char **uris, int count)
         
         pjsua_buddy_id buddy_id;
         pj_status_t status = pjsua_buddy_add(&buddy_cfg, &buddy_id);
-        if (status != PJ_SUCCESS && g_on_log) {
+        if (g_on_log) {
             char buf[256];
-            snprintf(buf, sizeof(buf), "Failed to add BLF buddy %s: %d", uris[i], (int)status);
-            g_on_log(2, buf);
+            if (status == PJ_SUCCESS) {
+                snprintf(buf, sizeof(buf), "[BLF] Subscribed buddy_id=%d uri=%s", (int)buddy_id, uris[i]);
+            } else {
+                snprintf(buf, sizeof(buf), "[BLF] Failed to add buddy uri=%s status=%d", uris[i], (int)status);
+            }
+            g_on_log(4, buf);
         }
     }
     
