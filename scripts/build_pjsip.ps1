@@ -186,8 +186,12 @@ Write-Step "Building pjproject Release x64 with $Jobs parallel job(s)"
 Write-Info "This may take 5-20 minutes on first run…"
 
 # Set VCPKG_ROOT if not already set
-if (-not $env:VCPKG_ROOT) {
-    $env:VCPKG_ROOT = Join-Path $RepoRoot 'vcpkg'
+# Prioritize repo-local vcpkg if it exists
+$RepoVcpkgPath = Join-Path $RepoRoot 'vcpkg'
+if (Test-Path $RepoVcpkgPath) {
+    $env:VCPKG_ROOT = $RepoVcpkgPath
+} elseif (-not $env:VCPKG_ROOT) {
+    Write-Warning "VCPKG_ROOT not set and local vcpkg not found. Build may fail."
 }
 
 # Ensure custom triplets are present in vcpkg
@@ -225,10 +229,7 @@ if (-not (Test-Path $OpenSslInc)) {
 }
 Write-OK "OpenSSL found at $OpenSslInc"
 
-# Prepend vcpkg paths to environment variables so they're found during build
-$env:LIB = "$VcpkgLibDir;$env:LIB"
-$env:INCLUDE = "$VcpkgIncDir;$env:INCLUDE"
-
+# MSBuild properties will handle the paths
 Write-Info "VCPKG_LIB_DIR: $VcpkgLibDir"
 Write-Info "VCPKG_INC_DIR: $VcpkgIncDir"
 
@@ -241,10 +242,8 @@ $MsBuildArgs = @(
     '/nologo',
     '/verbosity:minimal',
     '/clp:Summary',
-    "/p:AdditionalLibraryDirectories=`"$VcpkgLibDir`"",
-    "/p:AdditionalIncludeDirectories=`"$VcpkgIncDir`"",
-    "/p:LibraryPath=`"$VcpkgLibDir`"",
-    "/p:IncludePath=`"$VcpkgIncDir`""
+    "/p:VCPKG_INCLUDE=`"$VcpkgIncDir`"",
+    "/p:VCPKG_LIB=`"$VcpkgLibDir`""
 )
 
 Push-Location $PjProjectDir
