@@ -66,12 +66,16 @@ CFLAGS 	= $(TARGET_FLAGS) \
 	  -I..\..\pjmedia\include \
 	  -I..\..\pjnath/include
 LDFLAGS = $(BUILD_FLAGS) $(LIBS) \
-	  /libpath:$(VCPKG_LIB_DIR) \
-	  /libpath:$(VCPKG_ROOT)\installed\x64-windows-static-md\lib \
-	  /libpath:..\..\..\vcpkg\installed\x64-windows-static-md\lib \
 	  Iphlpapi.lib ole32.lib user32.lib dsound.lib dxguid.lib netapi32.lib \
 	  mswsock.lib ws2_32.lib gdi32.lib advapi32.lib oleaut32.lib \
 	  crypt32.lib libssl.lib libcrypto.lib
+
+# /link tells cl.exe to forward everything after it to link.exe,
+# so /libpath: flags are correctly passed to the linker (not ignored as D9002).
+LNKPATH = /link \
+	  /libpath:$(VCPKG_LIB_DIR) \
+	  /libpath:$(VCPKG_ROOT)\installed\x64-windows-static-md\lib \
+	  /libpath:..\..\..\vcpkg\installed\x64-windows-static-md\lib
 
 SRCDIR = ..\src\samples
 OBJDIR = .\output\samples-$(TARGET)
@@ -115,7 +119,7 @@ all: $(BINDIR) $(OBJDIR) $(SAMPLES)
 
 $(SAMPLES): $(SRCDIR)\$(@B).c $(LIBS) $(SRCDIR)\util.h Samples-vc.mak
 	cl -nologo -c $(SRCDIR)\$(@B).c /Fo$(OBJDIR)\$(@B).obj $(CFLAGS) 
-	cl /nologo $(OBJDIR)\$(@B).obj /Fe$@ /Fm$(OBJDIR)\$(@B).map $(LDFLAGS)
+	cl /nologo $(OBJDIR)\$(@B).obj /Fe$@ /Fm$(OBJDIR)\$(@B).map $(LDFLAGS) $(LNKPATH)
 	@rem the following two lines is just for cleaning up the 'bin' directory
 	if exist $(BINDIR)\*.ilk del /Q $(BINDIR)\*.ilk
 	if exist $(BINDIR)\*.pdb del /Q $(BINDIR)\*.pdb
