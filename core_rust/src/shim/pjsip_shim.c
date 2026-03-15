@@ -299,6 +299,14 @@ static void on_reg_state(pjsua_acc_id acc_id)
     memcpy(reason, info.status_text.ptr, (size_t)len);
     reason[len] = '\0';
 
+    if (g_on_log) {
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+                 "[PD_SHIM] on_reg_state: acc_id=%d status=%d (%s) expires=%d active=%d",
+                 (int)acc_id, (int)info.status, reason, info.expires, info.is_default);
+        g_on_log(info.status == 200 ? 4 : 2, buf);
+    }
+
     g_on_reg((int)acc_id, info.expires, (int)info.status, reason);
 }
 
@@ -340,18 +348,13 @@ static void on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id,
     
     /* Check DND mode */
     if (g_dnd_enabled) {
-        if (g_on_log) {
-            g_on_log(4, "DND enabled - auto-rejecting incoming call");
-        }
-        /* Auto-reject with 486 Busy Here */
+        if (g_on_log) g_on_log(3, "[PD_SHIM] on_incoming_call: DND active — rejecting with 486");
         pjsua_call_hangup(call_id, 486, NULL, NULL);
         return;
     }
 
     if (pd_has_other_live_call(call_id)) {
-        if (g_on_log) {
-            g_on_log(4, "Active call already in progress - rejecting incoming call with busy");
-        }
+        if (g_on_log) g_on_log(3, "[PD_SHIM] on_incoming_call: busy — rejecting with 486");
         pjsua_call_hangup(call_id, 486, NULL, NULL);
         return;
     }
@@ -455,10 +458,29 @@ static void on_call_tsx_state(pjsua_call_id call_id, pjsip_transaction *tsx,
  */
 static void on_call_transfer_status(pjsua_call_id call_id,
                                      int status_code,
-                                     const char *reason,
-                                     pj_bool_t final)
+                                     const pj_str_t *st_text,
+                                     pj_bool_t final,
+                                     pj_bool_t *p_cont)
 {
+    if (p_cont) *p_cont = PJ_TRUE; /* keep subscription alive */
     if (!g_on_transfer_status) return;
+
+    /* Convert pj_str_t to NUL-terminated C string */
+    char reason[128] = "";
+    if (st_text && st_text->slen > 0) {
+        pj_ssize_t len = st_text->slen;
+        if (len >= (pj_ssize_t)sizeof(reason)) len = (pj_ssize_t)sizeof(reason) - 1;
+        memcpy(reason, st_text->ptr, (size_t)len);
+        reason[len] = '\0';
+    }
+
+    if (g_on_log) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] on_call_transfer_status: call_id=%d code=%d reason=%s final=%d",
+                 (int)call_id, status_code, reason, (int)final);
+        g_on_log(3, buf);
+    }
+
     g_on_transfer_status((int)call_id, status_code, reason, final ? 1 : 0);
 }
 
@@ -697,37 +719,76 @@ int pd_init(const char *user_agent,
     pjsua_transport_config_default(&tp_cfg);
     tp_cfg.port = 0;
 
+    if (g_on_log) g_on_log(4, "[PD_SHIM] Creating UDP transport...");
     status = pjsua_transport_create(PJSIP_TRANSPORT_UDP, &tp_cfg, &g_udp_tp);
     if (status != PJ_SUCCESS) {
+        char err_msg[256]; pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] FATAL: UDP transport create failed status=%d (%s)", (int)status, err_msg);
+        if (g_on_log) g_on_log(1, buf);
         fprintf(stderr, "DEBUG: pjsua_transport_create (UDP) failed: %d\n", (int)status);
         pjsua_destroy();
         return (int)status;
     }
+    if (g_on_log) g_on_log(4, "[PD_SHIM] UDP transport created OK");
 
     /* Create TCP transport (optional — ignore failure) */
+    if (g_on_log) g_on_log(4, "[PD_SHIM] Creating TCP transport...");
     status = pjsua_transport_create(PJSIP_TRANSPORT_TCP, &tp_cfg, &g_tcp_tp);
     if (status != PJ_SUCCESS) {
-        g_tcp_tp = PJSUA_INVALID_ID; /* TCP unavailable — UDP only */
+        char err_msg[256]; pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] TCP transport unavailable status=%d (%s) — UDP only", (int)status, err_msg);
+        if (g_on_log) g_on_log(3, buf);
+        g_tcp_tp = PJSUA_INVALID_ID;
+    } else {
+        if (g_on_log) g_on_log(4, "[PD_SHIM] TCP transport created OK");
     }
 
     /* Create TLS transport (optional — ignore failure) */
+    if (g_on_log) g_on_log(4, "[PD_SHIM] Creating TLS transport (verify_server=off, method=TLSv1+)...");
     pjsua_transport_config tls_cfg;
     pjsua_transport_config_default(&tls_cfg);
     tls_cfg.port = 0;
-    /* TLS default port is 5061, but we use 0 to let OS assign */
+    /* Disable server cert verification so TLS works without a CA bundle.
+     * Set verify_server = PJ_TRUE and supply a CA file for strict validation. */
+    tls_cfg.tls_setting.verify_server = PJ_FALSE;
+    tls_cfg.tls_setting.verify_client = PJ_FALSE;
+    /* Allow TLS 1.0+ for compatibility with older PBX servers */
+    tls_cfg.tls_setting.method = PJSIP_TLSV1_METHOD;
     status = pjsua_transport_create(PJSIP_TRANSPORT_TLS, &tls_cfg, &g_tls_tp);
     if (status != PJ_SUCCESS) {
-        g_tls_tp = PJSUA_INVALID_ID; /* TLS unavailable */
+        char err_msg[256]; pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] TLS transport FAILED status=%d (%s) — TLS accounts will fall back to UDP", (int)status, err_msg);
+        if (g_on_log) g_on_log(1, buf);
+        fprintf(stderr, "DEBUG: pjsua_transport_create (TLS) failed: %d (%s)\n", (int)status, err_msg);
+        g_tls_tp = PJSUA_INVALID_ID;
+    } else {
+        if (g_on_log) g_on_log(4, "[PD_SHIM] TLS transport created OK");
     }
 
     /* Start */
     status = pjsua_start();
     if (status != PJ_SUCCESS) {
+        char err_msg[256]; pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] FATAL: pjsua_start failed status=%d (%s)", (int)status, err_msg);
+        if (g_on_log) g_on_log(1, buf);
         fprintf(stderr, "DEBUG: pjsua_start failed: %d\n", (int)status);
         pjsua_destroy();
         return (int)status;
     }
     fprintf(stderr, "DEBUG: pjsua_start success\n");
+    if (g_on_log) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "[PD_SHIM] Engine started. Transports: UDP=%s TCP=%s TLS=%s",
+                 g_udp_tp != PJSUA_INVALID_ID ? "OK" : "FAIL",
+                 g_tcp_tp != PJSUA_INVALID_ID ? "OK" : "unavail",
+                 g_tls_tp != PJSUA_INVALID_ID ? "OK" : "FAIL");
+        g_on_log(3, buf);
+    }
 
     /* -----------------------------------------------------------------
      * Audio device setup.
@@ -873,36 +934,47 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
         case 2: /* TLS */
             if (g_tls_tp != PJSUA_INVALID_ID) {
                 cfg.transport_id = g_tls_tp;
+                if (g_on_log) g_on_log(4, "[PD_SHIM] pd_acc_add: using TLS transport");
             } else {
-                cfg.transport_id = g_udp_tp; /* Fallback to UDP if TLS unavailable */
+                cfg.transport_id = g_udp_tp;
+                if (g_on_log) g_on_log(1, "[PD_SHIM] pd_acc_add: TLS requested but transport unavailable — falling back to UDP");
             }
             break;
         case 1: /* TCP */
             if (g_tcp_tp != PJSUA_INVALID_ID) {
                 cfg.transport_id = g_tcp_tp;
+                if (g_on_log) g_on_log(4, "[PD_SHIM] pd_acc_add: using TCP transport");
             } else {
-                cfg.transport_id = g_udp_tp; /* Fallback to UDP if TCP unavailable */
+                cfg.transport_id = g_udp_tp;
+                if (g_on_log) g_on_log(2, "[PD_SHIM] pd_acc_add: TCP requested but transport unavailable — falling back to UDP");
             }
             break;
-        case 3: /* UDP+TCP (auto) - leave transport_id as default (PJSUA_INVALID_ID)
-                 * PJSIP will auto-select based on destination and availability */
+        case 3: /* UDP+TCP (auto) */
             cfg.transport_id = PJSUA_INVALID_ID;
+            if (g_on_log) g_on_log(4, "[PD_SHIM] pd_acc_add: using UDP+TCP auto transport");
             break;
         case 0: /* UDP (default) */
         default:
             cfg.transport_id = g_udp_tp;
+            if (g_on_log) g_on_log(4, "[PD_SHIM] pd_acc_add: using UDP transport");
             break;
     }
 
-    /* Registration options */
-    cfg.register_on_acc_add = PJ_TRUE;
-    cfg.reg_timeout = 300;  /* 5 minutes */
-    cfg.reg_retry_interval  = 60;   /* retry every 60 s on failure */
-    cfg.reg_first_retry_interval = 5;
-
     pjsua_acc_id acc_id;
     pj_status_t status = pjsua_acc_add(&cfg, PJ_TRUE, &acc_id);
-    if (status != PJ_SUCCESS) return -1;
+    if (status != PJ_SUCCESS) {
+        char err_msg[256]; pj_strerror(status, err_msg, sizeof(err_msg));
+        char buf[512];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] pd_acc_add: pjsua_acc_add FAILED status=%d (%s) uri=%s",
+                 (int)status, err_msg, sip_uri ? sip_uri : "<null>");
+        if (g_on_log) g_on_log(1, buf);
+        return -1;
+    }
+    if (g_on_log) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "[PD_SHIM] pd_acc_add: account added OK acc_id=%d", (int)acc_id);
+        g_on_log(4, buf);
+    }
     return (int)acc_id;
 }
 

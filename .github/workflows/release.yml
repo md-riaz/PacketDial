@@ -110,88 +110,29 @@ jobs:
           path: ${{ github.workspace }}/dist/PacketDial-Setup-*.exe
           retention-days: 30
 
+      - name: Extract changelog for this release
+        id: changelog
+        shell: pwsh
+        run: |
+          $content = Get-Content "CHANGELOG.md" -Raw
+          # Grab everything between the first "## " heading and the next one
+          if ($content -match '(?s)## Unreleased\r?\n(.*?)(\r?\n## |\z)') {
+            $notes = $Matches[1].Trim()
+          } elseif ($content -match '(?s)## \[?[0-9].*?\r?\n(.*?)(\r?\n## |\z)') {
+            $notes = $Matches[1].Trim()
+          } else {
+            $notes = "See CHANGELOG.md for details."
+          }
+          # Write to a temp file to avoid multiline env var issues
+          $notes | Set-Content "$env:RUNNER_TEMP\release_notes.md" -Encoding UTF8
+          echo "notes_file=$env:RUNNER_TEMP\release_notes.md" >> $env:GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.release_version }}
           name: PacketDial v${{ inputs.release_version }}
-          body: |
-            ## PacketDial v${{ inputs.release_version }}
-
-            ### 📦 Installation Options
-
-            #### Option 1: Windows Installer (Recommended)
-            Download and run `PacketDial-Setup-${{ inputs.release_version }}.exe`
-
-            - Professional setup wizard
-            - Installs to Program Files
-            - Start Menu & Desktop shortcuts
-            - Uninstaller in Control Panel
-
-            #### Option 2: Portable Version
-            Download `PacketDial-${{ inputs.release_version }}-Portable.zip`
-
-            - No installation required
-            - Extract and run
-            - Perfect for USB drives
-            - Includes uninstaller script
-
-            ### ✨ What's New
-
-            - **Multi-Account Support** - Multiple SIP accounts with selection per call
-            - **BLF/Presence Contacts** - Real-time presence monitoring with dedicated Contacts tab
-            - **Unified Settings** - All settings in one page (Codecs, Auto Answer, DND, DTMF)
-            - **Call Transfer** - Blind and attended (consult) transfer
-            - **3-Way Conference** - Merge two calls into conference
-            - **Call Forwarding** - Per-account forwarding rules
-            - **Caller Lookup** - Custom URL for caller ID lookup
-            - **Do Not Disturb** - App-wide DND with quick footer toggle
-            - **Professional Installer** - Inno Setup Windows installer
-            - **Portable Version** - No-install ZIP package
-
-            ### 📋 Features
-
-            #### Call Management
-            - ✅ Multi-account support with account selection
-            - ✅ Blind and attended transfer
-            - ✅ 3-way conference calling
-            - ✅ Call hold/mute
-            - ✅ Call history with details
-
-            #### Contacts & Presence
-            - ✅ BLF contacts with presence indicators
-            - ✅ Filter by presence state (Available/Busy/Unknown)
-            - ✅ Import/export contacts to JSON
-
-            #### Settings
-            - ✅ Codec priority selection (drag-to-reorder)
-            - ✅ Auto answer incoming calls
-            - ✅ Do Not Disturb (DND) with footer toggle
-            - ✅ DTMF method selection (In-band/RFC2833/SIP INFO)
-            - ✅ Call forwarding per account
-            - ✅ Caller lookup URL customization
-
-            ### 🔧 Technical Details
-
-            - **SIP Engine:** PJSIP 2.14.1
-            - **Core:** Rust FFI layer
-            - **UI:** Flutter Desktop
-            - **Platform:** Windows 10/11 x64
-            - **Settings:** File-based JSON (`%APPDATA%\PacketDial\`)
-
-            ### 📖 Documentation
-
-            - [Complete Features List](https://github.com/${{ github.repository }}/blob/main/docs/FEATURES.md)
-            - [Build & Installation Guide](https://github.com/${{ github.repository }}/blob/main/docs/BUILD_AND_INSTALL.md)
-            - [Quick Start Guide](https://github.com/${{ github.repository }}/blob/main/docs/quickstart.md)
-            - [Architecture Overview](https://github.com/${{ github.repository }}/blob/main/docs/architecture.md)
-
-            ### 🙏 Thanks
-
-            Thank you to all contributors and users!
-
-            ---
-            **PacketDial** - Modern Windows SIP Client
+          body_path: ${{ steps.changelog.outputs.notes_file }}
           files: |
             ${{ github.workspace }}/dist/PacketDial-*-Portable.zip
             ${{ github.workspace }}/dist/PacketDial-Setup-*.exe
