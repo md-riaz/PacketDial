@@ -62,6 +62,17 @@ class _IncomingCallBannerState extends State<IncomingCallBanner>
     });
   }
 
+  @override
+  void didUpdateWidget(IncomingCallBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-load customer data if the callInfo map changed (e.g. late CRM response)
+    final oldData = oldWidget.callInfo['customer_data'];
+    final newData = widget.callInfo['customer_data'];
+    if (oldData != newData && newData != null) {
+      _loadCustomerData();
+    }
+  }
+
   Future<void> _loadCustomerData() async {
     final customerJson =
         widget.callInfo['customer_data'] as Map<String, dynamic>?;

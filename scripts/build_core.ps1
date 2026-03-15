@@ -38,6 +38,7 @@ Set-StrictMode -Version Latest
 function Write-Step  { param($m) Write-Host "`n>>> $m" -ForegroundColor Cyan }
 function Write-OK    { param($m) Write-Host "    [OK]   $m" -ForegroundColor Green }
 function Write-Info  { param($m) Write-Host "    [INFO] $m" -ForegroundColor Yellow }
+function Write-Warn  { param($m) Write-Host "    [WARN] $m" -ForegroundColor Yellow }
 function Write-Fail  { param($m) Write-Host "    [FAIL] $m" -ForegroundColor Red }
 
 $RepoRoot = Resolve-Path "."
@@ -60,6 +61,21 @@ if ((Test-Path $IncludeDir) -and (Test-Path $LibDir)) {
   Write-Fail "PJSIP outputs not found at $PjsipOut"
   Write-Info "Run: .\scripts\build_pjsip.ps1 first"
   exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Resolve OpenSSL (vcpkg) — required by PJSIP TLS transport
+# ---------------------------------------------------------------------------
+# build.rs looks for libssl/libcrypto via VCPKG_LIB or VCPKG_ROOT.
+# If neither is set, fall back to the project-local vcpkg directory.
+if (-not $env:VCPKG_LIB -and -not $env:VCPKG_ROOT) {
+  $LocalVcpkg = Join-Path $RepoRoot "vcpkg"
+  if (Test-Path $LocalVcpkg) {
+    $env:VCPKG_ROOT = $LocalVcpkg
+    Write-Info "Using project-local vcpkg: $LocalVcpkg"
+  } else {
+    Write-Warn "VCPKG_ROOT not set and no local vcpkg found - libssl.lib may be missing"
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -113,7 +129,7 @@ if (-not (Test-Path $DllDstDir)) {
 
 Copy-Item -Force $DllSrc $DllDstDir
 Write-OK "Copied: $DllSrc"
-Write-OK "    → $DllDstDir"
+Write-OK "    -> $DllDstDir"
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Green

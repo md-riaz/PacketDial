@@ -208,9 +208,132 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         const InfoBanner(
           icon: Icons.person_search,
           text:
-              'Automatically fetch customer data from your CRM when a call comes in.',
+              'When a call comes in, PacketDial sends an HTTP GET request to your web service with the caller\'s number. Your service returns contact details that appear on the incoming call screen.',
+        ),
+        const SizedBox(height: 16),
+
+        // How it works
+        InfoBanner(
+          icon: Icons.help_outline,
+          color: AppTheme.accent,
+          text: '',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'How it works',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '1. Incoming call arrives with caller number e.g. +441234567890\n'
+                '2. PacketDial calls your URL with %NUMBER% replaced by that number\n'
+                '3. Your service looks up the number in your database or CRM\n'
+                '4. Your service returns a JSON response (see format below)\n'
+                '5. The caller\'s name and company appear on the incoming call screen\n'
+                '6. An "Open CRM Record" button appears if you include a contact_link',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  height: 1.6,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // JSON format
+        InfoBanner(
+          icon: Icons.code,
+          color: AppTheme.accent,
+          text: '',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Required JSON response format',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '{\n'
+                  '  "crm_info": {\n'
+                  '    "number": "+441234567890",\n'
+                  '    "contact_name": "Jane Smith",\n'
+                  '    "company": "Acme Ltd",\n'
+                  '    "contact_link": "https://crm.example.com/contacts/42"\n'
+                  '  },\n'
+                  '  "custom_fields": {\n'
+                  '    "account_tier": "Gold",\n'
+                  '    "open_tickets": 3\n'
+                  '  }\n'
+                  '}',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    height: 1.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Only crm_info is required. All fields inside it are optional — include only what you have. '
+                'contact_link enables the "Open CRM Record" button on the call screen. '
+                'custom_fields can hold any extra data you want to pass through.',
+                style: TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 11,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // URL placeholder info
+        InfoBanner(
+          icon: Icons.swap_horiz,
+          color: AppTheme.accent,
+          text: '',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'URL placeholders',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildPlaceholderRow('%NUMBER%',
+                  'Caller\'s phone number (after dialing rules applied)'),
+              _buildPlaceholderRow('%EXTID%',
+                  'Extension ID from the SIP INVITE header, if present'),
+            ],
+          ),
         ),
         const SizedBox(height: 24),
+
         SwitchListTile(
           title: const Text('Enable Customer Lookup',
               style: TextStyle(color: AppTheme.textPrimary)),
@@ -239,6 +362,16 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           icon: Icons.timer_outlined,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'If your CRM takes longer than this to respond, the call screen shows without contact info. '
+          'The lookup still completes in the background and updates the screen when it arrives.',
+          style: TextStyle(
+            color: AppTheme.textTertiary,
+            fontSize: 11,
+            height: 1.5,
+          ),
         ),
         const SizedBox(height: 24),
         _buildSaveButton(() async {
@@ -271,7 +404,46 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        const Text(
+          'Lookup results are cached per number during the session. Clear the cache if you\'ve updated contact data in your CRM and want fresh results immediately.',
+          style: TextStyle(
+            color: AppTheme.textTertiary,
+            fontSize: 11,
+            height: 1.5,
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildPlaceholderRow(String placeholder, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            placeholder,
+            style: const TextStyle(
+              color: AppTheme.primary,
+              fontSize: 11,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              description,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

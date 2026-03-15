@@ -5,15 +5,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_settings_service.dart';
 import '../core/call_event_service.dart';
+import '../core/integration_service.dart';
+import '../models/customer_data.dart';
 
 class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
   IncomingCallNotifier() : super(null) {
     debugPrint('[IncomingCallNotifier] Initializing, subscribing to events');
-    // Subscribe to call events from the event bus
     _sub = CallEventService.instance.eventStream.listen(_onCallEvent);
+    // Listen for late-arriving CRM data and patch the active banner state
+    _crmSub = IntegrationService.instance.onCustomerDataResolved
+        .listen(_onCustomerDataResolved);
   }
 
   StreamSubscription<CallEvent>? _sub;
+  StreamSubscription<CustomerData>? _crmSub;
+
+  void _onCustomerDataResolved(CustomerData data) {
+    // Only update if there is an active incoming call banner showing
+    if (state == null) return;
+    debugPrint('[IncomingCallNotifier] Late CRM data arrived: ${data.contactName}');
+    state = {
+      ...state!,
+      'customer_data': data.toJson(),
+    };
+  }
 
   void _onCallEvent(CallEvent event) {
     debugPrint('[IncomingCallNotifier] Received event: ${event.state} ${event.direction}');
@@ -50,6 +65,7 @@ class IncomingCallNotifier extends StateNotifier<Map<String, dynamic>?> {
   void dispose() {
     debugPrint('[IncomingCallNotifier] Disposing');
     _sub?.cancel();
+    _crmSub?.cancel();
     super.dispose();
   }
 }

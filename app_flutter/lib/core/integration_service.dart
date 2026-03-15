@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'app_settings_service.dart';
@@ -26,6 +27,13 @@ class IntegrationService {
   final Set<int> _ringingCalls = {};
   final Set<int> _answeredCalls = {};
   final Set<int> _endedCalls = {};
+
+  /// Emits customer data as soon as the CRM lookup resolves for an incoming call.
+  /// Listeners (e.g. IncomingCallNotifier) can use this to update the UI late.
+  final _customerDataController =
+      StreamController<CustomerData>.broadcast();
+  Stream<CustomerData> get onCustomerDataResolved =>
+      _customerDataController.stream;
 
   /// Handle call events from the event stream.
   void _onCallEvent(CallEvent event) {
@@ -114,6 +122,11 @@ class IntegrationService {
       extid: extid,
     );
     _lastCustomerData = customerData;
+
+    // Push resolved customer data to listeners (e.g. incoming call banner)
+    if (customerData != null && !_customerDataController.isClosed) {
+      _customerDataController.add(customerData);
+    }
 
     // 2. Trigger Ring Webhook
     final settings = AppSettingsService.instance;
@@ -296,5 +309,6 @@ class IntegrationService {
   /// Dispose of resources
   void dispose() {
     _client.close();
+    _customerDataController.close();
   }
 }
