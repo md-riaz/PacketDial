@@ -434,10 +434,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         const SizedBox(height: 18),
         DropdownButtonFormField<String>(
           initialValue: _settings.screenPopEvent,
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             labelText: 'Trigger Event',
             contentPadding:
-                const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                EdgeInsets.symmetric(vertical: 16, horizontal: 16),
           ),
           items: const [
             DropdownMenuItem(value: 'ring', child: Text('Incoming Call Ring')),
