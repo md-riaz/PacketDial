@@ -919,10 +919,16 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             builder: (context) {
               final audioDevices = ref.watch(audioDevicesProvider);
               final activeAccountState = ref.watch(activeAccountProvider);
-              return SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: Padding(
-                padding: const EdgeInsets.all(10),
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 450,
+                  ),
+                  child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Padding(
+                  padding: const EdgeInsets.all(10),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -967,7 +973,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                         activeCall, audioDevices),
                   ],
                 ),
-              ));
+              ))));
             },
           ),
         ),

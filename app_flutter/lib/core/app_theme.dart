@@ -254,6 +254,10 @@ class AppTheme {
         onError: Colors.white,
         outline: brd,
         surfaceContainerHighest: card,
+        surfaceContainer: variant,
+        surfaceContainerLow: variant,
+        surfaceContainerHigh: variant,
+        onSurfaceVariant: ts,
       ),
       textTheme: baseText.copyWith(
         headlineLarge:
@@ -295,16 +299,25 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: variant,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         indicatorColor: pri.withValues(alpha: 0.15),
         height: 64,
-        labelTextStyle: WidgetStatePropertyAll(
-          GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500),
-        ),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final color = states.contains(WidgetState.selected) ? pri : ts;
+          return GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w500,
+            color: color,
+          );
+        }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return IconThemeData(color: pri, size: 22);
           }
-          return IconThemeData(color: tt, size: 20);
+          return IconThemeData(color: ts, size: 20);
         }),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       ),

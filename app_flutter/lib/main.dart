@@ -717,9 +717,7 @@ class _AppState extends ConsumerState<App>
     return Container(
       decoration: BoxDecoration(
         color: c.surfaceVariant,
-        border: Border(
-          top: BorderSide(color: c.border.withValues(alpha: 0.3)),
-        ),
+        border: Border(top: BorderSide(color: c.border.withValues(alpha: 0.3))),
       ),
       child: NavigationBar(
         height: 64,
