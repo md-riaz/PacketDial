@@ -373,9 +373,7 @@ extern "C" {
     fn pd_set_global_auto_answer(enabled: i32, delay_ms: i32) -> i32;
     fn pd_get_global_auto_answer(enabled_out: *mut i32, delay_ms_out: *mut i32) -> i32;
     fn pd_set_ec_enabled(enabled: i32) -> i32;
-    fn pd_get_ec_enabled(enabled_out: *mut i32) -> i32;
     fn pd_set_mic_amplification(level: f32) -> i32;
-    fn pd_get_mic_amplification(level_out: *mut f32) -> i32;
     fn pd_aud_play_dtmf(digits: *const c_char) -> i32;
     /* Call Recording */
     fn pd_call_start_recording(call_id: i32, file_path: *const c_char) -> i32;
