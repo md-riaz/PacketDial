@@ -535,71 +535,50 @@ class _AppState extends ConsumerState<App>
   Widget _buildMainShell() {
     final incomingCallInfo = ref.watch(incomingCallProvider);
 
-    // The content column — fixed width, centered in whatever window size the user sets
-    final contentColumn = Column(
-      children: [
-        _buildTitleBar(),
-        Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: KeyedSubtree(
-              key: ValueKey<int>(_selectedIndex),
-              child: _buildScreen(_selectedIndex),
-            ),
-          ),
-        ),
-        const CockpitFooter(),
-      ],
-    );
-
     return Stack(
       children: [
         Scaffold(
-          // Fill the whole window with the background gradient
-          backgroundColor: context.colors.surface,
           bottomNavigationBar: _buildNavBar(),
-          body: Center(
-            child: ConstrainedBox(
-              // Content never goes below min or above default width —
-              // extra window space just shows the background
-              constraints: BoxConstraints(
-                minWidth: AppTheme.minWindowSize.width,
-                maxWidth: AppTheme.defaultWindowSize.width,
-                minHeight: AppTheme.minWindowSize.height,
+          body: Column(
+            children: [
+              _buildTitleBar(),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_selectedIndex),
+                    child: _buildScreen(_selectedIndex),
+                  ),
+                ),
               ),
-              child: contentColumn,
-            ),
+              const CockpitFooter(),
+            ],
           ),
         ),
-        // Incoming call banner — centered over the content area
         if (incomingCallInfo != null)
-          Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: AppTheme.minWindowSize.width,
-                maxWidth: AppTheme.defaultWindowSize.width,
-                minHeight: AppTheme.minWindowSize.height,
-              ),
-              child: IncomingCallBanner(
-                callInfo: incomingCallInfo,
-                onAnswer: () {
-                  debugPrint('[MAIN] onAnswer clicked');
-                  try {
-                    final rc = EngineChannel.instance.engine.answerCall();
-                    debugPrint('[MAIN] answerCall() returned: $rc');
-                  } catch (e, stack) {
-                    debugPrint('[MAIN] ERROR in answerCall: $e\n$stack');
-                  }
-                },
-                onReject: () {
-                  debugPrint('[MAIN] onReject clicked');
-                  SchedulerBinding.instance.addPostFrameCallback((_) {
-                    EngineChannel.instance.engine.hangup();
-                    ref.read(incomingCallProvider.notifier).clear();
-                  });
-                },
-              ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: _titleBarHeight,
+            bottom: 0,
+            child: IncomingCallBanner(
+              callInfo: incomingCallInfo,
+              onAnswer: () {
+                debugPrint('[MAIN] onAnswer clicked');
+                try {
+                  final rc = EngineChannel.instance.engine.answerCall();
+                  debugPrint('[MAIN] answerCall() returned: $rc');
+                } catch (e, stack) {
+                  debugPrint('[MAIN] ERROR in answerCall: $e\n$stack');
+                }
+              },
+              onReject: () {
+                debugPrint('[MAIN] onReject clicked');
+                SchedulerBinding.instance.addPostFrameCallback((_) {
+                  EngineChannel.instance.engine.hangup();
+                  ref.read(incomingCallProvider.notifier).clear();
+                });
+              },
             ),
           ),
       ],
@@ -802,7 +781,8 @@ class WindowButtons extends StatelessWidget {
     return Row(
       children: [
         MinimizeWindowButton(colors: buttonColors),
-        MaximizeWindowButton(colors: buttonColors),
+        // Custom maximize button via window_manager so resize-lock constraints are respected
+        _MaximizeButton(colors: buttonColors),
         CloseWindowButton(
           colors: closeButtonColors,
           onPressed: () {
@@ -810,6 +790,54 @@ class WindowButtons extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _MaximizeButton extends StatefulWidget {
+  final WindowButtonColors colors;
+  const _MaximizeButton({required this.colors});
+
+  @override
+  State<_MaximizeButton> createState() => _MaximizeButtonState();
+}
+
+class _MaximizeButtonState extends State<_MaximizeButton> {
+  bool _hovering = false;
+  bool _pressing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = _pressing
+        ? widget.colors.mouseDown
+        : _hovering
+            ? widget.colors.mouseOver
+            : Colors.transparent;
+    final iconColor = (_hovering || _pressing)
+        ? widget.colors.iconMouseOver
+        : widget.colors.iconNormal;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressing = true),
+        onTapUp: (_) => setState(() => _pressing = false),
+        onTapCancel: () => setState(() => _pressing = false),
+        onTap: () async {
+          if (await windowManager.isMaximized()) {
+            await windowManager.unmaximize();
+          } else {
+            await windowManager.maximize();
+          }
+        },
+        child: Container(
+          width: 46,
+          height: 34,
+          color: bg,
+          child: Icon(Icons.crop_square, size: 10, color: iconColor),
+        ),
+      ),
     );
   }
 }
