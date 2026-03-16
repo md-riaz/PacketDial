@@ -68,6 +68,7 @@ class AppTheme {
   // ── Window Geometry ────────────────────────────────────────────────────────
   static const Size defaultWindowSize = Size(450, 850);
   static const Size minWindowSize = Size(400, 750);
+  static const Size maxWindowSize = Size(600, 1100);
 
   // ── Gradients ──────────────────────────────────────────────────────────────
   static const LinearGradient titleBarGradient = LinearGradient(

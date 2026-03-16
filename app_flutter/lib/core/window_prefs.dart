@@ -86,14 +86,14 @@ class WindowPrefs {
   Future<void> applyResizeLock() async {
     if (resizeLocked) {
       final size = await windowManager.getSize();
-      // Clamp to at least the minimum
       final w = size.width.clamp(
-          AppTheme.minWindowSize.width, AppTheme.defaultWindowSize.width);
+          AppTheme.minWindowSize.width, AppTheme.maxWindowSize.width);
       final h = size.height.clamp(
-          AppTheme.minWindowSize.height, AppTheme.defaultWindowSize.height);
+          AppTheme.minWindowSize.height, AppTheme.maxWindowSize.height);
       await windowManager.setMinimumSize(Size(w, h));
       await windowManager.setMaximumSize(Size(w, h));
     } else {
+      // Unlocked: only enforce the minimum, no max — content centering handles large windows
       await windowManager.setMinimumSize(AppTheme.minWindowSize);
       await windowManager.setMaximumSize(const Size(32767, 32767));
     }
@@ -115,12 +115,14 @@ class WindowPrefs {
 
   Future<void> restoreGeometry() async {
     if (!hasSavedGeometry) return;
-    final w =
-        (_data[_kW] as num?)?.toDouble() ?? AppTheme.defaultWindowSize.width;
-    final h =
-        (_data[_kH] as num?)?.toDouble() ?? AppTheme.defaultWindowSize.height;
+    var w = (_data[_kW] as num?)?.toDouble() ?? AppTheme.defaultWindowSize.width;
+    var h = (_data[_kH] as num?)?.toDouble() ?? AppTheme.defaultWindowSize.height;
     final x = (_data[_kX] as num?)?.toDouble();
     final y = (_data[_kY] as num?)?.toDouble();
+
+    // Clamp to at least the minimum — prevents restoring a too-small window
+    w = w.clamp(AppTheme.minWindowSize.width, double.infinity);
+    h = h.clamp(AppTheme.minWindowSize.height, double.infinity);
 
     await windowManager.setSize(Size(w, h));
     if (x != null && y != null) {

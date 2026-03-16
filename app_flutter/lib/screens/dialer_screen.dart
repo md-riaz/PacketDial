@@ -919,18 +919,21 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             builder: (context) {
               final audioDevices = ref.watch(audioDevicesProvider);
               final activeAccountState = ref.watch(activeAccountProvider);
-              return Padding(
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // 1. Compact Header
                     _buildCompactHeader(activeAccount, allAccounts),
                     const SizedBox(height: 10),
 
-                    // 2. Active Call Panel (expands to fill space)
+                    // 2. Active Call Panel or Ready Indicator (fixed min height)
                     if (activeCall != null)
-                      Expanded(
-                        flex: 2,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 200),
                         child: _ActiveCallCard(
                           call: activeCall,
                           stats: stats,
@@ -945,7 +948,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                         ),
                       )
                     else
-                      Expanded(child: _buildReadyIndicator()),
+                      SizedBox(height: 80, child: _buildReadyIndicator()),
 
                     const SizedBox(height: 10),
 
@@ -964,7 +967,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                         activeCall, audioDevices),
                   ],
                 ),
-              );
+              ));
             },
           ),
         ),

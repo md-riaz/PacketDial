@@ -87,6 +87,14 @@ Note: settings import/export is not part of the active settings UI.
 - Windows installer
 - release automation through GitHub Actions
 
+## Window and Layout
+
+- Minimum window size enforced at OS level (400×750) — cannot be dragged below this
+- Resize lock toggle in title bar — pins window to current size, persisted across restarts, defaults to locked
+- Content centered at fixed width — stretching the window wide shows background space, layout never breaks
+- Saved window geometry clamped to minimum on restore — prevents undersized window from previous session
+- Full title bar drag area — icon and app name are draggable, not just the empty space
+
 ## Known Current Gaps
 
 - Windows Credential Manager is not the active password storage path yet

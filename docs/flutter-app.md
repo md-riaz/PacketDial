@@ -64,6 +64,20 @@ Key packages and behaviors:
 - `package_info_plus` for runtime version display
 - `internet_connection_checker_plus` for footer network reachability
 
+## Window Sizing and Resize Behavior
+
+The app enforces a minimum window size of `400×750` at the OS level via `windowManager.setMinimumSize` — called before geometry restore so it is active from the first frame. A snap-back guard in `onWindowResized` corrects any edge-case slip below the minimum.
+
+When the window is resized larger, the UI content stays at a fixed max width (`450px`) and is centered in the window — extra space shows the background. This mirrors MicroSIP's behavior and prevents layout breakage on wide windows.
+
+A resize lock toggle (lock icon in the title bar) lets users pin the window to its current size. The lock state is persisted in `window_prefs.json` and defaults to locked. When unlocked, only the minimum size floor is enforced.
+
+`WindowPrefs` (`core/window_prefs.dart`) persists:
+- `window_x`, `window_y` — last position
+- `window_w`, `window_h` — last size (clamped to minimum on restore)
+- `always_on_top` — pin-on-top state
+- `resize_locked` — resize lock state (default: `true`)
+
 ## Current UX Notes
 
 - Incoming calls force the app back to the Dialer tab so the banner is visible.

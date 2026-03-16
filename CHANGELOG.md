@@ -4,6 +4,22 @@
 
 ---
 
+## 1.0.3
+
+### Added
+- Responsive window layout — app content is constrained to a fixed width and centered in the window; stretching the window wide shows background space rather than breaking the layout (same behavior as MicroSIP)
+- Window resize lock toggle in the title bar (lock icon) — when locked the OS window is pinned to its current size so users cannot accidentally resize; persisted across restarts and defaults to locked
+- Minimum window size enforced at the OS level (`400×750`) — the window physically cannot be dragged below this size; enforced before geometry restore so it is active from the very first frame
+- Snap-back guard in `onWindowResized` — if the window somehow ends up below the minimum (e.g. bitsdojo/window_manager disagreement) it is immediately snapped back to the minimum
+- Saved geometry is clamped to the minimum on restore — prevents a previously-saved undersized window from being applied on next launch
+- Title bar drag area now covers the icon and app name — the entire left portion of the title bar is draggable, not just the empty space to the right of the title
+
+### Fixed
+- Dialer screen overflow — replaced `Expanded` children inside the main column with `SingleChildScrollView` + fixed/constrained heights so the layout never throws a Flutter overflow error when the window is short
+- Window could be restored to an arbitrarily large width from a previous session, causing the numpad and content to stretch and break; geometry restore now clamps width and height to valid bounds
+
+---
+
 ## 0.5.0
 
 ### Added

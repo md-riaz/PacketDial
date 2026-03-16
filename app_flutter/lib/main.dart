@@ -76,16 +76,14 @@ void main(List<String> args) async {
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-    // Restore saved position/size before showing
+    // Enforce min size FIRST — before restoring geometry so it's always active
+    await windowManager.setMinimumSize(AppTheme.minWindowSize);
+    appWindow.minSize = AppTheme.minWindowSize;
+
+    // Now restore saved position/size (clamped to min in restoreGeometry)
     await windowPrefs.restoreGeometry();
     await windowPrefs.applyAlwaysOnTop();
-    // Always enforce the absolute minimum size first
-    await windowManager.setMinimumSize(AppTheme.minWindowSize);
     await windowPrefs.applyResizeLock();
-
-    // Configure Bitsdojo window (synchronous setup)
-    debugPrint('[APP] Bitsdojo Window Ready');
-    appWindow.minSize = AppTheme.minWindowSize;
     // Note: windowManager handles size via restoreGeometry,
     // but we set appWindow to be safe for Bitsdojo components.
     appWindow.size = AppTheme.defaultWindowSize;
@@ -412,6 +410,17 @@ class _AppState extends ConsumerState<App>
 
   @override
   void onWindowResized() async {
+    final size = await windowManager.getSize();
+    final minW = AppTheme.minWindowSize.width;
+    final minH = AppTheme.minWindowSize.height;
+    // Snap back if the window somehow ends up below the minimum
+    if (size.width < minW || size.height < minH) {
+      await windowManager.setSize(Size(
+        size.width < minW ? minW : size.width,
+        size.height < minH ? minH : size.height,
+      ));
+      return;
+    }
     if (!_resizeLocked) {
       await widget.windowPrefs.saveGeometry();
     }
@@ -525,65 +534,72 @@ class _AppState extends ConsumerState<App>
   // ── Main App Shell ──────────────────────────────────────────────────────
   Widget _buildMainShell() {
     final incomingCallInfo = ref.watch(incomingCallProvider);
+
+    // The content column — fixed width, centered in whatever window size the user sets
+    final contentColumn = Column(
+      children: [
+        _buildTitleBar(),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: KeyedSubtree(
+              key: ValueKey<int>(_selectedIndex),
+              child: _buildScreen(_selectedIndex),
+            ),
+          ),
+        ),
+        const CockpitFooter(),
+      ],
+    );
+
     return Stack(
       children: [
         Scaffold(
-          body: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: AppTheme.minWindowSize.width,
-              minHeight: AppTheme.minWindowSize.height,
-            ),
-            child: Column(
-              children: [
-                // Custom Title Bar
-                _buildTitleBar(),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: KeyedSubtree(
-                      key: ValueKey<int>(_selectedIndex),
-                      child: _buildScreen(_selectedIndex),
-                    ),
-                  ),
-                ),
-                const CockpitFooter(),
-              ],
+          // Fill the whole window with the background gradient
+          backgroundColor: context.colors.surface,
+          bottomNavigationBar: _buildNavBar(),
+          body: Center(
+            child: ConstrainedBox(
+              // Content never goes below min or above default width —
+              // extra window space just shows the background
+              constraints: BoxConstraints(
+                minWidth: AppTheme.minWindowSize.width,
+                maxWidth: AppTheme.defaultWindowSize.width,
+                minHeight: AppTheme.minWindowSize.height,
+              ),
+              child: contentColumn,
             ),
           ),
-          bottomNavigationBar: _buildNavBar(),
         ),
-        // Incoming call banner overlay
+        // Incoming call banner — centered over the content area
         if (incomingCallInfo != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            top: _titleBarHeight,
-            child: IncomingCallBanner(
-              callInfo: incomingCallInfo,
-              onAnswer: () {
-                debugPrint('[MAIN] onAnswer clicked');
-                // Answer call - runs in background thread (non-blocking)
-                try {
-                  final rc = EngineChannel.instance.engine.answerCall();
-                  debugPrint('[MAIN] answerCall() returned: $rc');
-                  debugPrint(
-                      '[MAIN] Answer initiated - check logs for call state updates');
-                } catch (e, stack) {
-                  debugPrint('[MAIN] ERROR in answerCall: $e\n$stack');
-                }
-              },
-              onReject: () {
-                debugPrint('[MAIN] onReject clicked');
-                // Schedule reject on next frame to avoid blocking UI
-                SchedulerBinding.instance.addPostFrameCallback((_) {
-                  debugPrint('[MAIN] Reject: calling hangup');
-                  EngineChannel.instance.engine.hangup();
-                  debugPrint('[MAIN] Reject: hangup completed');
-                  ref.read(incomingCallProvider.notifier).clear();
-                  debugPrint('[MAIN] Reject: cleared incoming call state');
-                });
-              },
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: AppTheme.minWindowSize.width,
+                maxWidth: AppTheme.defaultWindowSize.width,
+                minHeight: AppTheme.minWindowSize.height,
+              ),
+              child: IncomingCallBanner(
+                callInfo: incomingCallInfo,
+                onAnswer: () {
+                  debugPrint('[MAIN] onAnswer clicked');
+                  try {
+                    final rc = EngineChannel.instance.engine.answerCall();
+                    debugPrint('[MAIN] answerCall() returned: $rc');
+                  } catch (e, stack) {
+                    debugPrint('[MAIN] ERROR in answerCall: $e\n$stack');
+                  }
+                },
+                onReject: () {
+                  debugPrint('[MAIN] onReject clicked');
+                  SchedulerBinding.instance.addPostFrameCallback((_) {
+                    EngineChannel.instance.engine.hangup();
+                    ref.read(incomingCallProvider.notifier).clear();
+                  });
+                },
+              ),
             ),
           ),
       ],
@@ -615,31 +631,39 @@ class _AppState extends ConsumerState<App>
         decoration: BoxDecoration(gradient: c.titleBarGradient),
         child: Row(
           children: [
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                boxShadow: [
-                  BoxShadow(
-                    color: c.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                  ),
-                ],
+            // Left side: icon + title — wrapped in MoveWindow so dragging works here too
+            Expanded(
+              child: MoveWindow(
+                child: Row(
+                  children: [
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: [
+                          BoxShadow(
+                            color: c.primary.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Image.asset('assets/app_icon.png', width: 16, height: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'PacketDial',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: c.textPrimary.withValues(alpha: 0.9),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Image.asset('assets/app_icon.png', width: 16, height: 16),
             ),
-            const SizedBox(width: 8),
-            Text(
-              'PacketDial',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: c.textPrimary.withValues(alpha: 0.9),
-                letterSpacing: 0.5,
-              ),
-            ),
-            Expanded(child: MoveWindow()),
             // Always-on-top toggle
             Tooltip(
               message: _alwaysOnTop ? 'Unpin from top' : 'Pin on top',

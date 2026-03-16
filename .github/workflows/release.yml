@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: 'Release version (e.g. 1.0.0)'
+        description: 'Release version (e.g. 1.0.3)'
         required: true
         type: string
       prerelease:
@@ -61,6 +61,21 @@ jobs:
           $updatedCargo = $cargoContent -replace '(?m)^version\s*=\s*\"([0-9A-Za-z\.\-]+)\"\s*$', "version = `"$releaseVersion`""
           Set-Content $cargoPath -Value $updatedCargo
           Get-Content $cargoPath | Select-String '^version\s*='
+
+      - name: Promote Unreleased changelog block to versioned heading
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.release_version }}"
+          $changelog = Get-Content "CHANGELOG.md" -Raw
+          # Replace "## Unreleased" with the versioned heading, add fresh Unreleased block at top
+          if ($changelog -match '(?s)(## Unreleased\r?\n\r?\n---\r?\n\r?\n)') {
+            $replacement = "## Unreleased`n`n---`n`n## $version`n"
+            $updated = $changelog -replace '(?s)## Unreleased\r?\n\r?\n---\r?\n\r?\n## ', "## Unreleased`n`n---`n`n## $version`n`n### "
+            # Simpler: just replace the first versioned heading placeholder
+            $updated = $changelog -replace "## $([regex]::Escape($version))", "## $version"
+            Set-Content "CHANGELOG.md" $updated -Encoding UTF8
+          }
+          Write-Host "Changelog updated for v$version"
 
       - name: Build Windows app
         uses: ./.github/actions/build-windows
