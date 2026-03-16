@@ -9,7 +9,6 @@ import '../widgets/section_title.dart';
 import '../widgets/setting_card.dart';
 
 import '../widgets/info_banner.dart';
-import '../core/app_settings_service.dart';
 import '../core/recording_service.dart';
 
 import 'diagnostics_screen.dart';
@@ -57,9 +56,6 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
       title: 'Settings',
       bottom: TabBar(
         controller: _tabController,
-        labelColor: AppTheme.primary,
-        unselectedLabelColor: AppTheme.textTertiary,
-        indicatorColor: AppTheme.primary,
         tabs: const [
           Tab(icon: Icon(Icons.tune), text: 'General'),
           Tab(icon: Icon(Icons.volume_up), text: 'Audio'),
@@ -103,10 +99,10 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'PacketDial',
                       style: TextStyle(
-                        color: AppTheme.primary,
+                        color: context.colors.primary,
                         fontWeight: FontWeight.w700,
                         fontSize: 18,
                       ),
@@ -114,18 +110,12 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                     const SizedBox(height: 4),
                     Text(
                       versionText,
-                      style: const TextStyle(
-                        color: AppTheme.textTertiary,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: context.colors.textTertiary, fontSize: 12),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'Modern Windows SIP softphone with advanced features',
-                      style: TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                     ),
                   ],
                 ),
@@ -136,6 +126,24 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 32),
 
           const SectionTitle('Preferences'),
+          const SizedBox(height: 16),
+
+          // Theme toggle
+          SettingCard(
+            icon: Icons.brightness_6_outlined,
+            title: 'Light Mode',
+            subtitle: 'Switch to a calm light theme',
+            trailing: Switch(
+              value: ref.watch(appSettingsProvider).lightModeEnabled,
+              onChanged: (value) async {
+                await ref
+                    .read(appSettingsProvider.notifier)
+                    .setLightModeEnabled(value);
+              },
+              activeThumbColor: context.colors.primary,
+            ),
+          ),
+
           const SizedBox(height: 16),
 
           // BLF Toggle
@@ -150,7 +158,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                     .read(appSettingsProvider.notifier)
                     .setBlfEnabled(value);
               },
-              activeThumbColor: AppTheme.primary,
+              activeThumbColor: context.colors.primary,
             ),
           ),
 
@@ -167,7 +175,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                     .read(appSettingsProvider.notifier)
                     .setStartWithWindowsEnabled(value);
               },
-              activeThumbColor: AppTheme.primary,
+              activeThumbColor: context.colors.primary,
             ),
           ),
 
@@ -207,13 +215,13 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                   ),
                 );
               },
-              icon: const Icon(Icons.bug_report, color: AppTheme.primary),
-              label: const Text(
+              icon: Icon(Icons.bug_report, color: context.colors.primary),
+              label: Text(
                 'Diagnostics & Logs',
-                style: TextStyle(color: AppTheme.primary),
+                style: TextStyle(color: context.colors.primary),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppTheme.primary),
+                side: BorderSide(color: context.colors.primary),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -259,7 +267,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 8),
           const Text(
             'Drag to reorder. Higher priority codecs are preferred during call negotiation.',
-            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 24),
           ReorderableListView.builder(
@@ -298,48 +306,30 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
 
               return Card(
                 key: ValueKey(codec['id']),
-                color: AppTheme.surfaceCard,
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   leading: ReorderableDragStartListener(
                     index: index,
-                    child: const Icon(Icons.drag_handle,
-                        color: AppTheme.textTertiary),
+                    child: Icon(Icons.drag_handle, color: context.colors.textTertiary),
                   ),
-                  title: Text(
-                    codec['name'] as String,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                  ),
+                  title: Text(codec['name'] as String),
                   subtitle: Text(
                     codec['id'] as String,
-                    style: const TextStyle(
-                      color: AppTheme.textTertiary,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    ),
+                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                   ),
                   trailing: Switch(
                     value: isEnabled,
                     onChanged: (value) {
-                      final updated =
-                          List<Map<String, dynamic>>.from(stateCodecs);
-                      final idx =
-                          updated.indexWhere((c) => c['codec'] == codec['id']);
+                      final updated = List<Map<String, dynamic>>.from(stateCodecs);
+                      final idx = updated.indexWhere((c) => c['codec'] == codec['id']);
                       if (idx >= 0) {
                         updated[idx] = Map<String, dynamic>.from(updated[idx]);
                         updated[idx]['enabled'] = value;
                       } else {
-                        updated.add({
-                          'codec': codec['id'],
-                          'enabled': value,
-                          'priority': availableCodecs.length - index,
-                        });
+                        updated.add({'codec': codec['id'], 'enabled': value, 'priority': availableCodecs.length - index});
                       }
-                      ref
-                          .read(appSettingsProvider.notifier)
-                          .setCodecPriorities(updated);
+                      ref.read(appSettingsProvider.notifier).setCodecPriorities(updated);
                     },
-                    activeThumbColor: AppTheme.primary,
                   ),
                 ),
               );
@@ -451,36 +441,15 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                 _getDtmfMethodName(ref.watch(appSettingsProvider).dtmfMethod),
             trailing: DropdownButton<int>(
               value: ref.watch(appSettingsProvider).dtmfMethod,
-              dropdownColor: AppTheme.surfaceCard,
               underline: const SizedBox(),
-              items: const [
-                DropdownMenuItem(
-                    value: 3,
-                    child: Text('Auto',
-                        style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 13))),
-                DropdownMenuItem(
-                    value: 0,
-                    child: Text('In-band',
-                        style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 13))),
-                DropdownMenuItem(
-                    value: 1,
-                    child: Text('RFC2833',
-                        style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 13))),
-                DropdownMenuItem(
-                    value: 2,
-                    child: Text('SIP INFO',
-                        style: TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 13))),
+              items: [
+                DropdownMenuItem(value: 3, child: Text('Auto', style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
+                DropdownMenuItem(value: 0, child: Text('In-band', style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
+                DropdownMenuItem(value: 1, child: Text('RFC2833', style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
+                DropdownMenuItem(value: 2, child: Text('SIP INFO', style: TextStyle(color: context.colors.textPrimary, fontSize: 13))),
               ],
               onChanged: (value) async {
-                if (value != null) {
-                  await ref
-                      .read(appSettingsProvider.notifier)
-                      .setDtmfMethod(value);
-                }
+                if (value != null) await ref.read(appSettingsProvider.notifier).setDtmfMethod(value);
               },
             ),
           ),
@@ -534,33 +503,17 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               Expanded(
                 child: TextField(
                   controller: _recordingDirController,
-                  style: const TextStyle(
-                      color: AppTheme.textPrimary, fontSize: 14),
+                  style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
                     labelText: 'Recording Folder',
                     hintText: r'C:\Users\YourName\Desktop\Recordings',
-                    prefixIcon:
-                        const Icon(Icons.edit_location_alt_outlined, size: 18),
-                    contentPadding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 16),
-                    labelStyle: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 13),
-                    hintStyle: const TextStyle(
-                        color: AppTheme.textTertiary, fontSize: 13),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: AppTheme.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide:
-                          const BorderSide(color: AppTheme.primary, width: 2),
-                    ),
+                    prefixIcon: const Icon(Icons.edit_location_alt_outlined, size: 18),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                    labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                    hintStyle: TextStyle(color: context.colors.textTertiary, fontSize: 13),
                   ),
                   onSubmitted: (value) async {
-                    await ref
-                        .read(appSettingsProvider.notifier)
-                        .setLocalRecordingDirectory(value.trim());
+                    await ref.read(appSettingsProvider.notifier).setLocalRecordingDirectory(value.trim());
                   },
                 ),
               ),
@@ -582,8 +535,8 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                           .setLocalRecordingDirectory(result);
                     },
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppTheme.surfaceCard,
-                      foregroundColor: AppTheme.primary,
+                      backgroundColor: context.colors.surfaceCard,
+                      foregroundColor: context.colors.primary,
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(46, 46),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -637,36 +590,27 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
   void _showResetDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        title: const Text('Reset Settings',
-            style: TextStyle(color: AppTheme.textPrimary)),
-        content: const Text(
-          'Reset all settings to default values?',
-          style: TextStyle(color: AppTheme.textSecondary),
-        ),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ctx.colors.surfaceCard,
+        title: Text('Reset Settings', style: TextStyle(color: ctx.colors.textPrimary)),
+        content: Text('Reset all settings to default values?', style: TextStyle(color: ctx.colors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: ctx.colors.textSecondary)),
           ),
           FilledButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(ctx);
               await ref.read(appSettingsProvider.notifier).resetToDefaults();
-
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Settings reset to defaults'),
-                  backgroundColor: AppTheme.callGreen,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              if (!ctx.mounted) return;
+              ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                content: Text('Settings reset to defaults'),
+                backgroundColor: AppTheme.callGreen,
+                behavior: SnackBarBehavior.floating,
+              ));
             },
-            style:
-                FilledButton.styleFrom(backgroundColor: AppTheme.warningAmber),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.warningAmber),
             child: const Text('Reset'),
           ),
         ],
@@ -689,7 +633,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
           const SizedBox(height: 8),
           const Text(
             'Select your preferred microphone and speaker. If your device isn\'t listed, try refreshing.',
-            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 24),
 
@@ -703,26 +647,16 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             trailing: inputDevices.isEmpty
                 ? const SizedBox.shrink()
                 : DropdownButton<int>(
-                    value:
-                        inputDevices.any((d) => d.id == channel.selectedInputId)
-                            ? channel.selectedInputId
-                            : inputDevices.first.id,
-                    dropdownColor: AppTheme.surfaceCard,
+                    value: inputDevices.any((d) => d.id == channel.selectedInputId)
+                        ? channel.selectedInputId
+                        : inputDevices.first.id,
                     underline: const SizedBox(),
-                    items: inputDevices.map((d) {
-                      return DropdownMenuItem<int>(
-                        value: d.id,
-                        child: Text(d.name,
-                            style: const TextStyle(
-                                color: AppTheme.textPrimary, fontSize: 13)),
-                      );
-                    }).toList(),
+                    items: inputDevices.map((d) => DropdownMenuItem<int>(
+                      value: d.id,
+                      child: Text(d.name, style: TextStyle(color: context.colors.textPrimary, fontSize: 13)),
+                    )).toList(),
                     onChanged: (value) {
-                      if (value != null) {
-                        channel.engine
-                            .setAudioDevices(value, channel.selectedOutputId);
-                        setState(() {});
-                      }
+                      if (value != null) { channel.engine.setAudioDevices(value, channel.selectedOutputId); setState(() {}); }
                     },
                   ),
           ),
@@ -739,26 +673,16 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
             trailing: outputDevices.isEmpty
                 ? const SizedBox.shrink()
                 : DropdownButton<int>(
-                    value: outputDevices
-                            .any((d) => d.id == channel.selectedOutputId)
+                    value: outputDevices.any((d) => d.id == channel.selectedOutputId)
                         ? channel.selectedOutputId
                         : outputDevices.first.id,
-                    dropdownColor: AppTheme.surfaceCard,
                     underline: const SizedBox(),
-                    items: outputDevices.map((d) {
-                      return DropdownMenuItem<int>(
-                        value: d.id,
-                        child: Text(d.name,
-                            style: const TextStyle(
-                                color: AppTheme.textPrimary, fontSize: 13)),
-                      );
-                    }).toList(),
+                    items: outputDevices.map((d) => DropdownMenuItem<int>(
+                      value: d.id,
+                      child: Text(d.name, style: TextStyle(color: context.colors.textPrimary, fontSize: 13)),
+                    )).toList(),
                     onChanged: (value) {
-                      if (value != null) {
-                        channel.engine
-                            .setAudioDevices(channel.selectedInputId, value);
-                        setState(() {});
-                      }
+                      if (value != null) { channel.engine.setAudioDevices(channel.selectedInputId, value); setState(() {}); }
                     },
                   ),
           ),
@@ -781,7 +705,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
               icon: const Icon(Icons.refresh),
               label: const Text('Refresh Device List'),
               style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primary,
+                backgroundColor: context.colors.primary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -808,34 +732,34 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
         children: [
           const SectionTitle('Integration Features'),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Configure webhooks, CRM lookup, screen pop, and more.',
-            style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            style: TextStyle(color: context.colors.textTertiary, fontSize: 12),
           ),
           const SizedBox(height: 24),
 
           // Main integration settings card
           Card(
-            color: AppTheme.surfaceCard,
+            color: context.colors.surfaceCard,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Advanced Integration Settings',
                     style: TextStyle(
-                      color: AppTheme.textPrimary,
+                      color: context.colors.textPrimary,
                       fontWeight: FontWeight.w600,
                       fontSize: 16,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Configure webhooks, CRM customer lookup, screen pop, '
                     'recording upload, and dialing rules.',
                     style: TextStyle(
-                      color: AppTheme.textSecondary,
+                      color: context.colors.textSecondary,
                       fontSize: 12,
                     ),
                   ),
@@ -855,7 +779,7 @@ class _AppSettingsPageState extends ConsumerState<AppSettingsPage>
                       icon: const Icon(Icons.settings),
                       label: const Text('Open Integration Settings'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
+                        backgroundColor: context.colors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),

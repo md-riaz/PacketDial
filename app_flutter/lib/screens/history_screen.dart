@@ -132,8 +132,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         title: const Text('Call History'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined,
-                size: 20, color: AppTheme.textTertiary),
+            icon: Icon(Icons.delete_sweep_outlined,
+                size: 20, color: context.colors.textTertiary),
             tooltip: 'Clear History',
             onPressed: () async {
               await ref.read(accountServiceProvider).clearHistory();
@@ -171,30 +171,28 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppTheme.primary.withValues(alpha: 0.15),
-            AppTheme.primary.withValues(alpha: 0.05),
+            context.colors.primary.withValues(alpha: 0.15),
+            context.colors.primary.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppTheme.primary.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: context.colors.primary.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.insights, size: 18, color: AppTheme.primary),
-              SizedBox(width: 8),
+              Icon(Icons.insights, size: 18, color: context.colors.primary),
+              const SizedBox(width: 8),
               Text(
                 'Last 30 Days',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.primary,
+                  color: context.colors.primary,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -207,7 +205,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               _StatItem(
                 label: 'Total',
                 value: stats.totalCalls.toString(),
-                color: AppTheme.textPrimary,
+                color: context.colors.textPrimary,
               ),
               _StatItem(
                 label: 'Incoming',
@@ -218,13 +216,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               _StatItem(
                 label: 'Outgoing',
                 value: stats.outgoingCalls.toString(),
-                color: AppTheme.primary,
+                color: context.colors.primary,
                 icon: Icons.call_made,
               ),
               _StatItem(
                 label: 'Answered',
                 value: stats.answeredCalls.toString(),
-                color: AppTheme.accent,
+                color: context.colors.accent,
                 icon: Icons.check_circle,
               ),
               _StatItem(
@@ -236,7 +234,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               _StatItem(
                 label: 'Duration',
                 value: stats.formattedTotalDuration,
-                color: AppTheme.textSecondary,
+                color: context.colors.textSecondary,
                 icon: Icons.schedule,
               ),
             ],
@@ -292,9 +290,9 @@ class _StatItem extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 9,
-            color: AppTheme.textTertiary,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -325,7 +323,7 @@ class _HistoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOutgoing = entry.direction.toLowerCase() == 'outgoing';
     final dirIcon = isOutgoing ? Icons.call_made : Icons.call_received;
-    final dirColor = isOutgoing ? AppTheme.primary : AppTheme.callGreen;
+    final dirColor = isOutgoing ? context.colors.primary : AppTheme.callGreen;
     final isAnswered = entry.result == 'Answered';
 
     return Dismissible(
@@ -339,109 +337,73 @@ class _HistoryCard extends StatelessWidget {
           color: AppTheme.errorRed.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.delete_outline,
-            color: AppTheme.errorRed, size: 22),
+        child: const Icon(Icons.delete_outline, color: AppTheme.errorRed, size: 22),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
-        decoration: AppTheme.glassCard(borderRadius: 12),
+        decoration: context.colors.glassCard(borderRadius: 12),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () async {
-              // Pre-fill dialer with this number
-              // TODO: Navigate to dialer screen with the number pre-filled
-              // This will be implemented when dialer screen navigation is added
-            },
+            onTap: () async {},
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  // Direction icon with glow
                   Container(
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
                       color: dirColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: dirColor.withValues(alpha: 0.1),
-                          blurRadius: 6,
-                        ),
-                      ],
+                      boxShadow: [BoxShadow(color: dirColor.withValues(alpha: 0.1), blurRadius: 6)],
                     ),
-                    child: Center(
-                      child: Icon(dirIcon, color: dirColor, size: 18),
-                    ),
+                    child: Center(child: Icon(dirIcon, color: dirColor, size: 18)),
                   ),
                   const SizedBox(width: 12),
-                  // Call info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           SipUriUtils.friendlyName(entry.uri),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: AppTheme.textPrimary,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: context.colors.textPrimary),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 3),
                         Row(
                           children: [
-                            Text(
-                              _formattedTime(entry.timestamp),
-                              style: const TextStyle(
-                                  fontSize: 11, color: AppTheme.textTertiary),
-                            ),
+                            Text(_formattedTime(entry.timestamp),
+                                style: TextStyle(fontSize: 11, color: context.colors.textTertiary)),
                             Container(
-                              width: 3,
-                              height: 3,
+                              width: 3, height: 3,
                               margin: const EdgeInsets.symmetric(horizontal: 6),
                               decoration: BoxDecoration(
-                                color: AppTheme.textTertiary
-                                    .withValues(alpha: 0.4),
+                                color: context.colors.textTertiary.withValues(alpha: 0.4),
                                 shape: BoxShape.circle,
                               ),
                             ),
-                            Text(
-                              _relativeTime(entry.timestamp),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.textTertiary
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
+                            Text(_relativeTime(entry.timestamp),
+                                style: TextStyle(fontSize: 11, color: context.colors.textTertiary.withValues(alpha: 0.7))),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  // Result badge
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: (isAnswered
-                                  ? AppTheme.callGreen
-                                  : AppTheme.errorRed)
-                              .withValues(alpha: 0.1),
+                          color: (isAnswered ? AppTheme.callGreen : AppTheme.errorRed).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           entry.result ?? 'Ended',
                           style: TextStyle(
-                            color: isAnswered
-                                ? AppTheme.callGreen
-                                : AppTheme.errorRed,
+                            color: isAnswered ? AppTheme.callGreen : AppTheme.errorRed,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                           ),
@@ -449,14 +411,8 @@ class _HistoryCard extends StatelessWidget {
                       ),
                       if (entry.sipCode != null) ...[
                         const SizedBox(height: 4),
-                        Text(
-                          'SIP ${entry.sipCode}',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: AppTheme.textTertiary.withValues(alpha: 0.5),
-                            fontFamily: 'monospace',
-                          ),
-                        ),
+                        Text('SIP ${entry.sipCode}',
+                            style: TextStyle(fontSize: 9, color: context.colors.textTertiary.withValues(alpha: 0.5), fontFamily: 'monospace')),
                       ],
                     ],
                   ),

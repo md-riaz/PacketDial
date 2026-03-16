@@ -327,7 +327,7 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
       RegistrationState.registered => AppTheme.callGreen,
       RegistrationState.registering => AppTheme.warningAmber,
       RegistrationState.failed => AppTheme.errorRed,
-      _ => AppTheme.textTertiary,
+      _ => context.colors.textTertiary,
     };
 
     String statusLabel = registrationState.label;
@@ -343,21 +343,15 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: AppTheme.surfaceCard,
+          color: context.colors.surfaceCard,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
                 ? AppTheme.callGreen.withValues(alpha: 0.3)
-                : AppTheme.border.withValues(alpha: 0.4),
+                : context.colors.border.withValues(alpha: 0.4),
           ),
           boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppTheme.callGreen.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    spreadRadius: 0,
-                  )
-                ]
+              ? [BoxShadow(color: AppTheme.callGreen.withValues(alpha: 0.08), blurRadius: 12)]
               : null,
         ),
         child: Material(
@@ -366,14 +360,13 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
             padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                // Avatar with status indicator
                 Stack(
                   children: [
                     Container(
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.12),
+                        color: context.colors.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
@@ -381,10 +374,10 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                           widget.account.accountName.isNotEmpty
                               ? widget.account.accountName[0].toUpperCase()
                               : '?',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.primary,
+                            color: context.colors.primary,
                           ),
                         ),
                       ),
@@ -399,21 +392,14 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                           decoration: BoxDecoration(
                             color: statusColor,
                             shape: BoxShape.circle,
-                            border: Border.all(
-                                color: AppTheme.surfaceCard, width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: statusColor.withValues(alpha: 0.4),
-                                blurRadius: 4,
-                              )
-                            ],
+                            border: Border.all(color: context.colors.surfaceCard, width: 2),
+                            boxShadow: [BoxShadow(color: statusColor.withValues(alpha: 0.4), blurRadius: 4)],
                           ),
                         ),
                       ),
                   ],
                 ),
                 const SizedBox(width: 12),
-                // Account info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -422,44 +408,34 @@ class _AccountCardState extends ConsumerState<_AccountCard> {
                         widget.account.accountName,
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: AppTheme.textPrimary,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color: context.colors.textPrimary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${widget.account.username}@${widget.account.server}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textTertiary,
-                        ),
+                        style: TextStyle(fontSize: 11, color: context.colors.textTertiary),
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (isEnabled) ...[
                         const SizedBox(height: 4),
                         Text(
                           statusLabel,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: statusColor,
-                          ),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: statusColor),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ],
                   ),
                 ),
-                // Switch toggle
                 const SizedBox(width: 8),
                 Transform.scale(
                   scale: 0.8,
                   child: Switch(
                     value: isEnabled,
-                    onChanged: (ref.watch(accountRegisteringProvider(
-                                widget.account.uuid)) ||
+                    onChanged: (ref.watch(accountRegisteringProvider(widget.account.uuid)) ||
                             registrationState == RegistrationState.registering)
                         ? null
                         : _toggleRegistration,

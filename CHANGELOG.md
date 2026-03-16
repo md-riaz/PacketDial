@@ -2,7 +2,12 @@
 
 ## Unreleased
 
+---
+
+## 0.5.0
+
 ### Added
+- Full light mode theme — all screens, dialogs, widgets, and the numpad respond to system/app theme brightness; light mode uses genuine white/near-white surfaces with deep indigo primary color for proper contrast; `AppColorSet` exported so widget helpers can accept it as a parameter
 - Publish Presence (SIP PUBLISH) — per-account toggle; when enabled the app sends SIP PUBLISH so subscribed contacts can see your status via BLF; requires server-side support (e.g. Asterisk `res_pjsip_publish_asterisk`, FreeSWITCH `mod_presence`)
 - Microphone amplification toggle — disabled by default; when enabled applies 2× software gain via `pjsua_conf_adjust_tx_level` on the conference bridge mic port
 - Echo cancellation toggle in app settings — enabled by default (200 ms tail); calls `pjsua_set_ec` at runtime so no restart needed
@@ -15,8 +20,11 @@
 ### Fixed
 - BLF presence notifications were silently dropped — Rust callback fired `BlfStatus` but the event router expected `BlfStatusChanged`; renamed to match
 - BLF subscriptions now also fire on `PJSIP_EVSUB_STATE_PENDING` so early presence state is captured
+- Contact list no longer shows duplicate presence status when server activity note matches the presence state label
 
 ---
+
+## 0.4.0
 
 ### Fixed
 - TLS transport now initialises correctly at startup — accounts configured with TLS no longer silently fall back to UDP

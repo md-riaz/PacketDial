@@ -13,6 +13,7 @@ class AppSettingsData {
   final bool startWithWindowsEnabled;
   final bool localCallRecordingEnabled;
   final String localRecordingDirectory;
+  final bool lightModeEnabled;
 
   AppSettingsData({
     required this.codecPriorities,
@@ -25,6 +26,7 @@ class AppSettingsData {
     required this.startWithWindowsEnabled,
     required this.localCallRecordingEnabled,
     required this.localRecordingDirectory,
+    required this.lightModeEnabled,
   });
 
   factory AppSettingsData.defaultSettings() {
@@ -39,6 +41,7 @@ class AppSettingsData {
       startWithWindowsEnabled: false,
       localCallRecordingEnabled: false,
       localRecordingDirectory: '',
+      lightModeEnabled: false,
     );
   }
 
@@ -54,6 +57,7 @@ class AppSettingsData {
       startWithWindowsEnabled: service.startWithWindowsEnabled,
       localCallRecordingEnabled: service.localCallRecordingEnabled,
       localRecordingDirectory: service.localRecordingDirectory,
+      lightModeEnabled: service.lightModeEnabled,
     );
   }
 }
@@ -83,6 +87,11 @@ class AppSettingsNotifier extends Notifier<AppSettingsData> {
 
   Future<void> setBlfEnabled(bool value) async {
     await _service.setBlfEnabled(value);
+    _refresh();
+  }
+
+  Future<void> setLightModeEnabled(bool value) async {
+    await _service.setLightModeEnabled(value);
     _refresh();
   }
 

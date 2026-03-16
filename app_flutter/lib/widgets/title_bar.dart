@@ -21,23 +21,24 @@ class TitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return WindowTitleBarBox(
       child: Container(
         height: 34,
-        decoration: const BoxDecoration(gradient: AppTheme.titleBarGradient),
+        decoration: BoxDecoration(gradient: c.titleBarGradient),
         child: Row(
           children: [
             if (showBackButton)
               IconButton(
                 icon: const Icon(Icons.arrow_back, size: 16),
-                color: AppTheme.textSecondary,
+                color: c.textSecondary,
                 onPressed: () => Navigator.of(context).pop(),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, maxWidth: 34, minHeight: 34, maxHeight: 34),
+                constraints: const BoxConstraints(
+                    minWidth: 34, maxWidth: 34, minHeight: 34, maxHeight: 34),
               )
             else
               const SizedBox(width: 12),
-            
             if (!showBackButton) ...[
               Container(
                 padding: const EdgeInsets.all(2),
@@ -45,7 +46,7 @@ class TitleBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.3),
+                      color: c.primary.withValues(alpha: 0.3),
                       blurRadius: 8,
                     ),
                   ],
@@ -54,19 +55,16 @@ class TitleBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
             ],
-            
             Text(
               title ?? 'PacketDial',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary.withValues(alpha: 0.9),
+                color: c.textPrimary.withValues(alpha: 0.9),
                 letterSpacing: 0.5,
               ),
             ),
             Expanded(child: MoveWindow()),
-            
-            // Always-on-top toggle
             Tooltip(
               message: alwaysOnTop ? 'Unpin from top' : 'Pin on top',
               child: InkWell(
@@ -77,7 +75,7 @@ class TitleBar extends StatelessWidget {
                   child: Icon(
                     alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
                     size: 14,
-                    color: alwaysOnTop ? AppTheme.primary : AppTheme.textTertiary,
+                    color: alwaysOnTop ? c.primary : c.textTertiary,
                   ),
                 ),
               ),
@@ -96,18 +94,19 @@ class WindowButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final buttonColors = WindowButtonColors(
-      iconNormal: AppTheme.textSecondary,
-      mouseOver: AppTheme.primary.withValues(alpha: 0.15),
-      mouseDown: AppTheme.primary.withValues(alpha: 0.25),
-      iconMouseOver: AppTheme.textPrimary,
-      iconMouseDown: AppTheme.textPrimary,
+      iconNormal: c.textSecondary,
+      mouseOver: c.primary.withValues(alpha: 0.15),
+      mouseDown: c.primary.withValues(alpha: 0.25),
+      iconMouseOver: c.textPrimary,
+      iconMouseDown: c.textPrimary,
     );
 
     final closeButtonColors = WindowButtonColors(
       mouseOver: const Color(0xFFD32F2F),
       mouseDown: const Color(0xFFB71C1C),
-      iconNormal: AppTheme.textSecondary,
+      iconNormal: c.textSecondary,
       iconMouseOver: Colors.white,
     );
 
@@ -117,9 +116,7 @@ class WindowButtons extends StatelessWidget {
         MaximizeWindowButton(colors: buttonColors),
         CloseWindowButton(
           colors: closeButtonColors,
-          onPressed: () {
-            windowManager.close();
-          },
+          onPressed: () => windowManager.close(),
         ),
       ],
     );

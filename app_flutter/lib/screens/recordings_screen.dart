@@ -8,7 +8,6 @@ import '../widgets/title_bar.dart';
 import 'app_settings_page.dart';
 import '../providers/window_prefs_provider.dart';
 
-/// Screen for viewing and playing call recordings.
 class RecordingsScreen extends ConsumerStatefulWidget {
   const RecordingsScreen({super.key});
 
@@ -19,61 +18,47 @@ class RecordingsScreen extends ConsumerStatefulWidget {
 class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final state = ref.watch(recordingsProvider);
 
-    // Listen for when a recording is selected (for debugging)
-    ref.listen<RecordingsState>(
-      recordingsProvider,
-      (previous, next) {
-        if (next.currentRecording != null &&
-            previous?.currentRecording?.filePath !=
-                next.currentRecording?.filePath) {
-          debugPrint('[RecordingsScreen] Now playing: ${next.currentRecording?.fileName}');
-        }
-      },
-    );
+    ref.listen<RecordingsState>(recordingsProvider, (previous, next) {
+      if (next.currentRecording != null &&
+          previous?.currentRecording?.filePath !=
+              next.currentRecording?.filePath) {
+        debugPrint(
+            '[RecordingsScreen] Now playing: ${next.currentRecording?.fileName}');
+      }
+    });
 
     return Scaffold(
-      backgroundColor: AppTheme.surface,
       body: Column(
         children: [
           TitleBar(
-            title: '', // Keep title in the header body instead
+            title: '',
             alwaysOnTop: ref.watch(windowPrefsProvider),
             onToggleAlwaysOnTop: () =>
                 ref.read(windowPrefsProvider.notifier).toggleAlwaysOnTop(),
-            showBackButton: false, // Use the back button in the header
+            showBackButton: false,
           ),
-          // Header
-          _buildHeader(state),
-
-          // Content
-          Expanded(
-            child: _buildContent(state),
-          ),
-
-          // Player bottom sheet - show when there's a current recording
+          _buildHeader(c, state),
+          Expanded(child: _buildContent(c, state)),
           if (state.currentRecording != null)
             AudioPlayerControls(
               recording: state.currentRecording!,
-              onClose: () {
-                ref.read(recordingsProvider.notifier).stop();
-              },
+              onClose: () => ref.read(recordingsProvider.notifier).stop(),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildHeader(RecordingsState state) {
+  Widget _buildHeader(AppColorSet c, RecordingsState state) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: c.surfaceVariant,
         border: Border(
-          bottom: BorderSide(
-            color: AppTheme.border.withValues(alpha: 0.3),
-          ),
+          bottom: BorderSide(color: c.border.withValues(alpha: 0.3)),
         ),
       ),
       child: SafeArea(
@@ -83,63 +68,52 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back),
-                  color: AppTheme.textPrimary,
+                  color: c.textPrimary,
                   onPressed: () => Navigator.of(context).pop(),
                 ),
                 const SizedBox(width: 8),
-                // Title
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Recordings',
                     style: TextStyle(
-                      color: AppTheme.textPrimary,
+                      color: c.textPrimary,
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                // Settings link
                 TextButton.icon(
-                  onPressed: () => _showRecordingSettings(),
+                  onPressed: _showRecordingSettings,
                   icon: const Icon(Icons.settings, size: 18),
                   label: const Text('Settings'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.textSecondary,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: c.textSecondary),
                 ),
                 const SizedBox(width: 8),
-                // Refresh button
                 IconButton(
                   icon: const Icon(Icons.refresh),
-                  color: AppTheme.textPrimary,
-                  onPressed: () {
-                    ref.read(recordingsProvider.notifier).loadRecordings();
-                  },
+                  color: c.textPrimary,
+                  onPressed: () =>
+                      ref.read(recordingsProvider.notifier).loadRecordings(),
                   tooltip: 'Refresh',
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            // Summary row
             Row(
               children: [
-                const SizedBox(width: 48), // Align with content after back button
+                const SizedBox(width: 48),
                 Text(
                   '${state.recordings.length} recording${state.recordings.length != 1 ? 's' : ''}',
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: c.textTertiary, fontSize: 12),
                 ),
                 if (state.isLoading) ...[
                   const SizedBox(width: 16),
-                  const SizedBox(
+                  SizedBox(
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                      valueColor: AlwaysStoppedAnimation<Color>(c.primary),
                     ),
                   ),
                 ],
@@ -151,69 +125,52 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
     );
   }
 
-  Widget _buildContent(RecordingsState state) {
+  Widget _buildContent(AppColorSet c, RecordingsState state) {
     if (state.isLoading && state.recordings.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
-
-    if (state.recordings.isEmpty) {
-      return _buildEmptyState();
-    }
+    if (state.recordings.isEmpty) return _buildEmptyState(c);
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await ref.read(recordingsProvider.notifier).loadRecordings();
-      },
-      color: AppTheme.primary,
+      onRefresh: () async =>
+          ref.read(recordingsProvider.notifier).loadRecordings(),
+      color: c.primary,
       child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 100), // Space for player
+        padding: const EdgeInsets.only(bottom: 100),
         itemCount: state.recordings.length,
-        itemBuilder: (context, index) {
-          final recording = state.recordings[index];
-          return RecordingListTile(
-            recording: recording,
-          );
-        },
+        itemBuilder: (context, index) =>
+            RecordingListTile(recording: state.recordings[index]),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppColorSet c) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: AppTheme.surfaceCard,
+            decoration: BoxDecoration(
+              color: c.surfaceCard,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.mic_none,
-              size: 64,
-              color: AppTheme.textTertiary,
-            ),
+            child: Icon(Icons.mic_none, size: 64, color: c.textTertiary),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'No Recordings Yet',
             style: TextStyle(
-              color: AppTheme.textPrimary,
+              color: c.textPrimary,
               fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Recordings will appear here when you\nenable local call recording.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: c.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -221,9 +178,10 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
             icon: const Icon(Icons.settings),
             label: const Text('Open Recording Settings'),
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primary,
+              backgroundColor: c.primary,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -233,9 +191,7 @@ class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
 
   void _showRecordingSettings() {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const AppSettingsPage(initialTab: 3),
-      ),
+      MaterialPageRoute(builder: (_) => const AppSettingsPage(initialTab: 3)),
     );
   }
 }

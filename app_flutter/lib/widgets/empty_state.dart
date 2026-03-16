@@ -20,6 +20,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -28,18 +29,18 @@ class EmptyState extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.primary.withValues(alpha: 0.08),
+              color: c.primary.withValues(alpha: 0.08),
             ),
             child: Icon(icon,
-                size: 48, color: AppTheme.textTertiary.withValues(alpha: 0.5)),
+                size: 48, color: c.textTertiary.withValues(alpha: 0.5)),
           ),
           const SizedBox(height: AppTheme.spacingMd),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
+              color: c.textPrimary,
             ),
           ),
           if (subtitle != null) ...[
@@ -48,7 +49,7 @@ class EmptyState extends StatelessWidget {
               subtitle!,
               style: TextStyle(
                 fontSize: 13,
-                color: AppTheme.textTertiary.withValues(alpha: 0.7),
+                color: c.textTertiary.withValues(alpha: 0.7),
               ),
               textAlign: TextAlign.center,
             ),
@@ -60,7 +61,7 @@ class EmptyState extends StatelessWidget {
               icon: const Icon(Icons.add, size: 18),
               label: Text(actionLabel!),
               style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primary,
+                backgroundColor: c.primary,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(

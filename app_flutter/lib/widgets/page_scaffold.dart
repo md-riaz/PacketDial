@@ -19,8 +19,9 @@ class PageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      decoration: const BoxDecoration(gradient: AppTheme.pageGradient),
+      decoration: BoxDecoration(gradient: c.pageGradient),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -28,8 +29,8 @@ class PageScaffold extends StatelessWidget {
           elevation: 0,
           title: Text(
             title,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
+            style: TextStyle(
+              color: c.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 20,
             ),

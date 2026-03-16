@@ -10,6 +10,11 @@ on:
         description: 'Release version (e.g. 1.0.0)'
         required: true
         type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-and-release:
@@ -114,16 +119,17 @@ jobs:
         id: changelog
         shell: pwsh
         run: |
+          $version = "${{ inputs.release_version }}"
           $content = Get-Content "CHANGELOG.md" -Raw
-          # Grab everything between the first "## " heading and the next one
-          if ($content -match '(?s)## Unreleased\r?\n(.*?)(\r?\n## |\z)') {
+          # Try to match the versioned heading for this release first
+          if ($content -match "(?s)## \[?$([regex]::Escape($version))\]?[^\n]*\r?\n(.*?)(\r?\n## |\z)") {
             $notes = $Matches[1].Trim()
-          } elseif ($content -match '(?s)## \[?[0-9].*?\r?\n(.*?)(\r?\n## |\z)') {
+          # Fall back to Unreleased block
+          } elseif ($content -match '(?s)## Unreleased\r?\n(.*?)(\r?\n## |\z)') {
             $notes = $Matches[1].Trim()
           } else {
             $notes = "See CHANGELOG.md for details."
           }
-          # Write to a temp file to avoid multiline env var issues
           $notes | Set-Content "$env:RUNNER_TEMP\release_notes.md" -Encoding UTF8
           echo "notes_file=$env:RUNNER_TEMP\release_notes.md" >> $env:GITHUB_OUTPUT
 
@@ -137,7 +143,7 @@ jobs:
             ${{ github.workspace }}/dist/PacketDial-*-Portable.zip
             ${{ github.workspace }}/dist/PacketDial-Setup-*.exe
           draft: false
-          prerelease: false
+          prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
 
       - name: Cleanup

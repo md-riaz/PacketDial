@@ -24,7 +24,6 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
   static const _levels = ['All', 'Error', 'Warn', 'Info', 'Debug'];
   String _filterLevel = 'All';
 
-  // Active log-level selector for the engine (what it emits)
   static const _engineLevels = ['Error', 'Warn', 'Info', 'Debug'];
   String _engineLevel = 'Info';
 
@@ -51,17 +50,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
 
   void _scrollToBottom(ScrollController ctrl) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (ctrl.hasClients) {
-        ctrl.jumpTo(ctrl.position.maxScrollExtent);
-      }
+      if (ctrl.hasClients) ctrl.jumpTo(ctrl.position.maxScrollExtent);
     });
   }
 
-  void _exportBundle() {
-    // TODO: Implement with new C ABI - needs engine_export_diagnostics() function
-    // This will export logs, events, SIP messages, and system info to a zip file
-    _showSnack('Export bundle feature coming soon');
-  }
+  void _exportBundle() => _showSnack('Export bundle feature coming soon');
 
   void _copyAllEvents() {
     Clipboard.setData(ClipboardData(text: _channel.eventLog.join('\n')));
@@ -104,11 +97,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     return _channel.logBuffer.where((e) => e.level == target).toList();
   }
 
-  Color _levelColor(LogLevel level) => switch (level) {
+  Color _levelColor(LogLevel level, AppColorSet c) => switch (level) {
         LogLevel.error => AppTheme.errorRed,
         LogLevel.warn => AppTheme.warningAmber,
-        LogLevel.info => AppTheme.primary,
-        LogLevel.debug => AppTheme.textTertiary,
+        LogLevel.info => c.primary,
+        LogLevel.debug => c.textTertiary,
       };
 
   @override
@@ -175,9 +168,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     );
   }
 
-  // ── Event log tab ────────────────────────────────────────────────────────
-
   Widget _buildEventTab() {
+    final c = context.colors;
     final log = _channel.eventLog;
     return Column(
       children: [
@@ -195,16 +187,16 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                     margin: const EdgeInsets.only(bottom: 2),
                     decoration: BoxDecoration(
                       color: i.isEven
-                          ? AppTheme.surfaceCard.withValues(alpha: 0.4)
+                          ? c.surfaceCard.withValues(alpha: 0.4)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: SelectableText(
                       log.elementAt(i),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 11,
-                        color: AppTheme.textSecondary,
+                        color: c.textSecondary,
                         height: 1.4,
                       ),
                     ),
@@ -221,19 +213,17 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     );
   }
 
-  // ── Structured log tab ───────────────────────────────────────────────────
-
   Widget _buildLogTab() {
+    final c = context.colors;
     final logs = _filteredLogs;
     return Column(
       children: [
-        // Controls row
         Container(
           padding: const EdgeInsets.fromLTRB(10, 8, 4, 6),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceCard.withValues(alpha: 0.3),
+            color: c.surfaceCard.withValues(alpha: 0.3),
             border: Border(
-              bottom: BorderSide(color: AppTheme.border.withValues(alpha: 0.3)),
+              bottom: BorderSide(color: c.border.withValues(alpha: 0.3)),
             ),
           ),
           child: Row(
@@ -286,15 +276,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Level badge
                           Container(
                             width: 42,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 2),
                             margin: const EdgeInsets.only(right: 8, top: 1),
                             decoration: BoxDecoration(
-                              color:
-                                  _levelColor(e.level).withValues(alpha: 0.12),
+                              color: _levelColor(e.level, c)
+                                  .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -303,7 +292,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
-                                color: _levelColor(e.level),
+                                color: _levelColor(e.level, c),
                                 letterSpacing: 0.3,
                               ),
                             ),
@@ -311,10 +300,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                           Expanded(
                             child: SelectableText(
                               e.message,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 11,
-                                color: AppTheme.textSecondary,
+                                color: context.colors.textSecondary,
                                 height: 1.4,
                               ),
                             ),
@@ -329,33 +318,29 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     );
   }
 
-  // ── SIP Messages tab ──────────────────────────────────────────────────────
-
-  String _formatTime(DateTime dt) {
-    return '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}:'
-        '${dt.second.toString().padLeft(2, '0')}';
-  }
+  String _formatTime(DateTime dt) =>
+      '${dt.hour.toString().padLeft(2, '0')}:'
+      '${dt.minute.toString().padLeft(2, '0')}:'
+      '${dt.second.toString().padLeft(2, '0')}';
 
   Widget _buildSipTab() {
+    final c = context.colors;
     final messages = _channel.sipMessages;
     return Column(
       children: [
-        // Controls row
         Container(
           padding: const EdgeInsets.fromLTRB(10, 8, 4, 6),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceCard.withValues(alpha: 0.3),
+            color: c.surfaceCard.withValues(alpha: 0.3),
             border: Border(
-              bottom: BorderSide(color: AppTheme.border.withValues(alpha: 0.3)),
+              bottom: BorderSide(color: c.border.withValues(alpha: 0.3)),
             ),
           ),
           child: Row(
             children: [
               Text(
                 '${messages.length} message${messages.length == 1 ? '' : 's'}',
-                style:
-                    const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
+                style: TextStyle(fontSize: 11, color: c.textTertiary),
               ),
               const Spacer(),
               _MiniIconButton(
@@ -386,27 +371,25 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                     final m = messages.elementAt(i);
                     final isSend = m.isSend;
                     final accentColor =
-                        isSend ? AppTheme.primary : AppTheme.callGreen;
+                        isSend ? c.primary : AppTheme.callGreen;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.surfaceCard,
+                        color: c.surfaceCard,
                         borderRadius: BorderRadius.circular(8),
                         border: Border(
-                          left: BorderSide(
-                            color: accentColor,
-                            width: 3,
-                          ),
+                          left: BorderSide(color: accentColor, width: 3),
                         ),
                       ),
                       child: ExpansionTile(
                         dense: true,
-                        tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                        tilePadding:
+                            const EdgeInsets.symmetric(horizontal: 10),
                         childrenPadding:
                             const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                        iconColor: AppTheme.textTertiary,
-                        collapsedIconColor: AppTheme.textTertiary,
+                        iconColor: c.textTertiary,
+                        collapsedIconColor: c.textTertiary,
                         leading: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 2),
@@ -426,11 +409,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                         ),
                         title: Text(
                           m.firstLine,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
+                            color: c.textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -439,7 +422,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                           '${isSend ? "Sent" : "Received"} at ${_formatTime(m.timestamp)}',
                           style: TextStyle(
                             fontSize: 9,
-                            color: AppTheme.textTertiary.withValues(alpha: 0.6),
+                            color: c.textTertiary.withValues(alpha: 0.6),
                           ),
                         ),
                         children: [
@@ -447,19 +430,18 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
                             width: double.infinity,
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: AppTheme.surface,
+                              color: c.surface,
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                  color:
-                                      AppTheme.border.withValues(alpha: 0.3)),
+                                  color: c.border.withValues(alpha: 0.3)),
                             ),
                             child: SelectableText(
                               m.raw,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'monospace',
                                 fontSize: 10,
                                 height: 1.5,
-                                color: AppTheme.textSecondary,
+                                color: c.textSecondary,
                               ),
                             ),
                           ),
@@ -473,9 +455,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     );
   }
 
-  // ── Shared helpers ────────────────────────────────────────────────────────
-
   Widget _buildTabEmpty(IconData icon, String title, String subtitle) {
+    final c = context.colors;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -484,24 +465,23 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.primary.withValues(alpha: 0.05),
+              color: c.primary.withValues(alpha: 0.05),
             ),
             child: Icon(icon,
-                size: 40, color: AppTheme.textTertiary.withValues(alpha: 0.4)),
+                size: 40, color: c.textTertiary.withValues(alpha: 0.4)),
           ),
           const SizedBox(height: 12),
           Text(title,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary)),
+                  color: c.textSecondary)),
           const SizedBox(height: 4),
           Text(
             subtitle,
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 11,
-                color: AppTheme.textTertiary.withValues(alpha: 0.6)),
+                fontSize: 11, color: c.textTertiary.withValues(alpha: 0.6)),
           ),
         ],
       ),
@@ -514,12 +494,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
     required VoidCallback onClear,
     bool showExport = false,
   }) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceCard.withValues(alpha: 0.3),
+        color: c.surfaceCard.withValues(alpha: 0.3),
         border: Border(
-          top: BorderSide(color: AppTheme.border.withValues(alpha: 0.3)),
+          top: BorderSide(color: c.border.withValues(alpha: 0.3)),
         ),
       ),
       child: Row(
@@ -555,22 +536,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen>
             ),
           if (showExport) const SizedBox(width: 8),
           _MiniIconButton(
-            icon: Icons.copy,
-            tooltip: 'Copy all',
-            onPressed: onCopy,
-          ),
+              icon: Icons.copy, tooltip: 'Copy all', onPressed: onCopy),
           _MiniIconButton(
-            icon: Icons.delete_outline,
-            tooltip: 'Clear',
-            onPressed: onClear,
-          ),
+              icon: Icons.delete_outline, tooltip: 'Clear', onPressed: onClear),
         ],
       ),
     );
   }
 }
-
-// ── Reusable Widgets ────────────────────────────────────────────────────────
 
 class _CountBadge extends StatelessWidget {
   final int count;
@@ -578,18 +551,19 @@ class _CountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: AppTheme.primary.withValues(alpha: 0.15),
+        color: c.primary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         count > 99 ? '99+' : '$count',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
-          color: AppTheme.primary,
+          color: c.primary,
         ),
       ),
     );
@@ -610,25 +584,26 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 10, color: AppTheme.textTertiary)),
+            style: TextStyle(fontSize: 10, color: c.textTertiary)),
         const SizedBox(width: 4),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceCard,
+            color: c.surfaceCard,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AppTheme.border.withValues(alpha: 0.4)),
+            border: Border.all(color: c.border.withValues(alpha: 0.4)),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: value,
               isDense: true,
-              style: const TextStyle(fontSize: 11, color: AppTheme.primary),
-              dropdownColor: AppTheme.surfaceVariant,
+              style: TextStyle(fontSize: 11, color: c.primary),
+              dropdownColor: c.surfaceVariant,
               items: options
                   .map((l) => DropdownMenuItem(value: l, child: Text(l)))
                   .toList(),
@@ -655,13 +630,14 @@ class _MiniIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return IconButton(
       icon: Icon(icon, size: 16),
       visualDensity: VisualDensity.compact,
       tooltip: tooltip,
       onPressed: onPressed,
-      color: AppTheme.textTertiary,
-      hoverColor: AppTheme.primary.withValues(alpha: 0.1),
+      color: c.textTertiary,
+      hoverColor: c.primary.withValues(alpha: 0.1),
     );
   }
 }

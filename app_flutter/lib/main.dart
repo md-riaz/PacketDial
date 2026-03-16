@@ -427,17 +427,21 @@ class _AppState extends ConsumerState<App>
 
   @override
   Widget build(BuildContext context) {
+    final lightMode = ref.watch(appSettingsProvider).lightModeEnabled;
     return MaterialApp(
       navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'PacketDial',
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: lightMode ? ThemeMode.light : ThemeMode.dark,
       home: _ready ? _buildMainShell() : _buildSplashScreen(),
     );
   }
 
   // ── Splash / Loading Screen ─────────────────────────────────────────────
   Widget _buildSplashScreen() {
+    // Splash always uses dark palette (shown before theme is applied)
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -455,7 +459,6 @@ class _AppState extends ConsumerState<App>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // App Icon with glow
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -586,10 +589,11 @@ class _AppState extends ConsumerState<App>
   }
 
   Widget _buildTitleBar() {
+    final c = context.colors;
     return WindowTitleBarBox(
       child: Container(
         height: _titleBarHeight,
-        decoration: const BoxDecoration(gradient: AppTheme.titleBarGradient),
+        decoration: BoxDecoration(gradient: c.titleBarGradient),
         child: Row(
           children: [
             const SizedBox(width: 12),
@@ -599,7 +603,7 @@ class _AppState extends ConsumerState<App>
                 borderRadius: BorderRadius.circular(4),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.primary.withValues(alpha: 0.3),
+                    color: c.primary.withValues(alpha: 0.3),
                     blurRadius: 8,
                   ),
                 ],
@@ -612,7 +616,7 @@ class _AppState extends ConsumerState<App>
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary.withValues(alpha: 0.9),
+                color: c.textPrimary.withValues(alpha: 0.9),
                 letterSpacing: 0.5,
               ),
             ),
@@ -628,11 +632,38 @@ class _AppState extends ConsumerState<App>
                   child: Icon(
                     _alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
                     size: 14,
-                    color:
-                        _alwaysOnTop ? AppTheme.primary : AppTheme.textTertiary,
+                    color: _alwaysOnTop ? c.primary : c.textTertiary,
                   ),
                 ),
               ),
+            ),
+            const SizedBox(width: 4),
+            // Theme toggle
+            Consumer(
+              builder: (context, ref, _) {
+                final lightMode =
+                    ref.watch(appSettingsProvider).lightModeEnabled;
+                final tc = context.colors;
+                return Tooltip(
+                  message: lightMode ? 'Switch to dark mode' : 'Switch to light mode',
+                  child: InkWell(
+                    onTap: () => ref
+                        .read(appSettingsProvider.notifier)
+                        .setLightModeEnabled(!lightMode),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        lightMode
+                            ? Icons.dark_mode_outlined
+                            : Icons.light_mode_outlined,
+                        size: 14,
+                        color: tc.primary,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 4),
             const WindowButtons(),
@@ -643,13 +674,12 @@ class _AppState extends ConsumerState<App>
   }
 
   Widget _buildNavBar() {
+    final c = context.colors;
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: c.surfaceVariant,
         border: Border(
-          top: BorderSide(
-            color: AppTheme.border.withValues(alpha: 0.3),
-          ),
+          top: BorderSide(color: c.border.withValues(alpha: 0.3)),
         ),
       ),
       child: NavigationBar(
@@ -693,18 +723,19 @@ class WindowButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final buttonColors = WindowButtonColors(
-      iconNormal: AppTheme.textSecondary,
-      mouseOver: AppTheme.primary.withValues(alpha: 0.15),
-      mouseDown: AppTheme.primary.withValues(alpha: 0.25),
-      iconMouseOver: AppTheme.textPrimary,
-      iconMouseDown: AppTheme.textPrimary,
+      iconNormal: c.textSecondary,
+      mouseOver: c.primary.withValues(alpha: 0.15),
+      mouseDown: c.primary.withValues(alpha: 0.25),
+      iconMouseOver: c.textPrimary,
+      iconMouseDown: c.textPrimary,
     );
 
     final closeButtonColors = WindowButtonColors(
       mouseOver: const Color(0xFFD32F2F),
       mouseDown: const Color(0xFFB71C1C),
-      iconNormal: AppTheme.textSecondary,
+      iconNormal: c.textSecondary,
       iconMouseOver: Colors.white,
     );
 
@@ -715,7 +746,6 @@ class WindowButtons extends StatelessWidget {
         CloseWindowButton(
           colors: closeButtonColors,
           onPressed: () {
-            // Trigger the onWindowClose handler (which checks for active calls)
             windowManager.close();
           },
         ),
@@ -729,16 +759,15 @@ class CockpitFooter extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final summary = ref.watch(registrationSummaryProvider);
     final activeAccount = ref.watch(activeAccountProvider);
     final regState = ref.watch(registrationStateProvider);
     final activeCall = ref.watch(activeCallProvider);
     final networkStatus = ref.watch(networkStatusProvider);
 
-    // Multi-account summary vs single account
     final bool isMulti = summary.totalEnabled > 1;
 
-    // Status color logic (Spec 2.2 + USER)
     Color statusColor;
     if (summary.totalRegistered > 0) {
       statusColor = AppTheme.callGreen;
@@ -747,14 +776,13 @@ class CockpitFooter extends ConsumerWidget {
     } else if (summary.totalRegistering > 0) {
       statusColor = AppTheme.warningAmber;
     } else {
-      statusColor = AppTheme.textTertiary;
+      statusColor = c.textTertiary;
     }
 
     bool hasCall = activeCall != null;
     final isNetworkOnline =
         networkStatus.valueOrNull != NetworkReachabilityStatus.offline;
-    final networkColor =
-        isNetworkOnline ? AppTheme.textTertiary : AppTheme.errorRed;
+    final networkColor = isNetworkOnline ? c.textTertiary : AppTheme.errorRed;
     final networkLabel =
         isNetworkOnline ? 'Network: Online' : 'Network: Offline';
 
@@ -762,17 +790,14 @@ class CockpitFooter extends ConsumerWidget {
       height: 28,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: c.surfaceVariant,
         border: Border(
-          top: BorderSide(
-            color: AppTheme.border.withValues(alpha: 0.3),
-          ),
+          top: BorderSide(color: c.border.withValues(alpha: 0.3)),
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
-          // Registration Status with glow dot
           AppTheme.statusDot(statusColor),
           const SizedBox(width: 6),
           Flexible(
@@ -793,21 +818,20 @@ class CockpitFooter extends ConsumerWidget {
             width: 1,
             height: 12,
             margin: const EdgeInsets.symmetric(horizontal: 8),
-            color: AppTheme.border.withValues(alpha: 0.4),
+            color: c.border.withValues(alpha: 0.4),
           ),
 
-          // Network / Call Status
           if (hasCall) ...[
-            const Icon(Icons.call, size: 10, color: AppTheme.accentBright),
+            Icon(Icons.call, size: 10, color: c.accentBright),
             const SizedBox(width: 4),
             Flexible(
               child: Text(
                 'Call: ${activeCall.state.label} (${SipUriUtils.friendlyName(activeCall.uri)})',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 10,
-                    color: AppTheme.accentBright,
+                    color: c.accentBright,
                     fontWeight: FontWeight.w600),
               ),
             ),
@@ -826,6 +850,7 @@ class CockpitFooter extends ConsumerWidget {
           Consumer(
             builder: (context, ref, _) {
               final dndEnabled = ref.watch(appSettingsProvider).dndEnabled;
+              final dc = context.colors;
               return InkWell(
                 onTap: () async {
                   await ref
@@ -855,7 +880,7 @@ class CockpitFooter extends ConsumerWidget {
                         size: 12,
                         color: dndEnabled
                             ? AppTheme.errorRed
-                            : AppTheme.textTertiary,
+                            : dc.textTertiary,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -865,7 +890,7 @@ class CockpitFooter extends ConsumerWidget {
                           fontWeight: FontWeight.w600,
                           color: dndEnabled
                               ? AppTheme.errorRed
-                              : AppTheme.textTertiary,
+                              : dc.textTertiary,
                         ),
                       ),
                     ],
@@ -877,11 +902,10 @@ class CockpitFooter extends ConsumerWidget {
 
           const SizedBox(width: 12),
 
-          // App Version
           Text('v1.0.0',
               style: TextStyle(
                   fontSize: 9,
-                  color: AppTheme.textTertiary.withValues(alpha: 0.6),
+                  color: c.textTertiary.withValues(alpha: 0.6),
                   letterSpacing: 0.5)),
         ],
       ),

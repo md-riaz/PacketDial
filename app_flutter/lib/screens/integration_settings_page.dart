@@ -7,7 +7,6 @@ import '../core/app_theme.dart';
 import '../widgets/section_title.dart';
 import '../widgets/info_banner.dart';
 
-/// Integration settings page with tabs for all integration features
 class IntegrationSettingsPage extends StatefulWidget {
   const IntegrationSettingsPage({super.key});
 
@@ -21,18 +20,11 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   late TabController _tabController;
   final _settings = AppSettingsService.instance;
 
-  // Controllers for webhooks
   final _ringWebhookController = TextEditingController();
   final _endWebhookController = TextEditingController();
-
-  // Controllers for customer lookup
   final _customerLookupUrlController = TextEditingController();
   final _customerLookupTimeoutController = TextEditingController();
-
-  // Controllers for screen pop
   final _screenPopUrlController = TextEditingController();
-
-  // Controllers for recording upload
   final _localRecordingDirController = TextEditingController();
   final _recordingUploadUrlController = TextEditingController();
   final _recordingFieldNameController = TextEditingController();
@@ -60,9 +52,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     _localRecordingDirController.text = recordingDir;
     _recordingUploadUrlController.text = _settings.recordingUploadUrl;
     _recordingFieldNameController.text = _settings.recordingFileFieldName;
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -82,16 +72,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        backgroundColor: AppTheme.surfaceVariant,
-        elevation: 0,
         title: const Text('Integration Settings'),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppTheme.primary,
-          unselectedLabelColor: AppTheme.textSecondary,
-          indicatorColor: AppTheme.primary,
           tabs: const [
             Tab(icon: Icon(Icons.webhook), text: 'Webhooks'),
             Tab(icon: Icon(Icons.person_search), text: 'CRM Lookup'),
@@ -113,6 +97,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   }
 
   Widget _buildWebhooksTab() {
+    final c = context.colors;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -124,15 +109,13 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               'Webhooks are triggered on specific call events. URLs support placeholders: %NUMBER%, %ID%, %DIRECTION%, %DURATION%',
         ),
         const SizedBox(height: 24),
-
-        // Ring Webhook
         SwitchListTile(
-          title: const Text('Incoming Call Webhook',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Triggered when call starts ringing',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          title: Text('Incoming Call Webhook',
+              style: TextStyle(color: c.textPrimary)),
+          subtitle: Text('Triggered when call starts ringing',
+              style: TextStyle(color: c.textTertiary, fontSize: 12)),
           value: _settings.ringWebhookEnabled,
-          activeThumbColor: AppTheme.primary,
+          activeThumbColor: c.primary,
           contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setRingWebhookEnabled(value);
@@ -152,17 +135,14 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             },
           ),
         ],
-
         const SizedBox(height: 24),
-
-        // Call End Webhook
         SwitchListTile(
-          title: const Text('Call End Webhook',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Triggered when call ends',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          title: Text('Call End Webhook',
+              style: TextStyle(color: c.textPrimary)),
+          subtitle: Text('Triggered when call ends',
+              style: TextStyle(color: c.textTertiary, fontSize: 12)),
           value: _settings.callEndWebhookEnabled,
-          activeThumbColor: AppTheme.primary,
+          activeThumbColor: c.primary,
           contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setCallEndWebhookEnabled(value);
@@ -183,7 +163,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             },
           ),
         ],
-
         const SizedBox(height: 32),
         _buildSaveButton(() async {
           await _settings.setRingWebhookUrl(_ringWebhookController.text);
@@ -195,6 +174,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   }
 
   Widget _buildCrmLookupTab() {
+    final c = context.colors;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -206,25 +186,20 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
               'When a call comes in, PacketDial sends an HTTP GET request to your web service with the caller\'s number. Your service returns contact details that appear on the incoming call screen.',
         ),
         const SizedBox(height: 16),
-
-        // How it works
         InfoBanner(
           icon: Icons.help_outline,
-          color: AppTheme.accent,
+          color: context.colors.accent,
           text: '',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'How it works',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                ),
-              ),
+              Text('How it works',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary,
+                      fontSize: 13)),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '1. Incoming call arrives with caller number e.g. +441234567890\n'
                 '2. PacketDial calls your URL with %NUMBER% replaced by that number\n'
                 '3. Your service looks up the number in your database or CRM\n'
@@ -232,41 +207,33 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 '5. The caller\'s name and company appear on the incoming call screen\n'
                 '6. An "Open CRM Record" button appears if you include a contact_link',
                 style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 12,
-                  height: 1.6,
-                ),
+                    color: c.textSecondary, fontSize: 12, height: 1.6),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-
-        // JSON format
         InfoBanner(
           icon: Icons.code,
-          color: AppTheme.accent,
+          color: context.colors.accent,
           text: '',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Required JSON response format',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                ),
-              ),
+              Text('Required JSON response format',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary,
+                      fontSize: 13)),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.surface,
+                  color: c.surface,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   '{\n'
                   '  "crm_info": {\n'
                   '    "number": "+441234567890",\n'
@@ -280,7 +247,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                   '  }\n'
                   '}',
                   style: TextStyle(
-                    color: AppTheme.textSecondary,
+                    color: c.textSecondary,
                     fontSize: 11,
                     fontFamily: 'monospace',
                     height: 1.5,
@@ -288,37 +255,29 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Only crm_info is required. All fields inside it are optional — include only what you have. '
                 'contact_link enables the "Open CRM Record" button on the call screen. '
                 'custom_fields can hold any extra data you want to pass through.',
                 style: TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 11,
-                  height: 1.5,
-                ),
+                    color: c.textTertiary, fontSize: 11, height: 1.5),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-
-        // URL placeholder info
         InfoBanner(
           icon: Icons.swap_horiz,
-          color: AppTheme.accent,
+          color: context.colors.accent,
           text: '',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'URL placeholders',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                ),
-              ),
+              Text('URL placeholders',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary,
+                      fontSize: 13)),
               const SizedBox(height: 8),
               _buildPlaceholderRow('%NUMBER%',
                   'Caller\'s phone number (after dialing rules applied)'),
@@ -328,14 +287,13 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           ),
         ),
         const SizedBox(height: 24),
-
         SwitchListTile(
-          title: const Text('Enable Customer Lookup',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Fetch customer data on incoming calls',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          title: Text('Enable Customer Lookup',
+              style: TextStyle(color: c.textPrimary)),
+          subtitle: Text('Fetch customer data on incoming calls',
+              style: TextStyle(color: c.textTertiary, fontSize: 12)),
           value: _settings.customerLookupEnabled,
-          activeThumbColor: AppTheme.primary,
+          activeThumbColor: c.primary,
           contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setCustomerLookupEnabled(value);
@@ -359,14 +317,10 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'If your CRM takes longer than this to respond, the call screen shows without contact info. '
           'The lookup still completes in the background and updates the screen when it arrives.',
-          style: TextStyle(
-            color: AppTheme.textTertiary,
-            fontSize: 11,
-            height: 1.5,
-          ),
+          style: TextStyle(color: c.textTertiary, fontSize: 11, height: 1.5),
         ),
         const SizedBox(height: 24),
         _buildSaveButton(() async {
@@ -384,15 +338,15 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             onPressed: () {
               CustomerLookupService.instance.clearCache();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Customer lookup cache cleared')),
+                const SnackBar(
+                    content: Text('Customer lookup cache cleared')),
               );
             },
-            icon:
-                const Icon(Icons.delete_outline, color: AppTheme.textTertiary),
-            label: const Text('Clear Cache',
-                style: TextStyle(color: AppTheme.textTertiary)),
+            icon: Icon(Icons.delete_outline, color: c.textTertiary),
+            label: Text('Clear Cache',
+                style: TextStyle(color: c.textTertiary)),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppTheme.border),
+              side: BorderSide(color: c.border),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
@@ -400,19 +354,16 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Lookup results are cached per number during the session. Clear the cache if you\'ve updated contact data in your CRM and want fresh results immediately.',
-          style: TextStyle(
-            color: AppTheme.textTertiary,
-            fontSize: 11,
-            height: 1.5,
-          ),
+          style: TextStyle(color: c.textTertiary, fontSize: 11, height: 1.5),
         ),
       ],
     );
   }
 
   Widget _buildPlaceholderRow(String placeholder, String description) {
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -420,8 +371,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         children: [
           Text(
             placeholder,
-            style: const TextStyle(
-              color: AppTheme.primary,
+            style: TextStyle(
+              color: c.primary,
               fontSize: 11,
               fontFamily: 'monospace',
               fontWeight: FontWeight.w600,
@@ -429,13 +380,8 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              description,
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 11,
-              ),
-            ),
+            child: Text(description,
+                style: TextStyle(color: c.textSecondary, fontSize: 11)),
           ),
         ],
       ),
@@ -443,6 +389,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   }
 
   Widget _buildScreenPopTab() {
+    final c = context.colors;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -456,21 +403,21 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         const SizedBox(height: 12),
         InfoBanner(
           icon: Icons.code,
-          color: AppTheme.accent,
+          color: context.colors.accent,
           text: '',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Supported placeholders',
+              Text('Supported placeholders',
                   style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                      color: c.textPrimary,
                       fontSize: 13)),
               const SizedBox(height: 6),
               Text(
                 '%NUMBER%, %NAME%, %COMPANY%, %EXTID%, %DID%, %ID%, %ACCOUNT_ID%, %STATE%, %DIRECTION%, %CONTACT_LINK%',
                 style: TextStyle(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                    color: c.textSecondary.withValues(alpha: 0.8),
                     fontSize: 11,
                     fontFamily: 'monospace'),
               ),
@@ -491,38 +438,24 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
             labelText: 'Trigger Event',
             contentPadding:
                 const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            labelStyle:
-                const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              borderSide: const BorderSide(color: AppTheme.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-            ),
           ),
-          dropdownColor: AppTheme.surfaceVariant,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
           items: const [
             DropdownMenuItem(value: 'ring', child: Text('Incoming Call Ring')),
             DropdownMenuItem(value: 'answer', child: Text('Call Answered')),
             DropdownMenuItem(value: 'end', child: Text('Call Ended')),
           ],
           onChanged: (value) async {
-            if (value != null) {
-              await _settings.setScreenPopEvent(value);
-            }
+            if (value != null) await _settings.setScreenPopEvent(value);
           },
         ),
         const SizedBox(height: 16),
         SwitchListTile(
-          title: const Text('Open in Browser',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('If off, send background HTTP request',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          title: Text('Open in Browser',
+              style: TextStyle(color: c.textPrimary)),
+          subtitle: Text('If off, send background HTTP request',
+              style: TextStyle(color: c.textTertiary, fontSize: 12)),
           value: _settings.screenPopOpenBrowser,
-          activeThumbColor: AppTheme.primary,
+          activeThumbColor: c.primary,
           contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setScreenPopOpenBrowser(value);
@@ -530,12 +463,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
           },
         ),
         SwitchListTile(
-          title: const Text('Suppress Main Window',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Don\'t show PacketDial window on screen pop',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          title: Text('Suppress Main Window',
+              style: TextStyle(color: c.textPrimary)),
+          subtitle: Text('Don\'t show PacketDial window on screen pop',
+              style: TextStyle(color: c.textTertiary, fontSize: 12)),
           value: _settings.screenPopSuppressWindow,
-          activeThumbColor: AppTheme.primary,
+          activeThumbColor: c.primary,
           contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setScreenPopSuppressWindow(value);
@@ -552,6 +485,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   }
 
   Widget _buildRecordingTab() {
+    final c = context.colors;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -564,12 +498,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         ),
         const SizedBox(height: 24),
         SwitchListTile(
-          title: const Text('Enable Recording Upload',
-              style: TextStyle(color: AppTheme.textPrimary)),
-          subtitle: const Text('Upload recordings after calls end',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          title: Text('Enable Recording Upload',
+              style: TextStyle(color: c.textPrimary)),
+          subtitle: Text('Upload recordings after calls end',
+              style: TextStyle(color: c.textTertiary, fontSize: 12)),
           value: _settings.recordingUploadEnabled,
-          activeThumbColor: AppTheme.primary,
+          activeThumbColor: c.primary,
           contentPadding: EdgeInsets.zero,
           onChanged: (value) async {
             await _settings.setRecordingUploadEnabled(value);
@@ -604,7 +538,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
     );
   }
 
-
   Widget _buildField({
     required TextEditingController controller,
     required String label,
@@ -616,7 +549,6 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
   }) {
     return TextField(
       controller: controller,
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       onSubmitted: onSubmitted,
@@ -626,22 +558,12 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         prefixIcon: icon != null ? Icon(icon, size: 18) : null,
         contentPadding:
             const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-        labelStyle:
-            const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-        hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          borderSide: const BorderSide(color: AppTheme.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-        ),
       ),
     );
   }
 
   Widget _buildSaveButton(VoidCallback onPressed) {
+    final c = context.colors;
     return SizedBox(
       width: double.infinity,
       child: FilledButton.icon(
@@ -649,7 +571,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage>
         icon: const Icon(Icons.save, size: 18),
         label: const Text('Save Settings'),
         style: FilledButton.styleFrom(
-          backgroundColor: AppTheme.primary,
+          backgroundColor: c.primary,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusMd)),

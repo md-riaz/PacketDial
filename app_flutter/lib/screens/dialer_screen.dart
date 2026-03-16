@@ -243,36 +243,31 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   void _showErrorDialog(String title, String message,
       {bool showSettings = false}) {
+    final c = context.colors;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
+        backgroundColor: c.surfaceCard,
         icon: const Icon(Icons.error, color: AppTheme.errorRed, size: 48),
-        title: Text(title, style: const TextStyle(color: AppTheme.textPrimary)),
-        content: Text(message,
-            style: const TextStyle(color: AppTheme.textSecondary)),
+        title: Text(title, style: TextStyle(color: c.textPrimary)),
+        content: Text(message, style: TextStyle(color: c.textSecondary)),
         actions: [
           if (showSettings)
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Switch to Settings tab (index 2 usually)
-                // Note: The parent scaffold is controlled by NavigationBar
-                // This might not work perfectly without a callback to main,
-                // but we can try to push the settings page or just close.
-                // For now, let's just show a snackbar or close.
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                       content:
                           Text('Go to Settings > Audio to configure devices')),
                 );
               },
-              child: const Text('Check Settings',
-                  style: TextStyle(color: AppTheme.textSecondary)),
+              child: Text('Check Settings',
+                  style: TextStyle(color: c.textSecondary)),
             ),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: AppTheme.primary)),
+            child: Text('OK', style: TextStyle(color: c.primary)),
           ),
         ],
       ),
@@ -285,6 +280,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     required bool hasOutput,
     required VoidCallback onProceed,
   }) {
+    final c = context.colors;
     final missingDevices = <String>[];
     if (!hasInput) missingDevices.add('Microphone');
     if (!hasOutput) missingDevices.add('Speaker');
@@ -292,43 +288,41 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
+        backgroundColor: c.surfaceCard,
         icon: const Icon(Icons.warning, color: AppTheme.warningAmber, size: 48),
-        title: const Text('Audio Device Warning',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        title: Text('Audio Device Warning',
+            style: TextStyle(color: c.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Missing audio devices:',
               style: TextStyle(
-                  color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                  color: c.textSecondary, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            ...missingDevices.map((d) => Text('• $d',
-                style: const TextStyle(color: AppTheme.textSecondary))),
+            ...missingDevices.map((d) =>
+                Text('• $d', style: TextStyle(color: c.textSecondary))),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'The call will use null audio devices (no sound). '
               'Connect audio devices and configure them in Settings.',
-              style: TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: c.textSecondary),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               onProceed();
             },
-            child: const Text('Proceed Anyway',
-                style: TextStyle(color: AppTheme.primary)),
+            child: Text('Proceed Anyway', style: TextStyle(color: c.primary)),
           ),
         ],
       ),
@@ -343,6 +337,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       return;
     }
 
+    final c = context.colors;
     final transferCtrl = TextEditingController();
     final transferFocusNode = FocusNode();
     bool isConsultTransfer = false;
@@ -351,46 +346,37 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: AppTheme.surfaceCard,
-          icon: const Icon(Icons.phone_forwarded,
-              color: AppTheme.primary, size: 48),
-          title: const Text('Transfer Call',
-              style: TextStyle(color: AppTheme.textPrimary)),
+          backgroundColor: c.surfaceCard,
+          icon: Icon(Icons.phone_forwarded, color: c.primary, size: 48),
+          title: Text('Transfer Call', style: TextStyle(color: c.textPrimary)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Transfer this call to:',
-                  style: TextStyle(color: AppTheme.textSecondary),
-                ),
+                Text('Transfer this call to:',
+                    style: TextStyle(color: c.textSecondary)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: transferCtrl,
                   focusNode: transferFocusNode,
                   autofocus: true,
-                  style: const TextStyle(color: AppTheme.textPrimary),
                   decoration: InputDecoration(
                     hintText: 'sip:user@domain or extension',
-                    hintStyle: const TextStyle(color: AppTheme.textTertiary),
                     filled: true,
-                    fillColor: AppTheme.inputFill,
+                    fillColor: c.inputFill,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.phone_forwarded,
-                        color: AppTheme.primary),
+                    prefixIcon: Icon(Icons.phone_forwarded, color: c.primary),
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Transfer Type:',
-                  style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w600),
-                ),
+                Text('Transfer Type:',
+                    style: TextStyle(
+                        color: c.textSecondary,
+                        fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 RadioGroup<bool>(
                   groupValue: isConsultTransfer,
@@ -398,28 +384,28 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     if (value == null) return;
                     setDialogState(() => isConsultTransfer = value);
                   },
-                  child: const Column(
+                  child: Column(
                     children: [
                       RadioListTile<bool>(
                         value: false,
                         title: Text('Blind Transfer',
-                            style: TextStyle(color: AppTheme.textPrimary)),
+                            style: TextStyle(color: c.textPrimary)),
                         subtitle: Text(
                             'Transfer immediately without consulting',
                             style: TextStyle(
-                                color: AppTheme.textTertiary, fontSize: 11)),
+                                color: c.textTertiary, fontSize: 11)),
                         contentPadding: EdgeInsets.zero,
-                        activeColor: AppTheme.primary,
+                        activeColor: c.primary,
                       ),
                       RadioListTile<bool>(
                         value: true,
                         title: Text('Consult Transfer',
-                            style: TextStyle(color: AppTheme.textPrimary)),
+                            style: TextStyle(color: c.textPrimary)),
                         subtitle: Text('Speak to target first, then transfer',
                             style: TextStyle(
-                                color: AppTheme.textTertiary, fontSize: 11)),
+                                color: c.textTertiary, fontSize: 11)),
                         contentPadding: EdgeInsets.zero,
-                        activeColor: AppTheme.primary,
+                        activeColor: c.primary,
                       ),
                     ],
                   ),
@@ -429,11 +415,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cancel',
-                  style: TextStyle(color: AppTheme.textSecondary)),
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
             ),
             TextButton(
               onPressed: () {
@@ -443,8 +426,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                   Navigator.pop(context);
                 }
               },
-              child: const Text('Transfer',
-                  style: TextStyle(color: AppTheme.primary)),
+              child: Text('Transfer', style: TextStyle(color: c.primary)),
             ),
           ],
         ),
@@ -457,6 +439,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Shows dialog to complete consult transfer when consultation call is active.
   void _showCompleteTransferDialog(ActiveCall heldCall) {
+    final c = context.colors;
     final consultationId = ref.read(dialerUiProvider).consultationCallId;
     final consultationTarget = _consultationDisplay;
     if (consultationId == null) return;
@@ -464,50 +447,43 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        icon:
-            const Icon(Icons.check_circle, color: AppTheme.callGreen, size: 48),
-        title: const Text('Complete Transfer',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        backgroundColor: c.surfaceCard,
+        icon: const Icon(Icons.check_circle, color: AppTheme.callGreen, size: 48),
+        title: Text('Complete Transfer',
+            style: TextStyle(color: c.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Complete the attended transfer?',
               style: TextStyle(
-                  color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                  color: c.textSecondary, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             if (consultationTarget != null) ...[
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  color: c.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppTheme.primary.withValues(alpha: 0.3),
-                  ),
+                  border: Border.all(color: c.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.person, color: AppTheme.primary, size: 20),
+                    Icon(Icons.person, color: c.primary, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Transfer to:',
-                            style: TextStyle(
-                              color: AppTheme.textTertiary,
-                              fontSize: 10,
-                            ),
-                          ),
+                          Text('Transfer to:',
+                              style: TextStyle(
+                                  color: c.textTertiary, fontSize: 10)),
                           Text(
                             consultationTarget,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
+                            style: TextStyle(
+                              color: c.textPrimary,
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                             ),
@@ -524,16 +500,14 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             ],
             Text(
               'This will connect the held call to ${consultationTarget ?? 'the consultation target'} and end your consultation call.',
-              style:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+              style: TextStyle(color: c.textTertiary, fontSize: 12),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
           ),
           FilledButton.icon(
             onPressed: () {
@@ -543,7 +517,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             icon: const Icon(Icons.phone_forwarded, size: 18),
             label: const Text('Complete Transfer'),
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primary,
+              backgroundColor: c.primary,
               foregroundColor: Colors.white,
             ),
           ),
@@ -554,46 +528,42 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Shows conference dialog to add a participant.
   void _showConferenceDialog(ActiveCall call) {
-    // If there's a consultation call, show join conference dialog
     if (_hasConsultationCall()) {
       _joinConference(call);
       return;
     }
 
+    final c = context.colors;
     final conferenceCtrl = TextEditingController();
     final conferenceFocusNode = FocusNode();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        icon: const Icon(Icons.groups, color: AppTheme.primary, size: 48),
-        title: const Text('Add to Conference',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        backgroundColor: c.surfaceCard,
+        icon: Icon(Icons.groups, color: c.primary, size: 48),
+        title: Text('Add to Conference',
+            style: TextStyle(color: c.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Add this participant to the call:',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
+            Text('Add this participant to the call:',
+                style: TextStyle(color: c.textSecondary)),
             const SizedBox(height: 8),
             TextField(
               controller: conferenceCtrl,
               focusNode: conferenceFocusNode,
               autofocus: true,
-              style: const TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 hintText: 'sip:user@domain or extension',
-                hintStyle: const TextStyle(color: AppTheme.textTertiary),
                 filled: true,
-                fillColor: AppTheme.inputFill,
+                fillColor: c.inputFill,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
                 ),
-                prefixIcon: const Icon(Icons.groups, color: AppTheme.primary),
+                prefixIcon: Icon(Icons.groups, color: c.primary),
               ),
               onSubmitted: (_) {
                 if (conferenceCtrl.text.trim().isNotEmpty) {
@@ -603,9 +573,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               },
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'This will put the current call on hold and dial the participant. Once they answer, you can create a 3-way conference.',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+              style: TextStyle(color: c.textTertiary, fontSize: 12),
             ),
           ],
         ),
@@ -616,8 +586,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               conferenceFocusNode.dispose();
               Navigator.pop(context);
             },
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
           ),
           TextButton(
             onPressed: () {
@@ -626,8 +595,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('Add Participant',
-                style: TextStyle(color: AppTheme.primary)),
+            child: Text('Add Participant', style: TextStyle(color: c.primary)),
           ),
         ],
       ),
@@ -661,7 +629,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Calling $uri for consultation...'),
-            backgroundColor: AppTheme.primary,
+            backgroundColor: context.colors.primary,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -676,7 +644,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Transferring call to $uri...'),
-            backgroundColor: AppTheme.primary,
+            backgroundColor: context.colors.primary,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
@@ -723,7 +691,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Calling $uri to add to conference...'),
-          backgroundColor: AppTheme.primary,
+          backgroundColor: context.colors.primary,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -765,6 +733,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   /// Join the held call and active call into a conference.
   void _joinConference(ActiveCall heldCall) {
+    final c = context.colors;
     final consultationId = ref.read(dialerUiProvider).consultationCallId;
     final consultationTarget = _consultationDisplay;
     if (consultationId == null) return;
@@ -772,50 +741,40 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        icon: const Icon(Icons.groups, color: AppTheme.primary, size: 48),
-        title: const Text('Join Conference',
-            style: TextStyle(color: AppTheme.textPrimary)),
+        backgroundColor: c.surfaceCard,
+        icon: Icon(Icons.groups, color: c.primary, size: 48),
+        title: Text('Join Conference', style: TextStyle(color: c.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Create a 3-way conference?',
-              style: TextStyle(
-                  color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
-            ),
+            Text('Create a 3-way conference?',
+                style: TextStyle(
+                    color: c.textSecondary, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             if (consultationTarget != null) ...[
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  color: c.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppTheme.primary.withValues(alpha: 0.3),
-                  ),
+                  border: Border.all(color: c.primary.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.person_add,
-                        color: AppTheme.primary, size: 20),
+                    Icon(Icons.person_add, color: c.primary, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Add to conference:',
-                            style: TextStyle(
-                              color: AppTheme.textTertiary,
-                              fontSize: 10,
-                            ),
-                          ),
+                          Text('Add to conference:',
+                              style: TextStyle(
+                                  color: c.textTertiary, fontSize: 10)),
                           Text(
                             consultationTarget,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
+                            style: TextStyle(
+                              color: c.textPrimary,
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                             ),
@@ -830,17 +789,16 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            const Text(
+            Text(
               'This will merge all parties into a single conference call.',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+              style: TextStyle(color: c.textTertiary, fontSize: 12),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppTheme.textSecondary)),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
           ),
           FilledButton.icon(
             onPressed: () {
@@ -850,7 +808,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             icon: const Icon(Icons.groups, size: 18),
             label: const Text('Join Conference'),
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primary,
+              backgroundColor: c.primary,
               foregroundColor: Colors.white,
             ),
           ),
@@ -1016,6 +974,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   Widget _buildCompactHeader(
       AccountSchema? account, List<AccountSchema> allAccounts) {
+    final c = context.colors;
     final selectableAccounts =
         allAccounts.where((acct) => acct.isEnabled).toList(growable: false);
     final selectedValue = account != null &&
@@ -1025,27 +984,26 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: AppTheme.glassCard(borderRadius: 8),
+      decoration: c.glassCard(borderRadius: 8),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.15),
+              color: c.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Icon(Icons.account_circle,
-                size: 16, color: AppTheme.primary),
+            child: Icon(Icons.account_circle, size: 16, color: c.primary),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: selectableAccounts.length <= 1
                 ? Text(
                     _dialerHeaderAccountLabel(account),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
+                      color: c.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   )
@@ -1053,20 +1011,20 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     child: DropdownButton<String>(
                       value: selectedValue,
                       isExpanded: true,
-                      dropdownColor: AppTheme.surfaceCard,
-                      iconEnabledColor: AppTheme.primary,
-                      hint: const Text(
+                      dropdownColor: c.surfaceCard,
+                      iconEnabledColor: c.primary,
+                      hint: Text(
                         'Select account',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textTertiary,
+                          color: c.textTertiary,
                         ),
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
+                        color: c.textPrimary,
                       ),
                       items: selectableAccounts.map((acct) {
                         final regState = EngineChannel
@@ -1093,9 +1051,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                                 statusText,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: regState == RegistrationState.registered
+                                  color: regState ==
+                                          RegistrationState.registered
                                       ? AppTheme.callGreen
-                                      : AppTheme.textTertiary,
+                                      : c.textTertiary,
                                 ),
                               ),
                             ],
@@ -1111,10 +1070,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     ),
                   ),
           ),
-          // Recordings button
           IconButton(
             icon: const Icon(Icons.library_music, size: 20),
-            color: AppTheme.textSecondary,
+            color: c.textSecondary,
             onPressed: _navigateToRecordings,
             tooltip: 'Recordings',
             padding: const EdgeInsets.all(4),
@@ -1123,18 +1081,18 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.accent.withValues(alpha: 0.12),
+              color: c.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.keyboard, size: 10, color: AppTheme.accent),
-                SizedBox(width: 3),
+                Icon(Icons.keyboard, size: 10, color: c.accent),
+                const SizedBox(width: 3),
                 Text('KBD',
                     style: TextStyle(
                         fontSize: 8,
-                        color: AppTheme.accent,
+                        color: c.accent,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5)),
               ],
@@ -1157,10 +1115,11 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   }
 
   Widget _buildReadyIndicator() {
+    final c = context.colors;
     return Container(
-      decoration: AppTheme.glassCard(
+      decoration: c.glassCard(
         borderRadius: 10,
-        color: AppTheme.surfaceCard.withValues(alpha: 0.4),
+        color: c.surfaceCard.withValues(alpha: 0.4),
       ),
       child: Center(
         child: Column(
@@ -1171,7 +1130,7 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
             const SizedBox(height: 8),
             Text('READY',
                 style: TextStyle(
-                  color: AppTheme.textTertiary.withValues(alpha: 0.7),
+                  color: c.textTertiary.withValues(alpha: 0.7),
                   fontSize: 12,
                   letterSpacing: 3,
                   fontWeight: FontWeight.w600,
@@ -1183,14 +1142,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   }
 
   Widget _buildDialInput() {
+    final c = context.colors;
     return TextField(
       controller: _uriCtrl,
       focusNode: _focusNode,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 24,
         fontWeight: FontWeight.w300,
         letterSpacing: 2,
-        color: AppTheme.textPrimary,
+        color: c.textPrimary,
         fontFamily: 'monospace',
       ),
       textAlign: TextAlign.center,
@@ -1198,27 +1158,27 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
         hintText: 'Enter number or URI',
         hintStyle: TextStyle(
           fontSize: 14,
-          color: AppTheme.textTertiary.withValues(alpha: 0.5),
+          color: c.textTertiary.withValues(alpha: 0.5),
           letterSpacing: 0,
         ),
         filled: true,
-        fillColor: AppTheme.surfaceCard.withValues(alpha: 0.6),
+        fillColor: c.surfaceCard.withValues(alpha: 0.6),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.border),
+          borderSide: BorderSide(color: c.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppTheme.border.withValues(alpha: 0.4)),
+          borderSide: BorderSide(color: c.border.withValues(alpha: 0.4)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.primary, width: 1.5),
+          borderSide: BorderSide(color: c.primary, width: 1.5),
         ),
         suffixIcon: _uriCtrl.text.isNotEmpty
             ? IconButton(
-                icon: const Icon(Icons.backspace_outlined,
-                    size: 18, color: AppTheme.textTertiary),
+                icon: Icon(Icons.backspace_outlined,
+                    size: 18, color: c.textTertiary),
                 onPressed: _backspace,
               )
             : null,
@@ -1303,46 +1263,49 @@ class _NumpadButtonState extends State<_NumpadButton> {
       child: AnimatedScale(
         scale: _pressed ? 0.92 : 1.0,
         duration: const Duration(milliseconds: 100),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.numpadGradient,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _pressed
-                  ? AppTheme.primary.withValues(alpha: 0.5)
-                  : AppTheme.border.withValues(alpha: 0.4),
-              width: _pressed ? 1.5 : 1,
-            ),
-            boxShadow: _pressed
-                ? AppTheme.glowShadow(AppTheme.primary, blur: 8)
-                : null,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w400,
-                  color: _pressed ? AppTheme.primary : AppTheme.textPrimary,
-                ),
+        child: Builder(builder: (context) {
+          final c = context.colors;
+          return Container(
+            decoration: BoxDecoration(
+              gradient: c.numpadGradient,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _pressed
+                    ? c.primary.withValues(alpha: 0.5)
+                    : c.border.withValues(alpha: 0.4),
+                width: _pressed ? 1.5 : 1,
               ),
-              if (widget.subLabel != null) ...[
-                const SizedBox(height: 1),
+              boxShadow: _pressed
+                  ? AppTheme.glowShadow(c.primary, blur: 8)
+                  : null,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                 Text(
-                  widget.subLabel!,
+                  widget.label,
                   style: TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textTertiary.withValues(alpha: 0.6),
-                    letterSpacing: 1.5,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w400,
+                    color: _pressed ? c.primary : c.textPrimary,
                   ),
                 ),
+                if (widget.subLabel != null) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    widget.subLabel!,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w500,
+                      color: c.textTertiary.withValues(alpha: 0.6),
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1374,17 +1337,18 @@ class _ActiveCallCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final minCardHeight = hasConsultationCall ? 250.0 : 200.0;
     return Container(
       constraints: BoxConstraints(minHeight: minCardHeight),
       padding: const EdgeInsets.all(14),
-      decoration: AppTheme.glassCard(
+      decoration: c.glassCard(
         color: hasConsultationCall
-            ? AppTheme.primary.withValues(alpha: 0.05)
-            : AppTheme.accent.withValues(alpha: 0.08),
+            ? c.primary.withValues(alpha: 0.05)
+            : c.accent.withValues(alpha: 0.08),
         borderColor: hasConsultationCall
-            ? AppTheme.primary.withValues(alpha: 0.3)
-            : AppTheme.accent.withValues(alpha: 0.25),
+            ? c.primary.withValues(alpha: 0.3)
+            : c.accent.withValues(alpha: 0.25),
       ),
       child: SingleChildScrollView(
         child: ConstrainedBox(
@@ -1399,13 +1363,13 @@ class _ActiveCallCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.primary.withValues(alpha: 0.15),
-                        AppTheme.primary.withValues(alpha: 0.05),
+                        c.primary.withValues(alpha: 0.15),
+                        c.primary.withValues(alpha: 0.05),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: AppTheme.primary.withValues(alpha: 0.4),
+                      color: c.primary.withValues(alpha: 0.4),
                       width: 1.5,
                     ),
                   ),
@@ -1414,12 +1378,12 @@ class _ActiveCallCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.2),
+                          color: c.primary.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.phone_callback,
-                          color: AppTheme.primary,
+                          color: c.primary,
                           size: 18,
                         ),
                       ),
@@ -1428,10 +1392,10 @@ class _ActiveCallCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'Consultation Call',
                               style: TextStyle(
-                                color: AppTheme.primary,
+                                color: c.primary,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
                               ),
@@ -1440,7 +1404,7 @@ class _ActiveCallCard extends StatelessWidget {
                             Text(
                               consultationDisplay ?? 'Calling...',
                               style: TextStyle(
-                                color: AppTheme.primary.withValues(alpha: 0.8),
+                                color: c.primary.withValues(alpha: 0.8),
                                 fontSize: 11,
                               ),
                               maxLines: 1,
@@ -1462,11 +1426,8 @@ class _ActiveCallCard extends StatelessWidget {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.check_circle,
-                              color: AppTheme.callGreen,
-                              size: 12,
-                            ),
+                            Icon(Icons.check_circle,
+                                color: AppTheme.callGreen, size: 12),
                             SizedBox(width: 4),
                             Text(
                               'Active',
@@ -1488,26 +1449,24 @@ class _ActiveCallCard extends StatelessWidget {
               // Main call info
               Row(
                 children: [
-                  // Pulsing avatar
-                  const _PulsingAvatar(color: AppTheme.accent),
+                  _PulsingAvatar(color: c.accent),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(SipUriUtils.friendlyName(call.uri),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
-                                color: AppTheme.textPrimary)),
+                                color: c.textPrimary)),
                         const SizedBox(height: 2),
                         Row(
                           children: [
                             Text(call.state.label,
                                 style: TextStyle(
                                     fontSize: 11,
-                                    color:
-                                        AppTheme.accent.withValues(alpha: 0.8),
+                                    color: c.accent.withValues(alpha: 0.8),
                                     fontWeight: FontWeight.w500)),
                             if (call.state == CallState.inCall) ...[
                               const SizedBox(width: 6),
@@ -1681,22 +1640,20 @@ class _CallControlButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (!enabled) {
-      return Opacity(
-        opacity: 0.4,
-        child: _buildBody(),
-      );
+      return Opacity(opacity: 0.4, child: _buildBody(c));
     }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
-      child: _buildBody(),
+      child: _buildBody(c),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppColorSet c) {
     final selectedColor = activeColor ?? AppTheme.warningAmber;
-    final color = active ? selectedColor : AppTheme.primary;
+    final color = active ? selectedColor : c.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1706,7 +1663,7 @@ class _CallControlButton extends StatelessWidget {
         border: Border.all(
           color: active
               ? selectedColor.withValues(alpha: 0.3)
-              : AppTheme.border.withValues(alpha: 0.3),
+              : c.border.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -1858,19 +1815,20 @@ class _TimerWidgetState extends State<_TimerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.accent.withValues(alpha: 0.1),
+        color: c.accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         _formatDuration(_duration),
-        style: const TextStyle(
+        style: TextStyle(
             fontFamily: 'monospace',
             fontWeight: FontWeight.w700,
             fontSize: 14,
-            color: AppTheme.accentBright),
+            color: c.accentBright),
       ),
     );
   }

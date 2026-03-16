@@ -5,7 +5,6 @@ import '../core/app_theme.dart';
 import '../models/recording_item.dart';
 import '../providers/recordings_provider.dart';
 
-/// List tile widget for displaying a recording item.
 class RecordingListTile extends ConsumerStatefulWidget {
   final RecordingItem recording;
   final VoidCallback? onTap;
@@ -29,8 +28,10 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final state = ref.watch(recordingsProvider);
-    final isCurrentRecording = state.currentRecording?.filePath == widget.recording.filePath;
+    final isCurrentRecording =
+        state.currentRecording?.filePath == widget.recording.filePath;
     final isPlaying = state.isPlaying && isCurrentRecording;
     final isActivelyRecording = widget.recording.session?.isActive == true;
 
@@ -38,7 +39,7 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
         color: isCurrentRecording
-            ? AppTheme.primary.withValues(alpha: 0.08)
+            ? c.primary.withValues(alpha: 0.08)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
@@ -46,16 +47,19 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
       child: Column(
         children: [
           ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            leading: _buildLeading(isPlaying, isActivelyRecording),
-            title: _buildTitle(),
-            subtitle: _buildSubtitle(),
-            trailing: _buildTrailing(isPlaying),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            leading: _buildLeading(c, isPlaying, isActivelyRecording),
+            title: _buildTitle(c),
+            subtitle: _buildSubtitle(c),
+            trailing: _buildTrailing(c, isPlaying),
             onTap: () {
               if (_showDeleteConfirm) {
                 setState(() => _showDeleteConfirm = false);
               } else {
-                ref.read(recordingsProvider.notifier).playRecording(widget.recording);
+                ref
+                    .read(recordingsProvider.notifier)
+                    .playRecording(widget.recording);
                 widget.onTap?.call();
               }
             },
@@ -64,15 +68,14 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
               widget.onLongPress?.call();
             },
           ),
-          if (_showDeleteConfirm) _buildDeleteConfirm(),
+          if (_showDeleteConfirm) _buildDeleteConfirm(c),
         ],
       ),
     );
   }
 
-  Widget _buildLeading(bool isPlaying, bool isActivelyRecording) {
+  Widget _buildLeading(AppColorSet c, bool isPlaying, bool isActivelyRecording) {
     if (isActivelyRecording) {
-      // Live recording indicator
       return Container(
         width: 48,
         height: 48,
@@ -106,55 +109,43 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
     }
 
     if (isPlaying) {
-      // Playing indicator with animation
       return Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.15),
+          color: c.primary.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(
-          Icons.equalizer,
-          color: AppTheme.primary,
-          size: 24,
-        ),
+        child: Icon(Icons.equalizer, color: c.primary, size: 24),
       );
     }
 
-    // Default play icon
     return Container(
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: c.surfaceVariant,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Icon(
-        Icons.play_arrow,
-        color: AppTheme.textSecondary,
-        size: 24,
-      ),
+      child: Icon(Icons.play_arrow, color: c.textSecondary, size: 24),
     );
   }
 
-  Widget _buildTitle() {
+  Widget _buildTitle(AppColorSet c) {
     final chips = <Widget>[];
-
-    // Auto-recorded badge
     if (widget.recording.autoRecorded) {
       chips.add(
         Container(
           margin: const EdgeInsets.only(right: 6),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.2),
+            color: c.primary.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: const Text(
+          child: Text(
             'Auto',
             style: TextStyle(
-              color: AppTheme.primary,
+              color: c.primary,
               fontSize: 10,
               fontWeight: FontWeight.w600,
             ),
@@ -168,8 +159,8 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
         Expanded(
           child: Text(
             'Call #${widget.recording.callId}',
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
+            style: TextStyle(
+              color: c.textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -182,70 +173,37 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
     );
   }
 
-  Widget _buildSubtitle() {
+  Widget _buildSubtitle(AppColorSet c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 2),
         Row(
           children: [
-            // Date
-            const Icon(
-              Icons.calendar_today,
-              size: 12,
-              color: AppTheme.textTertiary,
-            ),
+            Icon(Icons.calendar_today, size: 12, color: c.textTertiary),
             const SizedBox(width: 4),
-            Text(
-              widget.recording.formattedDate,
-              style: const TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 11,
-              ),
-            ),
+            Text(widget.recording.formattedDate,
+                style: TextStyle(color: c.textTertiary, fontSize: 11)),
             const SizedBox(width: 12),
-            // Duration
-            const Icon(
-              Icons.access_time,
-              size: 12,
-              color: AppTheme.textTertiary,
-            ),
+            Icon(Icons.access_time, size: 12, color: c.textTertiary),
             const SizedBox(width: 4),
-            Text(
-              widget.recording.formattedDuration,
-              style: const TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 11,
-              ),
-            ),
+            Text(widget.recording.formattedDuration,
+                style: TextStyle(color: c.textTertiary, fontSize: 11)),
             const SizedBox(width: 12),
-            // File size
-            const Icon(
-              Icons.folder,
-              size: 12,
-              color: AppTheme.textTertiary,
-            ),
+            Icon(Icons.folder, size: 12, color: c.textTertiary),
             const SizedBox(width: 4),
-            Text(
-              widget.recording.formattedFileSize,
-              style: const TextStyle(
-                color: AppTheme.textTertiary,
-                fontSize: 11,
-              ),
-            ),
+            Text(widget.recording.formattedFileSize,
+                style: TextStyle(color: c.textTertiary, fontSize: 11)),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildTrailing(bool isPlaying) {
+  Widget _buildTrailing(AppColorSet c, bool isPlaying) {
     return PopupMenuButton<String>(
-      icon: const Icon(
-        Icons.more_vert,
-        color: AppTheme.textSecondary,
-      ),
-      color: AppTheme.surfaceCard,
+      icon: Icon(Icons.more_vert, color: c.textSecondary),
+      color: c.surfaceCard,
       onSelected: (value) async {
         switch (value) {
           case 'delete':
@@ -257,23 +215,24 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
-              Icon(Icons.delete, color: AppTheme.errorRed, size: 20),
-              SizedBox(width: 8),
-              Text('Delete', style: TextStyle(color: AppTheme.errorRed)),
+              const Icon(Icons.delete, color: AppTheme.errorRed, size: 20),
+              const SizedBox(width: 8),
+              Text('Delete',
+                  style: TextStyle(color: c.textPrimary)),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'open_folder',
           child: Row(
             children: [
-              Icon(Icons.folder_open, color: AppTheme.textSecondary, size: 20),
-              SizedBox(width: 8),
-              Text('Open Folder', style: TextStyle(color: AppTheme.textSecondary)),
+              Icon(Icons.folder_open, color: c.textSecondary, size: 20),
+              const SizedBox(width: 8),
+              Text('Open Folder', style: TextStyle(color: c.textSecondary)),
             ],
           ),
         ),
@@ -281,34 +240,22 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
     );
   }
 
-  Widget _buildDeleteConfirm() {
+  Widget _buildDeleteConfirm(AppColorSet c) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          const Icon(
-            Icons.warning,
-            color: AppTheme.errorRed,
-            size: 20,
-          ),
+          const Icon(Icons.warning, color: AppTheme.errorRed, size: 20),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               'Delete this recording?',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
             ),
           ),
           TextButton(
-            onPressed: () {
-              setState(() => _showDeleteConfirm = false);
-            },
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
+            onPressed: () => setState(() => _showDeleteConfirm = false),
+            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
           ),
           FilledButton(
             onPressed: () async {
@@ -317,18 +264,16 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
                   .deleteRecording(widget.recording);
               if (deleted && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Recording deleted'),
-                    backgroundColor: AppTheme.primary,
+                  SnackBar(
+                    content: const Text('Recording deleted'),
+                    backgroundColor: c.primary,
                     behavior: SnackBarBehavior.floating,
                   ),
                 );
               }
               widget.onDelete?.call();
             },
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.errorRed,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.errorRed),
             child: const Text('Delete'),
           ),
         ],
@@ -340,7 +285,6 @@ class _RecordingListTileState extends ConsumerState<RecordingListTile> {
     try {
       final file = File(widget.recording.filePath);
       final parent = file.parent;
-      // On Windows, open Explorer to the folder
       if (Platform.isWindows) {
         await Process.start('explorer.exe', [parent.path]);
       } else if (Platform.isMacOS) {

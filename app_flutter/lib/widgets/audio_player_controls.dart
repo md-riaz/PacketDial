@@ -4,7 +4,6 @@ import '../core/app_theme.dart';
 import '../models/recording_item.dart';
 import '../providers/recordings_provider.dart';
 
-/// Audio player controls widget for recording playback.
 class AudioPlayerControls extends ConsumerWidget {
   final RecordingItem recording;
   final VoidCallback? onClose;
@@ -17,9 +16,10 @@ class AudioPlayerControls extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
+        color: c.surfaceCard,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         boxShadow: [
           BoxShadow(
@@ -32,45 +32,36 @@ class AudioPlayerControls extends ConsumerWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle bar
           Container(
             margin: const EdgeInsets.only(top: 8),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppTheme.textTertiary,
+              color: c.textTertiary,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-
-          // Recording info header
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                // Recording icon
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.15),
+                    color: c.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.album,
-                    color: AppTheme.primary,
-                    size: 28,
-                  ),
+                  child: Icon(Icons.album, color: c.primary, size: 28),
                 ),
                 const SizedBox(width: 12),
-                // Recording details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Call #${recording.callId}',
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
+                        style: TextStyle(
+                          color: c.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -78,54 +69,44 @@ class AudioPlayerControls extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         recording.formattedDate,
-                        style: const TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: c.textSecondary, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
-                // Close button
                 if (onClose != null)
                   IconButton(
                     icon: const Icon(Icons.close),
-                    color: AppTheme.textSecondary,
+                    color: c.textSecondary,
                     onPressed: onClose,
                   ),
               ],
             ),
           ),
-
-          // Progress slider with separate consumer for smooth updates
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: _SeekBarSection(),
           ),
-
           const SizedBox(height: 8),
-
-          // Playback controls
-          _buildPlaybackControls(ref),
-
+          _buildPlaybackControls(context, ref),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildPlaybackControls(WidgetRef ref) {
+  Widget _buildPlaybackControls(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final state = ref.watch(recordingsProvider);
     final isPlaying = state.isPlaying;
     final isBuffering = state.isBuffering;
 
-    // Show loading indicator when buffering
     if (isBuffering) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
+      return Padding(
+        padding: const EdgeInsets.all(24),
         child: CircularProgressIndicator(
           strokeWidth: 3,
-          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
+          valueColor: AlwaysStoppedAnimation<Color>(c.primary),
         ),
       );
     }
@@ -135,36 +116,28 @@ class AudioPlayerControls extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Stop button
           IconButton(
             icon: const Icon(Icons.stop),
             iconSize: 28,
-            color: AppTheme.textSecondary,
-            onPressed: () {
-              ref.read(recordingsProvider.notifier).stop();
-            },
+            color: c.textSecondary,
+            onPressed: () => ref.read(recordingsProvider.notifier).stop(),
             tooltip: 'Stop',
           ),
-
           const SizedBox(width: 16),
-
-          // Play/Pause button
           Container(
             decoration: BoxDecoration(
-              color: AppTheme.primary,
+              color: c.primary,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.4),
+                  color: c.primary.withValues(alpha: 0.4),
                   blurRadius: 12,
                   spreadRadius: 2,
                 ),
               ],
             ),
             child: IconButton(
-              icon: Icon(
-                isPlaying ? Icons.pause : Icons.play_arrow,
-              ),
+              icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
               iconSize: 36,
               color: Colors.white,
               onPressed: () {
@@ -177,14 +150,11 @@ class AudioPlayerControls extends ConsumerWidget {
               tooltip: isPlaying ? 'Pause' : 'Play',
             ),
           ),
-
           const SizedBox(width: 16),
-
-          // Skip to end button
           IconButton(
             icon: const Icon(Icons.skip_next),
             iconSize: 28,
-            color: AppTheme.textSecondary,
+            color: c.textSecondary,
             onPressed: () {
               final duration = state.duration;
               if (duration != null) {
@@ -199,74 +169,70 @@ class AudioPlayerControls extends ConsumerWidget {
   }
 }
 
-/// Separate widget for seek bar to optimize rebuilds.
 class _SeekBarSection extends ConsumerWidget {
   const _SeekBarSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final state = ref.watch(recordingsProvider);
     final duration = state.duration ?? Duration.zero;
 
     return Column(
       children: [
-        _buildSeekBar(ref, state, duration),
+        SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 4,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            activeTrackColor: c.primary,
+            inactiveTrackColor: c.surfaceVariant,
+            thumbColor: c.primary,
+            overlayColor: c.primary.withValues(alpha: 0.2),
+          ),
+          child: Slider(
+            value: duration.inMilliseconds > 0
+                ? state.position.inMilliseconds
+                    .clamp(0, duration.inMilliseconds)
+                    .toDouble()
+                : 0,
+            min: 0,
+            max: duration.inMilliseconds > 0
+                ? duration.inMilliseconds.toDouble()
+                : 1,
+            onChanged: (value) {
+              ref
+                  .read(recordingsProvider.notifier)
+                  .seek(Duration(milliseconds: value.toInt()));
+            },
+          ),
+        ),
         const SizedBox(height: 8),
-        _buildTimeLabels(state),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _formatDuration(state.position),
+                style: TextStyle(
+                  color: c.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                _formatDuration(state.duration ?? Duration.zero),
+                style: TextStyle(
+                  color: c.textTertiary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
-    );
-  }
-
-  Widget _buildSeekBar(WidgetRef ref, RecordingsState state, Duration duration) {
-    return SliderTheme(
-      data: SliderThemeData(
-        trackHeight: 4,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-        activeTrackColor: AppTheme.primary,
-        inactiveTrackColor: AppTheme.surfaceVariant,
-        thumbColor: AppTheme.primary,
-        overlayColor: AppTheme.primary.withValues(alpha: 0.2),
-      ),
-      child: Slider(
-        value: duration.inMilliseconds > 0
-            ? state.position.inMilliseconds.clamp(0, duration.inMilliseconds).toDouble()
-            : 0,
-        min: 0,
-        max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1,
-        onChanged: (value) {
-          ref
-              .read(recordingsProvider.notifier)
-              .seek(Duration(milliseconds: value.toInt()));
-        },
-      ),
-    );
-  }
-
-  Widget _buildTimeLabels(RecordingsState state) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            _formatDuration(state.position),
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Text(
-            _formatDuration(state.duration ?? Duration.zero),
-            style: const TextStyle(
-              color: AppTheme.textTertiary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -20,23 +20,18 @@ class SettingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Card(
-      color: AppTheme.surfaceCard,
+      color: c.surfaceCard,
       child: ListTile(
-        leading: Icon(icon, color: iconColor ?? AppTheme.primary, size: 28),
+        leading: Icon(icon, color: iconColor ?? c.primary, size: 28),
         title: Text(
           title,
-          style: const TextStyle(
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(
-            color: AppTheme.textTertiary,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: c.textTertiary, fontSize: 12),
         ),
         trailing: trailing,
       ),

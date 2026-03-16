@@ -16,21 +16,22 @@ class AppSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return TextField(
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(color: AppTheme.textTertiary),
+        hintStyle: TextStyle(color: c.textTertiary),
         filled: true,
-        fillColor: AppTheme.inputFill,
+        fillColor: c.inputFill,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           borderSide: BorderSide.none,
         ),
-        prefixIcon: const Icon(Icons.search, color: AppTheme.textTertiary),
+        prefixIcon: Icon(Icons.search, color: c.textTertiary),
         suffixIcon: value.isNotEmpty
             ? IconButton(
-                icon: const Icon(Icons.clear, color: AppTheme.textTertiary),
+                icon: Icon(Icons.clear, color: c.textTertiary),
                 onPressed: () => onChanged(''),
               )
             : null,

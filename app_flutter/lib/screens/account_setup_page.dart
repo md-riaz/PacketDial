@@ -7,10 +7,7 @@ import '../providers/account_setup_provider.dart';
 class AccountSetupPage extends ConsumerStatefulWidget {
   final AccountSchema? existing;
 
-  const AccountSetupPage({
-    super.key,
-    this.existing,
-  });
+  const AccountSetupPage({super.key, this.existing});
 
   @override
   ConsumerState<AccountSetupPage> createState() => _AccountSetupPageState();
@@ -31,7 +28,6 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
   @override
   void initState() {
     super.initState();
-    // Initialize provider state after frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(accountSetupProvider.notifier).loadAccount(widget.existing);
     });
@@ -40,7 +36,6 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
   }
 
   void _onServerChanged() {
-    // If domain is empty, keep it in sync with server
     if (domainCtrl.text.isEmpty) {
       domainCtrl.text = serverCtrl.text.trim();
     }
@@ -59,14 +54,9 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       authUserCtrl.text = e.authUsername;
       domainCtrl.text = e.domain.isEmpty ? e.server : e.domain;
       proxyCtrl.text = e.sipProxy;
-      if (domainCtrl.text.isNotEmpty) debugPrint('Domain: ${domainCtrl.text}');
-      if (proxyCtrl.text.isNotEmpty) debugPrint('Proxy: ${proxyCtrl.text}');
       stunCtrl.text = e.stunServer;
       turnCtrl.text = e.turnServer;
-      debugPrint(
-          '[AccountSetupPage] Loaded account: ${e.accountName}, server: ${e.server}, user: ${e.username}');
     } else {
-      // Clear all fields for new account
       nameCtrl.clear();
       displayCtrl.clear();
       serverCtrl.clear();
@@ -82,7 +72,6 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
 
   @override
   void dispose() {
-    debugPrint('[AccountSetupPage] Disposing');
     nameCtrl.dispose();
     displayCtrl.dispose();
     serverCtrl.dispose();
@@ -98,24 +87,20 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final isEdit = widget.existing != null;
     final state = ref.watch(accountSetupProvider);
     final notifier = ref.read(accountSetupProvider.notifier);
 
     return Scaffold(
-      backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        backgroundColor: AppTheme.surfaceVariant,
-        elevation: 0,
-        leading: const BackButton(
-          color: AppTheme.textPrimary,
-        ),
+        leading: BackButton(color: c.textPrimary),
         title: Text(
           isEdit ? 'Edit Account' : 'Add SIP Account',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
+            color: c.textPrimary,
           ),
         ),
       ),
@@ -123,7 +108,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -146,7 +132,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                             child: Text(
                               state.registrationError!,
                               style: TextStyle(
-                                color: AppTheme.errorRed.withValues(alpha: 0.9),
+                                color:
+                                    AppTheme.errorRed.withValues(alpha: 0.9),
                                 fontSize: 12,
                               ),
                             ),
@@ -154,8 +141,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                         ],
                       ),
                     ),
-                  _sectionLabel('Identity'),
-                  _buildField(
+                  _sectionLabel(c, 'Identity'),
+                  _buildField(c,
                     controller: nameCtrl,
                     label: 'Account Label (e.g. Work)',
                     hint: 'My Office Number',
@@ -163,7 +150,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
-                  _buildField(
+                  _buildField(c,
                     controller: displayCtrl,
                     label: 'Display Name (Optional)',
                     hint: 'John Doe',
@@ -171,8 +158,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 24),
-                  _sectionLabel('Server'),
-                  _buildField(
+                  _sectionLabel(c, 'Server'),
+                  _buildField(c,
                     controller: serverCtrl,
                     label: 'SIP Server / Registrar',
                     hint: 'sip.provider.com',
@@ -180,7 +167,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
-                  _buildField(
+                  _buildField(c,
                     controller: userCtrl,
                     label: 'Username',
                     hint: '1000',
@@ -188,7 +175,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
-                  _buildField(
+                  _buildField(c,
                     controller: domainCtrl,
                     label: 'Domain',
                     hint: 'sip.provider.com:8090',
@@ -196,7 +183,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     enabled: !state.isRegistering,
                   ),
                   const SizedBox(height: 18),
-                  _buildField(
+                  _buildField(c,
                     controller: passCtrl,
                     label: 'Password',
                     icon: Icons.lock_outline,
@@ -205,23 +192,23 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                   ),
                   const SizedBox(height: 24),
                   ExpansionTile(
-                    title: const Text('Advanced Settings',
+                    title: Text('Advanced Settings',
                         style: TextStyle(
-                            fontSize: 13, color: AppTheme.textSecondary)),
+                            fontSize: 13, color: c.textSecondary)),
                     tilePadding: EdgeInsets.zero,
                     shape: const Border(),
                     collapsedShape: const Border(),
-                    iconColor: AppTheme.textTertiary,
-                    collapsedIconColor: AppTheme.textTertiary,
-                    textColor: AppTheme.textSecondary,
+                    iconColor: c.textTertiary,
+                    collapsedIconColor: c.textTertiary,
+                    textColor: c.textSecondary,
                     children: [
-                      _buildField(
+                      _buildField(c,
                         controller: authUserCtrl,
                         label: 'Auth Username (Optional)',
                         enabled: !state.isRegistering,
                       ),
                       const SizedBox(height: 18),
-                      _buildField(
+                      _buildField(c,
                         controller: proxyCtrl,
                         label: 'SIP Proxy (Optional)',
                         hint: 'Outbound proxy address if required.',
@@ -230,29 +217,16 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                       const SizedBox(height: 18),
                       DropdownButtonFormField<String>(
                         initialValue: state.transport,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Transport',
-                          contentPadding: const EdgeInsets.symmetric(
+                          contentPadding: EdgeInsets.symmetric(
                               vertical: 16, horizontal: 16),
-                          labelStyle:
-                              const TextStyle(color: AppTheme.textSecondary),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide:
-                                const BorderSide(color: AppTheme.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                                color: AppTheme.primary, width: 2),
-                          ),
                         ),
-                        dropdownColor: AppTheme.surfaceVariant,
-                        style: const TextStyle(color: AppTheme.textPrimary),
                         items: const [
                           DropdownMenuItem(value: 'udp', child: Text('UDP')),
                           DropdownMenuItem(value: 'tcp', child: Text('TCP')),
-                          DropdownMenuItem(value: 'udp_tcp', child: Text('UDP+TCP')),
+                          DropdownMenuItem(
+                              value: 'udp_tcp', child: Text('UDP+TCP')),
                           DropdownMenuItem(value: 'tls', child: Text('TLS')),
                         ],
                         onChanged: state.isRegistering
@@ -260,7 +234,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                             : (v) => notifier.setTransport(v ?? 'udp'),
                       ),
                       const SizedBox(height: 18),
-                      _buildField(
+                      _buildField(c,
                         controller: stunCtrl,
                         label: 'STUN Server (Optional)',
                         hint: 'For NAT traversal (e.g. stun.l.google.com)',
@@ -268,29 +242,29 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                       ),
                       const SizedBox(height: 24),
                       SwitchListTile(
-                        title: const Text('Enable SRTP',
-                            style: TextStyle(color: AppTheme.textPrimary)),
-                        subtitle: const Text('Secure RTP for media encryption',
-                            style: TextStyle(color: AppTheme.textTertiary)),
+                        title: Text('Enable SRTP',
+                            style: TextStyle(color: c.textPrimary)),
+                        subtitle: Text('Secure RTP for media encryption',
+                            style: TextStyle(color: c.textTertiary)),
                         value: state.srtpEnabled,
                         onChanged: state.isRegistering
                             ? null
                             : (v) => notifier.setSrtpEnabled(v),
-                        activeThumbColor: AppTheme.primary,
+                        activeThumbColor: c.primary,
                         contentPadding: EdgeInsets.zero,
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
-                        title: const Text('Publish Presence',
-                            style: TextStyle(color: AppTheme.textPrimary)),
-                        subtitle: const Text(
+                        title: Text('Publish Presence',
+                            style: TextStyle(color: c.textPrimary)),
+                        subtitle: Text(
                             'Send SIP PUBLISH so others can see your status via BLF',
-                            style: TextStyle(color: AppTheme.textTertiary)),
+                            style: TextStyle(color: c.textTertiary)),
                         value: state.publishPresence,
                         onChanged: state.isRegistering
                             ? null
                             : (v) => notifier.setPublishPresence(v),
-                        activeThumbColor: AppTheme.primary,
+                        activeThumbColor: c.primary,
                         contentPadding: EdgeInsets.zero,
                       ),
                       const SizedBox(height: 24),
@@ -301,10 +275,10 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.06),
+                        color: c.primary.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: AppTheme.primary.withValues(alpha: 0.15)),
+                            color: c.primary.withValues(alpha: 0.15)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -315,21 +289,21 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation(
-                                  AppTheme.primary.withValues(alpha: 0.7)),
+                                  c.primary.withValues(alpha: 0.7)),
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Column(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Verifying SIP credentials…',
                                   style: TextStyle(
-                                      fontSize: 13, color: AppTheme.primary)),
-                              SizedBox(height: 2),
+                                      fontSize: 13, color: c.primary)),
+                              const SizedBox(height: 2),
                               Text('This may take several seconds',
                                   style: TextStyle(
                                       fontSize: 10,
-                                      color: AppTheme.textTertiary)),
+                                      color: c.textTertiary)),
                             ],
                           ),
                         ],
@@ -341,26 +315,25 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
               ),
             ),
           ),
-          // Fixed bottom action bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              color: AppTheme.surfaceVariant,
-            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(color: c.surfaceVariant),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
                   onPressed: state.isRegistering ? null : _cancel,
-                  child: const Text('Cancel',
-                      style: TextStyle(color: AppTheme.textTertiary)),
+                  child: Text('Cancel',
+                      style: TextStyle(color: c.textTertiary)),
                 ),
                 const SizedBox(width: 12),
                 FilledButton(
-                  onPressed:
-                      state.isRegistering ? null : () => _saveAccount(notifier),
+                  onPressed: state.isRegistering
+                      ? null
+                      : () => _saveAccount(notifier),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
+                    backgroundColor: c.primary,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 10),
                     shape: RoundedRectangleBorder(
@@ -376,7 +349,7 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
     );
   }
 
-  Widget _sectionLabel(String text) {
+  Widget _sectionLabel(AppColorSet c, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12, top: 4),
       child: Row(
@@ -391,10 +364,10 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
           ),
           const SizedBox(width: 8),
           Text(text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textTertiary,
+                color: c.textTertiary,
                 letterSpacing: 1,
               )),
         ],
@@ -402,7 +375,8 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
     );
   }
 
-  Widget _buildField({
+  Widget _buildField(
+    AppColorSet c, {
     required TextEditingController controller,
     required String label,
     String? hint,
@@ -414,33 +388,17 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       controller: controller,
       enabled: enabled,
       obscureText: obscure,
-      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
         prefixIcon: icon != null ? Icon(icon, size: 18) : null,
         contentPadding:
             const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-        labelStyle:
-            const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-        hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
-        helperStyle:
-            const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-        ),
       ),
     );
   }
 
-  void _cancel() {
-    Navigator.of(context).pop(false);
-  }
+  void _cancel() => Navigator.of(context).pop(false);
 
   Future<void> _saveAccount(AccountSetupNotifier notifier) async {
     final success = await notifier.saveAccount(
@@ -457,8 +415,6 @@ class _AccountSetupPageState extends ConsumerState<AccountSetupPage> {
       turnServer: turnCtrl.text.trim(),
     );
 
-    if (success && mounted) {
-      Navigator.of(context).pop(true);
-    }
+    if (success && mounted) Navigator.of(context).pop(true);
   }
 }

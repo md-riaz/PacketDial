@@ -35,6 +35,9 @@ class AppSettingsService {
   bool _blfEnabled = true;
   bool _startWithWindowsEnabled = false;
 
+  // Theme
+  bool _lightModeEnabled = false;
+
   // Integration settings - Webhooks
   String _ringWebhookUrl = '';
   bool _ringWebhookEnabled = false;
@@ -73,6 +76,7 @@ class AppSettingsService {
   bool get dndEnabled => _dndEnabled;
   bool get blfEnabled => _blfEnabled;
   bool get startWithWindowsEnabled => _startWithWindowsEnabled;
+  bool get lightModeEnabled => _lightModeEnabled;
 
   // Getters - Webhooks
   String get ringWebhookUrl => _ringWebhookUrl;
@@ -122,6 +126,7 @@ class AppSettingsService {
         _blfEnabled = data['blf_enabled'] as bool? ?? true;
         _startWithWindowsEnabled =
             data['start_with_windows_enabled'] as bool? ?? true;
+        _lightModeEnabled = data['light_mode_enabled'] as bool? ?? false;
         _ringWebhookUrl = (data['ring_webhook_url'] as String? ?? '').trim();
         _ringWebhookEnabled =
             data['ring_webhook_enabled'] as bool? ?? _ringWebhookUrl.isNotEmpty;
@@ -215,6 +220,7 @@ class AppSettingsService {
         'dnd_enabled': _dndEnabled,
         'blf_enabled': _blfEnabled,
         'start_with_windows_enabled': _startWithWindowsEnabled,
+        'light_mode_enabled': _lightModeEnabled,
         'ring_webhook_url': _ringWebhookUrl,
         'ring_webhook_enabled': _ringWebhookEnabled,
         'end_webhook_url': _endWebhookUrl,
@@ -279,6 +285,12 @@ class AppSettingsService {
   /// Update BLF enabled.
   Future<void> setBlfEnabled(bool enabled) async {
     _blfEnabled = enabled;
+    await saveSettings();
+  }
+
+  /// Update light mode.
+  Future<void> setLightModeEnabled(bool enabled) async {
+    _lightModeEnabled = enabled;
     await saveSettings();
   }
 

@@ -18,20 +18,20 @@ class InfoBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppTheme.primary;
+    final c = context.colors;
+    final tint = color ?? c.primary;
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingMd),
-      decoration: AppTheme.infoCard(color: c),
+      decoration: AppTheme.infoCard(color: tint),
       child: child ??
           Row(
             children: [
-              Icon(icon, color: c, size: 24),
+              Icon(icon, color: tint, size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   text,
-                  style: const TextStyle(
-                      color: AppTheme.textTertiary, fontSize: 12),
+                  style: TextStyle(color: c.textTertiary, fontSize: 12),
                 ),
               ),
             ],
