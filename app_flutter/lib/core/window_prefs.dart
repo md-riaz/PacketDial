@@ -18,6 +18,7 @@ class WindowPrefs {
   static const _kW = 'window_w';
   static const _kH = 'window_h';
   static const _kAlwaysOnTop = 'always_on_top';
+  static const _kResizeLocked = 'resize_locked';
 
   Map<String, dynamic> _data = {};
   bool _initialized = false;
@@ -69,6 +70,33 @@ class WindowPrefs {
   /// Apply saved always-on-top state to the window.
   Future<void> applyAlwaysOnTop() async {
     await windowManager.setAlwaysOnTop(alwaysOnTop);
+  }
+
+  // ── Resize lock ───────────────────────────────────────────────────────
+
+  bool get resizeLocked => _data[_kResizeLocked] as bool? ?? true;
+
+  Future<void> setResizeLocked(bool value) async {
+    _data[_kResizeLocked] = value;
+    await _save();
+    await applyResizeLock();
+  }
+
+  /// Enforce or release the resize lock on the OS window.
+  Future<void> applyResizeLock() async {
+    if (resizeLocked) {
+      final size = await windowManager.getSize();
+      // Clamp to at least the minimum
+      final w = size.width.clamp(
+          AppTheme.minWindowSize.width, AppTheme.defaultWindowSize.width);
+      final h = size.height.clamp(
+          AppTheme.minWindowSize.height, AppTheme.defaultWindowSize.height);
+      await windowManager.setMinimumSize(Size(w, h));
+      await windowManager.setMaximumSize(Size(w, h));
+    } else {
+      await windowManager.setMinimumSize(AppTheme.minWindowSize);
+      await windowManager.setMaximumSize(const Size(32767, 32767));
+    }
   }
 
   // ── Window geometry ────────────────────────────────────────────────────

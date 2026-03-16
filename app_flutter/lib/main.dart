@@ -79,6 +79,9 @@ void main(List<String> args) async {
     // Restore saved position/size before showing
     await windowPrefs.restoreGeometry();
     await windowPrefs.applyAlwaysOnTop();
+    // Always enforce the absolute minimum size first
+    await windowManager.setMinimumSize(AppTheme.minWindowSize);
+    await windowPrefs.applyResizeLock();
 
     // Configure Bitsdojo window (synchronous setup)
     debugPrint('[APP] Bitsdojo Window Ready');
@@ -172,6 +175,7 @@ class _AppState extends ConsumerState<App>
   String _status = 'Initializing…';
   bool _ready = false;
   bool _alwaysOnTop = false;
+  bool _resizeLocked = true;
   bool _forcedTopMostForIncoming = false;
 
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
@@ -193,6 +197,7 @@ class _AppState extends ConsumerState<App>
     );
     _splashCtrl.forward();
     _alwaysOnTop = widget.windowPrefs.alwaysOnTop;
+    _resizeLocked = widget.windowPrefs.resizeLocked;
     windowManager.addListener(this);
     // Prevent default close — we handle it in onWindowClose
     windowManager.setPreventClose(true);
@@ -407,13 +412,21 @@ class _AppState extends ConsumerState<App>
 
   @override
   void onWindowResized() async {
-    await widget.windowPrefs.saveGeometry();
+    if (!_resizeLocked) {
+      await widget.windowPrefs.saveGeometry();
+    }
   }
 
   void _toggleAlwaysOnTop() async {
     final newValue = !_alwaysOnTop;
     await widget.windowPrefs.setAlwaysOnTop(newValue);
     setState(() => _alwaysOnTop = newValue);
+  }
+
+  Future<void> _toggleResizeLock() async {
+    final newValue = !_resizeLocked;
+    await widget.windowPrefs.setResizeLocked(newValue);
+    setState(() => _resizeLocked = newValue);
   }
 
   @override
@@ -515,21 +528,27 @@ class _AppState extends ConsumerState<App>
     return Stack(
       children: [
         Scaffold(
-          body: Column(
-            children: [
-              // Custom Title Bar
-              _buildTitleBar(),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: KeyedSubtree(
-                    key: ValueKey<int>(_selectedIndex),
-                    child: _buildScreen(_selectedIndex),
+          body: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: AppTheme.minWindowSize.width,
+              minHeight: AppTheme.minWindowSize.height,
+            ),
+            child: Column(
+              children: [
+                // Custom Title Bar
+                _buildTitleBar(),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_selectedIndex),
+                      child: _buildScreen(_selectedIndex),
+                    ),
                   ),
                 ),
-              ),
-              const CockpitFooter(),
-            ],
+                const CockpitFooter(),
+              ],
+            ),
           ),
           bottomNavigationBar: _buildNavBar(),
         ),
@@ -633,6 +652,23 @@ class _AppState extends ConsumerState<App>
                     _alwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
                     size: 14,
                     color: _alwaysOnTop ? c.primary : c.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Resize lock toggle
+            Tooltip(
+              message: _resizeLocked ? 'Unlock window resize' : 'Lock window size',
+              child: InkWell(
+                onTap: _toggleResizeLock,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    _resizeLocked ? Icons.lock_outline : Icons.lock_open_outlined,
+                    size: 14,
+                    color: _resizeLocked ? c.primary : c.textTertiary,
                   ),
                 ),
               ),
