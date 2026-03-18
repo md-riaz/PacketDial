@@ -58,8 +58,33 @@ class EngineChannel {
   /// All known accounts, keyed by id.
   final Map<String, Account> accounts = {};
 
-  /// The currently active call, or null if no call is in progress.
-  ActiveCall? activeCall;
+  /// All currently active calls, keyed by call ID.
+  final Map<int, ActiveCall> activeCalls = {};
+
+  /// The "primary" active call: the non-held call, or the first call if all are held.
+  /// Returns null if there are no active calls.
+  ActiveCall? get activeCall {
+    if (activeCalls.isEmpty) return null;
+    // Prefer a call that is not on hold (the foreground call)
+    final foreground = activeCalls.values
+        .where((c) => c.state != CallState.ended && !c.onHold)
+        .toList();
+    if (foreground.isNotEmpty) return foreground.first;
+    // Fall back to any non-ended call (e.g. all on hold)
+    final any = activeCalls.values
+        .where((c) => c.state != CallState.ended)
+        .toList();
+    return any.isNotEmpty ? any.first : null;
+  }
+
+  /// Setter kept for compatibility with reset() and legacy code.
+  set activeCall(ActiveCall? call) {
+    if (call == null) {
+      activeCalls.clear();
+    } else {
+      activeCalls[call.callId] = call;
+    }
+  }
 
   /// Media stats for the active call, keyed by call_id.
   final Map<int, MediaStats> mediaStats = {};
@@ -122,11 +147,11 @@ class EngineChannel {
   /// Clears in-memory state without disposing the engine.
   void reset() {
     accounts.clear();
+    activeCalls.clear();
     mediaStats.clear();
     eventLog.clear();
     logBuffer.clear();
     sipMessages.clear();
-    activeCall = null;
     engineReady = false;
   }
 
@@ -470,8 +495,8 @@ class EngineChannel {
       case 'CallStateChanged':
         final callId = (payload['call_id'] as num?)?.toInt() ?? 0;
         final state = CallState.fromString(payload['state'] as String? ?? '');
-        final previousCall =
-            activeCall?.callId == callId ? activeCall : null;
+        // Look up the previous state for this specific call (not just activeCall)
+        final previousCall = activeCalls[callId];
         final eventCall = ActiveCall(
           callId: callId,
           accountId: payload['account_id'] as String? ?? '',
@@ -489,14 +514,20 @@ class EngineChannel {
                   (payload['last_resumed_at'] as int) * 1000)
               : null,
         );
-        activeCall = eventCall;
+
+        // Track all calls independently — do NOT wipe other calls
+        if (state == CallState.ended) {
+          activeCalls.remove(callId);
+        } else {
+          activeCalls[callId] = eventCall;
+        }
 
         if (state == CallState.inCall) {
           unawaited(RecordingService.instance.maybeAutoStartForCall(eventCall));
         }
 
         debugPrint(
-            '[EngineChannel] Emitting CallEvent for call $callId, state $state');
+            '[EngineChannel] Emitting CallEvent for call $callId, state $state, activeCalls=${activeCalls.keys.toList()}');
 
         // Emit call event to all listeners (thread-safe, no platform calls)
         CallEventService.instance.addEvent(CallEvent(
@@ -525,67 +556,64 @@ class EngineChannel {
             finalRecordingPath: endedRecordingPath,
           );
 
-          if (activeCall?.callId == callId) {
-            // Save to JSON via AccountService
-            if (_accountService != null) {
-              final sipCode = (payload['sip_code'] as num?)?.toInt();
-              final sipReason = payload['sip_reason'] as String?;
+          // Save history and trigger integrations for this specific ended call
+          if (_accountService != null) {
+            final sipCode = (payload['sip_code'] as num?)?.toInt();
+            final sipReason = payload['sip_reason'] as String?;
 
-              // Map SIP code to professional Result (Spec 2.2)
-              String result = 'Ended';
-              if (historyCall.direction == CallDirection.incoming) {
-                if (sipCode == 487) {
-                  result = wasConnected ? 'Answered' : 'Missed';
-                } else if (sipCode == 603 || sipCode == 486) {
-                  result = 'Rejected';
-                } else if (wasConnected) {
-                  result = 'Answered';
-                } else {
-                  result = 'Missed';
-                }
+            // Map SIP code to professional Result (Spec 2.2)
+            String result = 'Ended';
+            if (historyCall.direction == CallDirection.incoming) {
+              if (sipCode == 487) {
+                result = wasConnected ? 'Answered' : 'Missed';
+              } else if (sipCode == 603 || sipCode == 486) {
+                result = 'Rejected';
+              } else if (wasConnected) {
+                result = 'Answered';
               } else {
-                if (wasConnected) {
-                  result = 'Answered';
-                } else if (sipCode == 486) {
-                  result = 'Busy';
-                } else if (sipCode == 487) {
-                  result = 'Cancelled';
-                } else if (sipCode != null && sipCode >= 400) {
-                  result = 'Failed';
-                } else {
-                  result = 'Disconnected';
-                }
+                result = 'Missed';
               }
-
-              final entry = CallHistorySchema(
-                id: '', // Will be set in AccountService
-                accountId: historyCall.accountId,
-                uri: historyCall.uri,
-                direction: historyCall.direction.name,
-                timestamp: DateTime.now(),
-                durationSeconds: historyCall.startedAt != null
-                    ? DateTime.now()
-                        .difference(historyCall.startedAt!)
-                        .inSeconds
-                    : 0,
-                sipCode: sipCode,
-                sipReason: sipReason,
-                result: result,
-              );
-
-              _accountService!.saveCallHistory(entry);
+            } else {
+              if (wasConnected) {
+                result = 'Answered';
+              } else if (sipCode == 486) {
+                result = 'Busy';
+              } else if (sipCode == 487) {
+                result = 'Cancelled';
+              } else if (sipCode != null && sipCode >= 400) {
+                result = 'Failed';
+              } else {
+                result = 'Disconnected';
+              }
             }
 
-            // Trigger CRM End Hook and Recording Upload
-            if (previousCall != null) {
-              IntegrationService.instance.onCallEnd(
-                historyCall,
-                recordingPath: endedRecordingPath,
-              );
-            }
+            final entry = CallHistorySchema(
+              id: '', // Will be set in AccountService
+              accountId: historyCall.accountId,
+              uri: historyCall.uri,
+              direction: historyCall.direction.name,
+              timestamp: DateTime.now(),
+              durationSeconds: historyCall.startedAt != null
+                  ? DateTime.now()
+                      .difference(historyCall.startedAt!)
+                      .inSeconds
+                  : 0,
+              sipCode: sipCode,
+              sipReason: sipReason,
+              result: result,
+            );
 
-            activeCall = null;
+            _accountService!.saveCallHistory(entry);
           }
+
+          // Trigger CRM End Hook and Recording Upload
+          if (previousCall != null) {
+            IntegrationService.instance.onCallEnd(
+              historyCall,
+              recordingPath: endedRecordingPath,
+            );
+          }
+
           mediaStats.remove(callId);
         }
 

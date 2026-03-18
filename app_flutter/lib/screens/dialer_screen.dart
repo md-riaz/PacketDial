@@ -936,11 +936,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     _buildCompactHeader(activeAccount, allAccounts),
                     const SizedBox(height: 10),
 
-                    // 2. Active Call Panel or Ready Indicator (fixed min height)
+                    // 2. Active Call Panel or Ready Indicator
                     if (activeCall != null)
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 200),
-                        child: _ActiveCallCard(
+                      _ActiveCallCard(
                           call: activeCall,
                           stats: stats,
                           onHangup: _hangup,

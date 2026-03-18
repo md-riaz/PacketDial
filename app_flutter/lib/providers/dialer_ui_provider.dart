@@ -53,8 +53,10 @@ class DialerUiNotifier extends StateNotifier<DialerUiState> {
 
     // Track consultation call when we start a new outgoing leg from hold.
     if (callId != null && callState == 'Ringing' && direction == 'Outgoing') {
-      final activeCall = EngineChannel.instance.activeCall;
-      if (activeCall != null && activeCall.onHold) {
+      // Check if any existing call is on hold (the original call being consulted)
+      final hasHeldCall = EngineChannel.instance.activeCalls.values
+          .any((c) => c.onHold && c.callId != callId);
+      if (hasHeldCall) {
         state = state.copyWith(
           consultationCallId: callId,
           consultationUri: uri,

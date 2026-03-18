@@ -966,13 +966,23 @@ int pd_acc_add(const char *sip_uri, const char *registrar,
                const char *username, const char *password,
                const char *auth_username, const char *sip_proxy,
                int transport_id, const char *stun_server,
-               int publish_presence)
+               int publish_presence, const char *display_name)
 {
     pd_ensure_thread();
     pjsua_acc_config cfg;
     pjsua_acc_config_default(&cfg);
 
-    cfg.id      = S(sip_uri);
+    /* Build the account ID (From header) with display name if provided.
+     * Format: "Display Name" <sip:user@domain>
+     * Without display name PJSIP sends a bare URI and FusionPBX shows
+     * an empty Contact column. */
+    char id_buf[512];
+    if (display_name && display_name[0] != '\0') {
+        snprintf(id_buf, sizeof(id_buf), "\"%s\" <%s>", display_name, sip_uri);
+        cfg.id = S(id_buf);
+    } else {
+        cfg.id = S(sip_uri);
+    }
     cfg.reg_uri = S(registrar);
 
     /* Presence publishing — sends SIP PUBLISH so other subscribers can see

@@ -298,6 +298,12 @@ class AccountService extends ChangeNotifier {
     debugPrint(
         '[AccountService] Registering account ${schema.accountName} (${schema.uuid})');
 
+    final effectiveDisplayName = schema.displayName.trim().isNotEmpty
+        ? schema.displayName.trim()
+        : schema.accountName.trim().isNotEmpty
+            ? schema.accountName.trim()
+            : schema.username.trim();
+
     final payload = {
       'uuid': schema.uuid,
       'username': schema.username,
@@ -307,7 +313,7 @@ class AccountService extends ChangeNotifier {
       'domain': schema.domain,
       'sip_proxy': schema.sipProxy,
       'account_name': schema.accountName,
-      'display_name': schema.displayName,
+      'display_name': effectiveDisplayName,
       'auth_username': schema.authUsername,
       'stun_server': schema.stunServer,
       'turn_server': schema.turnServer,

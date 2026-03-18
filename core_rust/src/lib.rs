@@ -317,6 +317,7 @@ extern "C" {
         use_tcp: i32,
         stun_server: *const c_char,
         publish_presence: i32,
+        display_name: *const c_char,
     ) -> i32;
     fn pd_acc_remove(acc_id: i32) -> i32;
     fn pd_call_make(acc_id: i32, dst_uri: *const c_char) -> i32;
@@ -1474,6 +1475,18 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 return EngineErrorCode::InternalError;
             }
         };
+        // Use display_name if set, otherwise fall back to account_name, then username
+        let effective_display_name = if !acct_snapshot.display_name.is_empty() {
+            acct_snapshot.display_name.clone()
+        } else if !acct_snapshot.account_name.is_empty() {
+            acct_snapshot.account_name.clone()
+        } else {
+            acct_snapshot.username.clone()
+        };
+        let display_name = match CString::new(effective_display_name) {
+            Ok(s) => s,
+            Err(_) => CString::new("").unwrap(),
+        };
 
         let pj_acc_id = unsafe {
             pd_acc_add(
@@ -1486,6 +1499,7 @@ fn cmd_account_register(p: &serde_json::Value) -> EngineErrorCode {
                 transport_id,
                 stun_server.as_ptr(),
                 if acct_snapshot.publish_presence { 1 } else { 0 },
+                display_name.as_ptr(),
             )
         };
 
