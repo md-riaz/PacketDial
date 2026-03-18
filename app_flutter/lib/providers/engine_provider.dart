@@ -21,6 +21,18 @@ final activeCallProvider = Provider<ActiveCall?>((ref) {
   return EngineChannel.instance.activeCall;
 });
 
+/// All currently active calls (foreground + held), sorted so non-held comes first.
+final activeCallsProvider = Provider<List<ActiveCall>>((ref) {
+  ref.watch(engineEventsProvider);
+  final calls = EngineChannel.instance.activeCalls.values.toList();
+  calls.sort((a, b) {
+    // Non-held first
+    if (a.onHold != b.onHold) return a.onHold ? 1 : -1;
+    return a.callId.compareTo(b.callId);
+  });
+  return calls;
+});
+
 final activeCallMediaStatsProvider = Provider<MediaStats?>((ref) {
   ref.watch(engineEventsProvider);
   final call = EngineChannel.instance.activeCall;

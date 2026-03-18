@@ -687,10 +687,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
     // Put current call on hold and dial the participant
     final result = EngineChannel.instance.startAttendedXfer(call.callId, uri);
     if (result >= 0) {
-      ref.read(dialerUiProvider.notifier).setConsultationCallId(result);
+      ref.read(dialerUiProvider.notifier).startConferenceAdd(result, uri);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Calling $uri to add to conference...'),
+          content: Text('Adding ${SipUriUtils.friendlyName(uri)} to conference...'),
           backgroundColor: context.colors.primary,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -939,17 +939,22 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                     // 2. Active Call Panel or Ready Indicator
                     if (activeCall != null)
                       _ActiveCallCard(
-                          call: activeCall,
-                          stats: stats,
-                          onHangup: _hangup,
-                          onRecordToggle: _toggleRecording,
-                          onTransfer: () => _showTransferDialog(activeCall),
-                          onConference: () => _showConferenceDialog(activeCall),
-                          hasConsultationCall: dialerUi.hasConsultationCall,
-                          consultationDisplay: dialerUi.consultationDisplay,
-                          isRecording: RecordingService.instance
-                              .isRecordingForCall(activeCall.callId),
-                        ),
+                        call: activeCall,
+                        stats: stats,
+                        onHangup: _hangup,
+                        onRecordToggle: _toggleRecording,
+                        onTransfer: () => _showTransferDialog(activeCall),
+                        onConference: () => _showConferenceDialog(activeCall),
+                        hasConsultationCall: dialerUi.hasConsultationCall,
+                        consultationDisplay: dialerUi.consultationDisplay,
+                        isConference: dialerUi.isConference,
+                        conferenceParticipantCount: dialerUi.conferenceParticipantCount,
+                        pendingConferenceAdd: dialerUi.pendingConferenceAdd,
+                        addingParticipantDisplay: dialerUi.pendingConferenceAdd
+                            ? dialerUi.consultationDisplay
+                            : null,
+                        isRecording: RecordingService.instance
+                            .isRecordingForCall(activeCall.callId),
                       )
                     else
                       SizedBox(height: 80, child: _buildReadyIndicator()),
@@ -1328,6 +1333,10 @@ class _ActiveCallCard extends StatelessWidget {
   final VoidCallback onConference;
   final bool hasConsultationCall;
   final String? consultationDisplay;
+  final bool isConference;
+  final int conferenceParticipantCount;
+  final bool pendingConferenceAdd;
+  final String? addingParticipantDisplay;
   final bool isRecording;
 
   const _ActiveCallCard({
@@ -1339,6 +1348,10 @@ class _ActiveCallCard extends StatelessWidget {
     required this.onConference,
     this.hasConsultationCall = false,
     this.consultationDisplay,
+    this.isConference = false,
+    this.conferenceParticipantCount = 0,
+    this.pendingConferenceAdd = false,
+    this.addingParticipantDisplay,
     required this.isRecording,
   });
 
@@ -1350,12 +1363,16 @@ class _ActiveCallCard extends StatelessWidget {
       constraints: BoxConstraints(minHeight: minCardHeight),
       padding: const EdgeInsets.all(14),
       decoration: c.glassCard(
-        color: hasConsultationCall
-            ? c.primary.withValues(alpha: 0.05)
-            : c.accent.withValues(alpha: 0.08),
-        borderColor: hasConsultationCall
-            ? c.primary.withValues(alpha: 0.3)
-            : c.accent.withValues(alpha: 0.25),
+        color: isConference
+            ? AppTheme.callGreen.withValues(alpha: 0.05)
+            : hasConsultationCall
+                ? c.primary.withValues(alpha: 0.05)
+                : c.accent.withValues(alpha: 0.08),
+        borderColor: isConference
+            ? AppTheme.callGreen.withValues(alpha: 0.3)
+            : hasConsultationCall
+                ? c.primary.withValues(alpha: 0.3)
+                : c.accent.withValues(alpha: 0.25),
       ),
       child: SingleChildScrollView(
         child: ConstrainedBox(
@@ -1453,33 +1470,81 @@ class _ActiveCallCard extends StatelessWidget {
                 const SizedBox(height: 12),
               ],
 
+              // Adding participant strip (conference mode, waiting for answer)
+              if (pendingConferenceAdd) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.callGreen.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.callGreen.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.callGreen.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Adding ${addingParticipantDisplay ?? 'participant'}...',
+                          style: TextStyle(
+                            color: AppTheme.callGreen.withValues(alpha: 0.9),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
               // Main call info
               Row(
                 children: [
-                  _PulsingAvatar(color: c.accent),
+                  _PulsingAvatar(color: isConference ? AppTheme.callGreen : c.accent),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(SipUriUtils.friendlyName(call.uri),
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                color: c.textPrimary)),
+                        Text(
+                          isConference ? 'Conference Call' : SipUriUtils.friendlyName(call.uri),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: isConference ? AppTheme.callGreen : c.textPrimary),
+                        ),
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Text(call.state.label,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: c.accent.withValues(alpha: 0.8),
-                                    fontWeight: FontWeight.w500)),
-                            if (call.state == CallState.inCall) ...[
+                            Text(
+                              isConference
+                                  ? '$conferenceParticipantCount participants'
+                                  : call.state.label,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: isConference
+                                      ? AppTheme.callGreen.withValues(alpha: 0.8)
+                                      : c.accent.withValues(alpha: 0.8),
+                                  fontWeight: FontWeight.w500),
+                            ),
+                            if (!isConference && call.state == CallState.inCall) ...[
                               const SizedBox(width: 6),
                               _CallQualityDot(stats: stats),
                             ],
-                            if (call.onHold) ...[
+                            if (!isConference && call.onHold) ...[
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
