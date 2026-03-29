@@ -205,10 +205,14 @@ static void emit_json(int event_id, const char *json_payload) {
 }
 
 static void emit_log_event(const char *level, const char *message) {
+  char escaped_level[32];
+  char escaped_message[1024];
   char payload[1024];
+  json_copy_escaped(escaped_level, sizeof(escaped_level), level);
+  json_copy_escaped(escaped_message, sizeof(escaped_message), message);
   snprintf(payload, sizeof(payload),
            "{\"type\":\"EngineLog\",\"payload\":{\"level\":\"%s\",\"message\":\"%s\"}}",
-           level == NULL ? "info" : level, message == NULL ? "" : message);
+           escaped_level[0] == '\0' ? "info" : escaped_level, escaped_message);
   emit_json(PD_EVENT_ENGINE_LOG, payload);
 }
 
@@ -481,6 +485,8 @@ static const char *call_state_for(int inv_state) {
 static void on_reg_state_cb(int acc_id, int expires, int status_code,
                             const char *reason) {
   char payload[1024];
+  char escaped_reason[256];
+  char escaped_account_id[96];
   int i;
   const char *external_id = "";
   for (i = 0; i < PD_MAX_ACCOUNTS; ++i) {
@@ -490,17 +496,21 @@ static void on_reg_state_cb(int acc_id, int expires, int status_code,
       break;
     }
   }
+  json_copy_escaped(escaped_reason, sizeof(escaped_reason), reason);
+  json_copy_escaped(escaped_account_id, sizeof(escaped_account_id), external_id);
   snprintf(payload, sizeof(payload),
            "{\"type\":\"RegistrationStateChanged\",\"payload\":{"
            "\"account_id\":\"%s\",\"state\":\"%s\",\"reason\":\"%s\","
            "\"status_code\":%d,\"expires\":%d}}",
-           external_id, registration_state_for(expires, status_code),
-           reason == NULL ? "" : reason, status_code, expires);
+           escaped_account_id, registration_state_for(expires, status_code),
+           escaped_reason, status_code, expires);
   emit_json(PD_EVENT_REGISTRATION_STATE_CHANGED, payload);
 }
 
 static void on_incoming_call_cb(int acc_id, int call_id, const char *from_uri) {
   char payload[1024];
+  char escaped_account_id[96];
+  char escaped_uri[512];
   const char *external_id = "";
   int i;
   g_current_call_id = call_id;
@@ -510,11 +520,13 @@ static void on_incoming_call_cb(int acc_id, int call_id, const char *from_uri) {
       break;
     }
   }
+  json_copy_escaped(escaped_account_id, sizeof(escaped_account_id), external_id);
+  json_copy_escaped(escaped_uri, sizeof(escaped_uri), from_uri);
   snprintf(payload, sizeof(payload),
            "{\"type\":\"CallStateChanged\",\"payload\":{"
            "\"call_id\":%d,\"account_id\":\"%s\",\"uri\":\"%s\","
            "\"direction\":\"incoming\",\"state\":\"Ringing\"}}",
-           call_id, external_id, from_uri == NULL ? "" : from_uri);
+           call_id, escaped_account_id, escaped_uri);
   emit_json(PD_EVENT_CALL_STATE_CHANGED, payload);
 }
 
@@ -557,11 +569,13 @@ static void on_log_cb(int level, const char *msg) {
 }
 
 static void on_sip_msg_cb(int call_id, int is_tx, const char *msg) {
+  char escaped_message[2048];
   char payload[2048];
+  json_copy_escaped(escaped_message, sizeof(escaped_message), msg);
   snprintf(payload, sizeof(payload),
            "{\"type\":\"SipMessageCaptured\",\"payload\":{"
            "\"call_id\":%d,\"direction\":\"%s\",\"message\":\"%s\"}}",
-           call_id, is_tx ? "tx" : "rx", msg == NULL ? "" : msg);
+           call_id, is_tx ? "tx" : "rx", escaped_message);
   emit_json(PD_EVENT_SIP_MESSAGE_CAPTURED, payload);
 }
 
@@ -580,11 +594,15 @@ static void on_transfer_status_cb(int call_id, int status_code,
 }
 
 static void on_blf_status_cb(const char *uri, int state, const char *activity) {
+  char escaped_uri[512];
+  char escaped_activity[256];
   char payload[1024];
+  json_copy_escaped(escaped_uri, sizeof(escaped_uri), uri);
+  json_copy_escaped(escaped_activity, sizeof(escaped_activity), activity);
   snprintf(payload, sizeof(payload),
            "{\"type\":\"BlfStatus\",\"payload\":{"
            "\"uri\":\"%s\",\"state\":%d,\"activity\":\"%s\"}}",
-           uri == NULL ? "" : uri, state, activity == NULL ? "" : activity);
+           escaped_uri, state, escaped_activity);
   emit_json(26, payload);
 }
 
@@ -608,14 +626,16 @@ static void emit_audio_devices_snapshot(void) {
   for (i = 0; i < count && offset < (int)sizeof(payload) - 256; ++i) {
     const char *kind = "Input";
     char *name_slot = names + (i * PD_NAME_SLOT_LEN);
+    char escaped_name[PD_NAME_SLOT_LEN * 2];
     if (kinds[i] == 1) {
       kind = "Output";
     } else if (kinds[i] == 2) {
       kind = "Both";
     }
+    json_copy_escaped(escaped_name, sizeof(escaped_name), name_slot);
     offset += snprintf(payload + offset, sizeof(payload) - (size_t)offset,
                        "%s{\"id\":%d,\"name\":\"%s\",\"kind\":\"%s\"}",
-                       i == 0 ? "" : ",", ids[i], name_slot, kind);
+                       i == 0 ? "" : ",", ids[i], escaped_name, kind);
   }
   snprintf(payload + offset, sizeof(payload) - (size_t)offset,
            "],\"selected_input\":%d,\"selected_output\":%d}}",
@@ -743,7 +763,11 @@ VOIP_CORE_EXPORT int32_t engine_unregister(const char *account_id) {
     return -1;
   }
   slot->registered = 0;
-  return pd_acc_remove(slot->internal_acc_id);
+  if (pd_acc_remove(slot->internal_acc_id) != 0) {
+    return -1;
+  }
+  slot->internal_acc_id = -1;
+  return 0;
 }
 
 VOIP_CORE_EXPORT int32_t engine_make_call(const char *account_id,
@@ -806,12 +830,14 @@ VOIP_CORE_EXPORT int32_t engine_start_recording(const char *file_path) {
   }
   rc = pd_call_start_recording(g_current_call_id, file_path);
   if (rc == 0) {
+    char escaped_path[512];
     char payload[512];
     g_current_recording_call_id = g_current_call_id;
+    json_copy_escaped(escaped_path, sizeof(escaped_path), file_path);
     snprintf(payload, sizeof(payload),
              "{\"type\":\"RecordingStarted\",\"payload\":{\"call_id\":%d,"
              "\"file_path\":\"%s\"}}",
-             g_current_recording_call_id, file_path == NULL ? "" : file_path);
+             g_current_recording_call_id, escaped_path);
     emit_json(PD_EVENT_RECORDING_STARTED, payload);
   }
   return rc;

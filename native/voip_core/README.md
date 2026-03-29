@@ -1,32 +1,35 @@
 # native/voip_core
 
-This module is the start of the non-Rust PacketDial telephony port.
-It is intended to become the shared native telephony base for both Windows and
-Android, with one exported ABI and one core implementation strategy.
+This module documents the shared native telephony ABI used by PacketDial.
+For this repository, it is a binary-only integration boundary for Windows and
+Android. Rust is out of scope, and the app consumes prebuilt native libraries.
 
 Purpose:
-- own the public `engine_*` ABI in-repo
-- own the reusable PJSIP shim outside `reference/core_rust`
-- provide shared Windows/Android native build entrypoints
+- define the public `engine_*` ABI used by Flutter through FFI
+- keep the shared native headers and core sources in-repo for ABI reference
+- document how vendored Windows and Android telephony binaries are packaged
 
 Current contents:
-- `include/voip_core.h`: shared exported ABI
-- `src/core/engine_bridge.c`: initial engine wrapper that translates shim callbacks into PacketDial event payloads
-- `src/shim/pjsip_shim.{c,h}`: extracted reusable PJSIP layer from the reference implementation
-- `android/build_android.ps1`: Android build entrypoint for the port
-- `windows/build_windows.ps1`: Windows build entrypoint for the same module
-- `android/pjproject_config_site.h`: Android-specific PJSIP configuration used to stage mobile libs
+- `include/voip_core.h`: shared exported ABI contract
+- `src/core/engine_bridge.c`: current shared core implementation reference
+- `src/shim/pjsip_shim.{c,h}`: shared shim/reference code kept with the ABI
+- `sync_artifacts.ps1`: validates vendored runtime binaries and enforces the Android ABI policy
+- `windows/build_windows.ps1`: validates the vendored Windows DLL
+- `android/build_android.ps1`: validates the vendored Android `.so`
 
-Current status:
-- The wrapper implements the direct telephony exports from the documented native API.
-- `engine_send_command(...)` now covers the structured commands the Flutter app currently depends on: account profile upsert/delete, credential store/retrieve, diagnostics export, and ping.
-- The Android and Windows scripts are entrypoints for converging both platforms onto this shared module.
-- Android app packaging now ships shared-core builds from `apps/softphone_app/android/app/src/main/jniLibs/`.
-- The vendored Windows `native/vendor/windows/x64/voip_core.dll` is now refreshed from this shared module's Windows build output.
-- `CMakeLists.txt` now accepts a staged `VOIP_CORE_PJSIP_ROOT` with `include/` and `lib/` folders so both platforms can link against the same core sources.
-- `sync_artifacts.ps1` is the canonical artifact refresh workflow for the current repo.
+Supported workflow in this repo:
+1. Keep the vendored Windows runtime at `native/vendor/windows/x64/voip_core.dll`.
+2. Keep the vendored Android runtime at `apps/softphone_app/android/app/src/main/jniLibs/arm64-v8a/libvoip_core.so`.
+3. Run `native/voip_core/sync_artifacts.ps1` to validate that the required binaries are present and that unsupported Android ABI folders are removed.
 
-Next port steps:
-1. Continue filling native command/event parity where Flutter still needs richer SIP/runtime truth.
-2. Keep the vendored Windows DLL and Android `jniLibs` in sync from `native/voip_core`.
-3. Expand Android ABI support only when packaging is deterministic for the extra ABI.
+Current policy:
+- Windows runtime is consumed from the vendored DLL.
+- Android runtime is consumed from checked-in `jniLibs`.
+- `arm64-v8a` is the only supported Android ABI in this repository.
+- This repository treats the telephony core as a binary-only dependency.
+
+If you receive a new native telephony binary drop:
+1. Replace the vendored Windows DLL if it changed.
+2. Replace the checked-in Android `arm64-v8a/libvoip_core.so` if it changed.
+3. Run `native/voip_core/sync_artifacts.ps1`.
+4. Rebuild the Flutter apps and verify the packaged artifacts.

@@ -1,6 +1,6 @@
 # ninja log v5
-0	385	7964956659126338	CMakeFiles/voip_core.dir/src/core/engine_bridge.c.o	2e7cc11b6f992955
-6	4426	7964967874860784	CMakeFiles/voip_core.dir/src/shim/pjsip_shim.c.o	6578f40d1589ac90
-4427	4829	7964967878990038	libvoip_core.so	7159255f658be2c7
 6	557	7964990382268180	CMakeFiles/voip_core.dir/src/core/engine_bridge.c.o	2e7cc11b6f992955
+6	4426	7964967874860784	CMakeFiles/voip_core.dir/src/shim/pjsip_shim.c.o	6578f40d1589ac90
 558	1017	7964990386904696	libvoip_core.so	1f2ca1d713f2b8d5
+5	567	7965016077671707	CMakeFiles/voip_core.dir/src/core/engine_bridge.c.o	2e7cc11b6f992955
+567	915	7965016081190944	libvoip_core.so	1f2ca1d713f2b8d5
