@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\vm_user\Downloads\PacketDial\native\voip_core\build\windows\CMakeFiles\4467321fac9f9ee3cbdcbccee5177b77\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{31E58E5D-515A-3BDC-9CFC-81FD0BFE4B76}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,17 @@
+name: packet_dial_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.11.1
+
+workspace:
+  - apps/softphone_app
+  - packages/app_core
+  - packages/voip_bridge
+  - packages/platform_services
+  - packages/feature_accounts
+  - packages/feature_calls
+  - packages/feature_contacts
+  - packages/feature_history
+  - packages/feature_settings
+  - packages/feature_diagnostics

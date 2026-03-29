@@ -1,0 +1,26 @@
+name: platform_services
+description: Platform service wrappers and fake implementations for PacketDial.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  audio_session: ^0.2.2
+  connectivity_plus: ^7.0.0
+  device_info_plus: ^11.5.0
+  flutter_local_notifications: ^21.0.0
+  flutter_secure_storage: ^10.0.0
+  package_info_plus: ^9.0.0
+  path_provider: ^2.1.5
+  permission_handler: ^12.0.1
+  tray_manager: ^0.5.2
+  wakelock_plus: ^1.5.1
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

@@ -1,0 +1,4 @@
+# ninja log v5
+0	397	7964962029994043	CMakeFiles/voip_core.dir/src/core/engine_bridge.c.o	ca9967f17bcacad3
+7	2801	7964962053958367	CMakeFiles/voip_core.dir/src/shim/pjsip_shim.c.o	ca28977534043f2
+9	339	7964963588244148	libvoip_core.so	5ab26aa5dfe894c7

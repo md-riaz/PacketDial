@@ -1,0 +1,9 @@
+export 'src/fakes/fake_platform_services.dart';
+export 'src/implementations/flutter_local_notifications_service.dart';
+export 'src/platform_services_bundle.dart';
+export 'src/interfaces/app_notifications.dart';
+export 'src/interfaces/audio_session_service.dart';
+export 'src/interfaces/connectivity_service.dart';
+export 'src/interfaces/desktop_shell_service.dart';
+export 'src/interfaces/permissions_service.dart';
+export 'src/interfaces/secure_secrets_store.dart';

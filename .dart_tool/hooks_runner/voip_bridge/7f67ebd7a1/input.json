@@ -1,0 +1,29 @@
+{
+  "assets": {},
+  "config": {
+    "build_asset_types": [
+      "code_assets/code"
+    ],
+    "extensions": {
+      "code_assets": {
+        "android": {
+          "target_ndk_api": 24
+        },
+        "c_compiler": {
+          "ar": "C:\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\llvm-ar.exe",
+          "cc": "C:\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+          "ld": "C:\\Android\\Sdk\\ndk\\28.2.13676358\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\ld.lld.exe"
+        },
+        "link_mode_preference": "dynamic",
+        "target_architecture": "arm",
+        "target_os": "android"
+      }
+    },
+    "linking_enabled": false
+  },
+  "out_dir_shared": "C:\\Users\\vm_user\\Downloads\\PacketDial\\.dart_tool\\hooks_runner\\shared\\voip_bridge\\build\\",
+  "out_file": "C:\\Users\\vm_user\\Downloads\\PacketDial\\.dart_tool\\hooks_runner\\voip_bridge\\7f67ebd7a1\\output.json",
+  "package_name": "voip_bridge",
+  "package_root": "C:\\Users\\vm_user\\Downloads\\PacketDial\\packages\\voip_bridge\\",
+  "user_defines": {}
+}

@@ -1,0 +1,20 @@
+name: app_core
+description: Shared domain models and state for PacketDial.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  collection: ^1.19.1
+  platform_services:
+    path: ../platform_services
+  riverpod: ^2.6.1
+  uuid: ^4.5.1
+  voip_bridge:
+    path: ../voip_bridge
+
+dev_dependencies:
+  lints: ^6.0.0

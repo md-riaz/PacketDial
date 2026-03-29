@@ -1,0 +1,44 @@
+name: softphone_app
+description: PacketDial softphone shell.
+publish_to: none
+version: 1.0.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  app_core:
+    path: ../../packages/app_core
+  feature_accounts:
+    path: ../../packages/feature_accounts
+  feature_calls:
+    path: ../../packages/feature_calls
+  feature_contacts:
+    path: ../../packages/feature_contacts
+  feature_diagnostics:
+    path: ../../packages/feature_diagnostics
+  feature_history:
+    path: ../../packages/feature_history
+  feature_settings:
+    path: ../../packages/feature_settings
+  flutter_riverpod: ^2.6.1
+  go_router: ^16.2.0
+  google_fonts: ^6.3.2
+  path_provider: ^2.1.5
+  platform_services:
+    path: ../../packages/platform_services
+  tray_manager: ^0.5.2
+  voip_bridge:
+    path: ../../packages/voip_bridge
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

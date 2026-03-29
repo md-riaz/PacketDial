@@ -1,0 +1,3 @@
+C:/Users/vm_user/Downloads/PacketDial/native/voip_core/build/windows/CMakeFiles/voip_core.dir
+C:/Users/vm_user/Downloads/PacketDial/native/voip_core/build/windows/CMakeFiles/ALL_BUILD.dir
+C:/Users/vm_user/Downloads/PacketDial/native/voip_core/build/windows/CMakeFiles/ZERO_CHECK.dir
