@@ -62,80 +62,131 @@ class _CallsPageState extends State<CallsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasActiveCall = widget.activeCall != null;
+
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       children: [
-        Text('Dialer', style: theme.textTheme.headlineMedium),
-        const SizedBox(height: 20),
         Row(
           children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: widget.selectedAccountId,
-                decoration: const InputDecoration(labelText: 'Source account'),
-                items: widget.accounts
-                    .map(
-                      (account) => DropdownMenuItem<String>(
-                        value: account.id,
-                        child: Text(account.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: widget.onAccountChanged,
+            const Icon(Icons.call_outlined, color: Color(0xFF1DA8D6), size: 20),
+            const SizedBox(width: 6),
+            Text('Dial Pad', style: theme.textTheme.headlineSmall),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF4FB),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFFD2E4F2)),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: TextFormField(
-                key: ValueKey<String>(widget.dialPadText),
-                initialValue: widget.dialPadText,
-                onChanged: widget.onDialPadChanged,
-                decoration: const InputDecoration(
-                  labelText: 'Destination',
-                  hintText: '2001 or sip:alice@example.com',
+              child: Text(
+                hasActiveCall ? 'In Call' : 'Idle',
+                style: const TextStyle(
+                  color: Color(0xFF4F738A),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
-              onPressed: widget.onPlaceCall,
-              icon: const Icon(Icons.call),
-              label: const Text('Call'),
-            ),
-            const SizedBox(width: 12),
-            if (widget.supportsIncomingSimulation)
-              OutlinedButton.icon(
-                onPressed: widget.onSimulateIncoming,
-                icon: const Icon(Icons.phone_callback_outlined),
-                label: const Text('Simulate incoming'),
-              ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: widget.selectedAccountId,
+                        decoration: const InputDecoration(
+                          labelText: 'Account',
+                          prefixIcon: Icon(Icons.account_circle_outlined),
+                        ),
+                        items: widget.accounts
+                            .map(
+                              (account) => DropdownMenuItem<String>(
+                                value: account.id,
+                                child: Text(account.label),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: widget.onAccountChanged,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        key: ValueKey<String>(widget.dialPadText),
+                        initialValue: widget.dialPadText,
+                        onChanged: widget.onDialPadChanged,
+                        decoration: const InputDecoration(
+                          labelText: 'Number / SIP URI',
+                          hintText: '2001 or sip:alice@example.com',
+                          prefixIcon: Icon(Icons.dialpad_outlined),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    FilledButton.icon(
+                      onPressed: widget.onPlaceCall,
+                      icon: const Icon(Icons.call, size: 18),
+                      label: const Text('Call'),
+                    ),
+                    const SizedBox(width: 8),
+                    if (widget.supportsIncomingSimulation)
+                      OutlinedButton.icon(
+                        onPressed: widget.onSimulateIncoming,
+                        icon: const Icon(Icons.phone_callback_outlined, size: 18),
+                        label: const Text('Simulate incoming'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Card(
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: widget.activeCall == null
-                ? const Text(
-                    'No active call. Place a test call to exercise the bridge.',
+                ? const Row(
+                    children: [
+                      Icon(Icons.phone_disabled_outlined, color: Color(0xFF8AA2B2)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'No active call. Place a call to start media/session controls.',
+                          style: TextStyle(color: Color(0xFF6B7F8E)),
+                        ),
+                      ),
+                    ],
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.activeCall!.displayName ??
-                            widget.activeCall!.remoteIdentity,
+                        widget.activeCall!.displayName ?? widget.activeCall!.remoteIdentity,
                         style: theme.textTheme.headlineSmall,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
-                        'State: ${widget.activeCall!.state.name} - ${widget.activeCall!.direction.name} - Route: ${widget.activeCall!.route.name}',
+                        'State: ${widget.activeCall!.state.name} • ${widget.activeCall!.direction.name} • Route: ${widget.activeCall!.route.name}',
+                        style: const TextStyle(color: Color(0xFF6B7F8E), fontSize: 12),
                       ),
                       const SizedBox(height: 16),
-                      if (widget.activeCall!.direction ==
-                              CallDirection.incoming &&
+                      if (widget.activeCall!.direction == CallDirection.incoming &&
                           widget.activeCall!.state == CallState.ringing)
                         Wrap(
                           spacing: 12,
@@ -145,7 +196,7 @@ class _CallsPageState extends State<CallsPage> {
                               onPressed: widget.onAnswer,
                               child: const Text('Answer'),
                             ),
-                            FilledButton.tonal(
+                            OutlinedButton(
                               onPressed: widget.onReject,
                               child: const Text('Reject'),
                             ),
@@ -155,10 +206,12 @@ class _CallsPageState extends State<CallsPage> {
                         Wrap(
                           spacing: 12,
                           runSpacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            FilledButton.tonal(
+                            OutlinedButton.icon(
                               onPressed: widget.onHangup,
-                              child: const Text('Hang up'),
+                              icon: const Icon(Icons.call_end_outlined),
+                              label: const Text('Hang up'),
                             ),
                             FilterChip(
                               selected: widget.activeCall!.muted,
@@ -192,8 +245,7 @@ class _CallsPageState extends State<CallsPage> {
                         CallTransferPanel(
                           controller: _transferController,
                           onBlindTransfer: widget.onBlindTransfer,
-                          onBeginAttendedTransfer:
-                              widget.onBeginAttendedTransfer,
+                          onBeginAttendedTransfer: widget.onBeginAttendedTransfer,
                         ),
                         const SizedBox(height: 16),
                         CallKeypad(onSendDtmf: widget.onSendDtmf),

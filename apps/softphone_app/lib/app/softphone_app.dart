@@ -218,59 +218,84 @@ class ShellScaffold extends StatelessWidget {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFF3EFE7), Color(0xFFE0F0EA), Color(0xFFFDF8EE)],
-          ),
-        ),
+        color: const Color(0xFFF2F6FA),
         child: Row(
           children: [
-            NavigationRail(
-              extended: MediaQuery.of(context).size.width > 1100,
-              selectedIndex: current.index,
-              onDestinationSelected: (index) {
-                context.go(AppSection.values[index].path);
-              },
-              labelType: MediaQuery.of(context).size.width > 1100
-                  ? NavigationRailLabelType.none
-                  : NavigationRailLabelType.selected,
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.dialpad_outlined),
-                  label: Text('Calls'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.account_circle_outlined),
-                  label: Text('Accounts'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.people_outline),
-                  label: Text('Contacts'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.history_outlined),
-                  label: Text('History'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.tune_outlined),
-                  label: Text('Settings'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.monitor_heart_outlined),
-                  label: Text('Diagnostics'),
-                ),
-              ],
+            Container(
+              width: MediaQuery.of(context).size.width > 1100 ? 232 : 76,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEFF4F9),
+                border: Border(right: BorderSide(color: Color(0xFFD8E3EC))),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 18),
+                  const ListTile(
+                    dense: true,
+                    leading: Icon(Icons.wifi_calling_3_rounded, color: Color(0xFF1DA8D6), size: 22),
+                    title: Text(
+                      'PacketDial',
+                      style: TextStyle(
+                        color: Color(0xFF1F2F3B),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    subtitle: Text('Softphone', style: TextStyle(color: Color(0xFF6B7F8E), fontSize: 12)),
+                  ),
+                  const Divider(color: Color(0xFFD8E3EC), height: 16),
+                  Expanded(
+                    child: NavigationRail(
+                      extended: MediaQuery.of(context).size.width > 1100,
+                      selectedIndex: current.index,
+                      groupAlignment: -0.95,
+                      minWidth: 68,
+                      minExtendedWidth: 220,
+                      onDestinationSelected: (index) {
+                        context.go(AppSection.values[index].path);
+                      },
+                      labelType: MediaQuery.of(context).size.width > 1100
+                          ? NavigationRailLabelType.none
+                          : NavigationRailLabelType.selected,
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.dialpad_outlined),
+                          label: Text('Calls'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.account_circle_outlined),
+                          label: Text('Accounts'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.people_outline),
+                          label: Text('Contacts'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.history_outlined),
+                          label: Text('History'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.tune_outlined),
+                          label: Text('Settings'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.monitor_heart_outlined),
+                          label: Text('Diagnostics'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: const Color(0xFFD3DDD8)),
+                    color: const Color(0xFFFFFFFF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFD8E3EC)),
                   ),
                   child: child,
                 ),
