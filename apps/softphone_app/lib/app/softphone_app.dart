@@ -289,16 +289,14 @@ class ShellScaffold extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFFFF),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFD8E3EC)),
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFFFFF),
+                  border: Border(
+                    left: BorderSide(color: Color(0xFFD8E3EC)),
                   ),
-                  child: child,
                 ),
+                child: child,
               ),
             ),
           ],

@@ -65,8 +65,9 @@ class _CallsPageState extends State<CallsPage> {
     final hasActiveCall = widget.activeCall != null;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
+        const SizedBox(height: 4),
         Row(
           children: [
             const Icon(Icons.call_outlined, color: Color(0xFF1DA8D6), size: 20),
