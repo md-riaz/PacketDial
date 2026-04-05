@@ -17,6 +17,7 @@ class HistoryFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dropdownItems = <String>['All accounts', ...accountLabels.toSet()];
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
     return Wrap(
       spacing: 8,
@@ -24,7 +25,7 @@ class HistoryFilterBar extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
-          width: 280,
+          width: isNarrow ? double.infinity : 280,
           child: TextField(
             decoration: const InputDecoration(
               labelText: 'Search history',
@@ -33,22 +34,28 @@ class HistoryFilterBar extends StatelessWidget {
             onChanged: (value) => onChanged(state.copyWith(query: value)),
           ),
         ),
-        DropdownButton<String>(
-          value: dropdownItems.contains(state.accountLabel)
-              ? state.accountLabel
-              : 'All accounts',
-          items: dropdownItems
-              .map(
-                (label) =>
-                    DropdownMenuItem<String>(value: label, child: Text(label)),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value == null) {
-              return;
-            }
-            onChanged(state.copyWith(accountLabel: value));
-          },
+        SizedBox(
+          width: isNarrow ? double.infinity : null,
+          child: DropdownButton<String>(
+            isExpanded: isNarrow,
+            value: dropdownItems.contains(state.accountLabel)
+                ? state.accountLabel
+                : 'All accounts',
+            items: dropdownItems
+                .map(
+                  (label) => DropdownMenuItem<String>(
+                    value: label,
+                    child: Text(label, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              onChanged(state.copyWith(accountLabel: value));
+            },
+          ),
         ),
         ...[
           (HistoryDirectionFilter.all, 'All'),

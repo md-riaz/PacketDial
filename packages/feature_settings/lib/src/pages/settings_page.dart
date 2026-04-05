@@ -15,8 +15,10 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
+
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
       children: [
         Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 20),
@@ -44,23 +46,47 @@ class SettingsPage extends StatelessWidget {
           onChanged: (value) => onChanged(settings.copyWith(preferTcp: value)),
         ),
         ListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('Default transport'),
-          trailing: DropdownButton<SipTransport>(
-            value: settings.defaultTransport,
-            items: SipTransport.values
-                .map(
-                  (value) => DropdownMenuItem<SipTransport>(
-                    value: value,
-                    child: Text(value.name.toUpperCase()),
+          subtitle: isNarrow
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: DropdownButtonFormField<SipTransport>(
+                    initialValue: settings.defaultTransport,
+                    items: SipTransport.values
+                        .map(
+                          (value) => DropdownMenuItem<SipTransport>(
+                            value: value,
+                            child: Text(value.name.toUpperCase()),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        onChanged(settings.copyWith(defaultTransport: value));
+                      }
+                    },
                   ),
                 )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                onChanged(settings.copyWith(defaultTransport: value));
-              }
-            },
-          ),
+              : null,
+          trailing: isNarrow
+              ? null
+              : DropdownButton<SipTransport>(
+                  value: settings.defaultTransport,
+                  items: SipTransport.values
+                      .map(
+                        (value) => DropdownMenuItem<SipTransport>(
+                          value: value,
+                          child: Text(value.name.toUpperCase()),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      onChanged(settings.copyWith(defaultTransport: value));
+                    }
+                  },
+                ),
         ),
         SettingsToggleTile(
           value: settings.enableIceByDefault,

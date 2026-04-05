@@ -93,35 +93,58 @@ class _ContactsPageState extends State<ContactsPage> {
     final favoriteCount = _contacts
         .where((contact) => contact.isFavorite)
         .length;
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Contacts',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${_contacts.length} contacts - $favoriteCount favorites',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
+        if (isNarrow)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Contacts',
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
-            ),
-            FilledButton.icon(
-              onPressed: _createContact,
-              icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: const Text('Add contact'),
-            ),
-          ],
-        ),
+              const SizedBox(height: 4),
+              Text(
+                '${_contacts.length} contacts - $favoriteCount favorites',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _createContact,
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add contact'),
+              ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Contacts',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_contacts.length} contacts - $favoriteCount favorites',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _createContact,
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add contact'),
+              ),
+            ],
+          ),
         const SizedBox(height: 16),
         TextField(
           decoration: const InputDecoration(

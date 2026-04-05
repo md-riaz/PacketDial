@@ -67,39 +67,53 @@ class _AccountFormState extends State<AccountForm> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
+
     return Column(
       children: [
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
-            _field(_labelController, 'Label', width: 240),
-            _field(_usernameController, 'Username', width: 180),
-            _field(_authUsernameController, 'Auth username', width: 180),
-            _field(_domainController, 'Domain', width: 220),
-            _field(_displayNameController, 'Display name', width: 220),
+            _field(_labelController, 'Label', width: isNarrow ? double.infinity : 240),
+            _field(_usernameController, 'Username', width: isNarrow ? double.infinity : 180),
+            _field(_authUsernameController, 'Auth username', width: isNarrow ? double.infinity : 180),
+            _field(_domainController, 'Domain', width: isNarrow ? double.infinity : 220),
+            _field(_displayNameController, 'Display name', width: isNarrow ? double.infinity : 220),
             _field(
               _passwordController,
               'SIP password',
-              width: 220,
+              width: isNarrow ? double.infinity : 220,
               obscure: true,
             ),
-            _transportDropdown(),
-            _dtmfModeDropdown(),
-            _field(_outboundProxyController, 'Outbound proxy', width: 220),
-            _field(_stunServerController, 'STUN server', width: 220),
-            _field(_turnServerController, 'TURN server', width: 220),
-            _field(_voicemailController, 'Voicemail', width: 220),
+            _transportDropdown(width: isNarrow ? double.infinity : 220),
+            _dtmfModeDropdown(width: isNarrow ? double.infinity : 220),
+            _field(
+              _outboundProxyController,
+              'Outbound proxy',
+              width: isNarrow ? double.infinity : 220,
+            ),
+            _field(
+              _stunServerController,
+              'STUN server',
+              width: isNarrow ? double.infinity : 220,
+            ),
+            _field(
+              _turnServerController,
+              'TURN server',
+              width: isNarrow ? double.infinity : 220,
+            ),
+            _field(_voicemailController, 'Voicemail', width: isNarrow ? double.infinity : 220),
             _field(
               _registerExpiresController,
               'Register expires',
-              width: 160,
+              width: isNarrow ? double.infinity : 160,
               keyboardType: TextInputType.number,
             ),
             _field(
               _codecsController,
               'Preferred codecs',
-              width: 260,
+              width: isNarrow ? double.infinity : 260,
               hint: 'opus,pcmu,pcma',
             ),
           ],
@@ -172,9 +186,9 @@ class _AccountFormState extends State<AccountForm> {
     );
   }
 
-  Widget _transportDropdown() {
+  Widget _transportDropdown({required double width}) {
     return SizedBox(
-      width: 220,
+      width: width,
       child: DropdownButtonFormField<SipTransport>(
         initialValue: _transport,
         decoration: const InputDecoration(labelText: 'Transport'),
@@ -201,9 +215,9 @@ class _AccountFormState extends State<AccountForm> {
     );
   }
 
-  Widget _dtmfModeDropdown() {
+  Widget _dtmfModeDropdown({required double width}) {
     return SizedBox(
-      width: 220,
+      width: width,
       child: DropdownButtonFormField<DtmfMode>(
         initialValue: _dtmfMode,
         decoration: const InputDecoration(labelText: 'DTMF mode'),

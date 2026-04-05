@@ -42,8 +42,10 @@ class AccountsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
+
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
       children: [
         Text('Accounts', style: theme.textTheme.headlineMedium),
         const SizedBox(height: 8),

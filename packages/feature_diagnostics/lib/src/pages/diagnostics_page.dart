@@ -31,32 +31,52 @@ class DiagnosticsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sections = _derivedSections();
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Diagnostics',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(bundle.summary),
-                ],
+        if (isNarrow)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Diagnostics',
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
-            ),
-            FilledButton.icon(
-              onPressed: onExport,
-              icon: const Icon(Icons.download_outlined),
-              label: const Text('Export diagnostics'),
-            ),
-          ],
-        ),
+              const SizedBox(height: 4),
+              Text(bundle.summary),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: onExport,
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Export diagnostics'),
+              ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Diagnostics',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(bundle.summary),
+                  ],
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: onExport,
+                icon: const Icon(Icons.download_outlined),
+                label: const Text('Export diagnostics'),
+              ),
+            ],
+          ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 12,

@@ -31,27 +31,22 @@ class _HistoryPageState extends State<HistoryPage> {
           ..sort();
     final filtered = widget.entries.where(_viewState.matches).toList()
       ..sort((left, right) => right.endedAt.compareTo(left.endedAt));
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isNarrow ? 16 : 24),
       children: [
-        Row(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Recents',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${filtered.length} of ${widget.entries.length} calls shown',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
+            Text(
+              'Recents',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${filtered.length} of ${widget.entries.length} calls shown',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
         ),

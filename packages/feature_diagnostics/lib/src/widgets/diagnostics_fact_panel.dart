@@ -16,6 +16,8 @@ class DiagnosticsFactPanel extends StatelessWidget {
       );
     }
 
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -25,7 +27,7 @@ class DiagnosticsFactPanel extends StatelessWidget {
           children: facts.entries
               .map(
                 (entry) => SizedBox(
-                  width: 240,
+                  width: isNarrow ? double.infinity : 240,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
