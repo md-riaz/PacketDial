@@ -63,34 +63,66 @@ class _CallsPageState extends State<CallsPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final hasActiveCall = widget.activeCall != null;
+    final isNarrow = MediaQuery.sizeOf(context).width < 700;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: EdgeInsets.fromLTRB(isNarrow ? 12 : 16, 0, isNarrow ? 12 : 16, 16),
       children: [
-        Row(
-          children: [
-            const Icon(Icons.call_outlined, color: Color(0xFF1DA8D6), size: 20),
-            const SizedBox(width: 6),
-            Text('Dial Pad', style: theme.textTheme.headlineSmall),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF4FB),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0xFFD2E4F2)),
+        if (isNarrow)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.call_outlined, color: Color(0xFF1DA8D6), size: 20),
+                  const SizedBox(width: 6),
+                  Text('Dial Pad', style: theme.textTheme.headlineSmall),
+                ],
               ),
-              child: Text(
-                hasActiveCall ? 'In Call' : 'Idle',
-                style: const TextStyle(
-                  color: Color(0xFF4F738A),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4FB),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFD2E4F2)),
+                ),
+                child: Text(
+                  hasActiveCall ? 'In Call' : 'Idle',
+                  style: const TextStyle(
+                    color: Color(0xFF4F738A),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              const Icon(Icons.call_outlined, color: Color(0xFF1DA8D6), size: 20),
+              const SizedBox(width: 6),
+              Text('Dial Pad', style: theme.textTheme.headlineSmall),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4FB),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFD2E4F2)),
+                ),
+                child: Text(
+                  hasActiveCall ? 'In Call' : 'Idle',
+                  style: const TextStyle(
+                    color: Color(0xFF4F738A),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: 12),
         Card(
           clipBehavior: Clip.antiAlias,
@@ -98,10 +130,10 @@ class _CallsPageState extends State<CallsPage> {
             padding: const EdgeInsets.all(14),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
+                if (isNarrow)
+                  Column(
+                    children: [
+                      DropdownButtonFormField<String>(
                         initialValue: widget.selectedAccountId,
                         decoration: const InputDecoration(
                           labelText: 'Account',
@@ -117,11 +149,8 @@ class _CallsPageState extends State<CallsPage> {
                             .toList(),
                         onChanged: widget.onAccountChanged,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: TextFormField(
+                      const SizedBox(height: 10),
+                      TextFormField(
                         key: ValueKey<String>(widget.dialPadText),
                         initialValue: widget.dialPadText,
                         onChanged: widget.onDialPadChanged,
@@ -131,18 +160,55 @@ class _CallsPageState extends State<CallsPage> {
                           prefixIcon: Icon(Icons.dialpad_outlined),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: widget.selectedAccountId,
+                          decoration: const InputDecoration(
+                            labelText: 'Account',
+                            prefixIcon: Icon(Icons.account_circle_outlined),
+                          ),
+                          items: widget.accounts
+                              .map(
+                                (account) => DropdownMenuItem<String>(
+                                  value: account.id,
+                                  child: Text(account.label),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: widget.onAccountChanged,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          key: ValueKey<String>(widget.dialPadText),
+                          initialValue: widget.dialPadText,
+                          onChanged: widget.onDialPadChanged,
+                          decoration: const InputDecoration(
+                            labelText: 'Number / SIP URI',
+                            hintText: '2001 or sip:alice@example.com',
+                            prefixIcon: Icon(Icons.dialpad_outlined),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 10),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     FilledButton.icon(
                       onPressed: widget.onPlaceCall,
                       icon: const Icon(Icons.call, size: 18),
                       label: const Text('Call'),
                     ),
-                    const SizedBox(width: 8),
                     if (widget.supportsIncomingSimulation)
                       OutlinedButton.icon(
                         onPressed: widget.onSimulateIncoming,

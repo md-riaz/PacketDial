@@ -215,6 +215,54 @@ class ShellScaffold extends StatelessWidget {
       (section) => section.path == location,
       orElse: () => AppSection.calls,
     );
+    final width = MediaQuery.sizeOf(context).width;
+    final isCompact = width < 900;
+    final isExtendedRail = width > 1100;
+
+    if (isCompact) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('PacketDial'),
+          centerTitle: false,
+        ),
+        body: DecoratedBox(
+          decoration: const BoxDecoration(color: Color(0xFFFFFFFF)),
+          child: child,
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: current.index,
+          onDestinationSelected: (index) {
+            context.go(AppSection.values[index].path);
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dialpad_outlined),
+              label: 'Calls',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_circle_outlined),
+              label: 'Accounts',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.people_outline),
+              label: 'Contacts',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.history_outlined),
+              label: 'History',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.tune_outlined),
+              label: 'Settings',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.monitor_heart_outlined),
+              label: 'Diagnostics',
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       body: Container(
@@ -222,7 +270,7 @@ class ShellScaffold extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: MediaQuery.of(context).size.width > 1100 ? 232 : 76,
+              width: isExtendedRail ? 232 : 76,
               decoration: const BoxDecoration(
                 color: Color(0xFFEFF4F9),
                 border: Border(right: BorderSide(color: Color(0xFFD8E3EC))),
@@ -246,7 +294,7 @@ class ShellScaffold extends StatelessWidget {
                   const Divider(color: Color(0xFFD8E3EC), height: 16),
                   Expanded(
                     child: NavigationRail(
-                      extended: MediaQuery.of(context).size.width > 1100,
+                      extended: isExtendedRail,
                       selectedIndex: current.index,
                       groupAlignment: -0.95,
                       minWidth: 68,
@@ -254,7 +302,7 @@ class ShellScaffold extends StatelessWidget {
                       onDestinationSelected: (index) {
                         context.go(AppSection.values[index].path);
                       },
-                      labelType: MediaQuery.of(context).size.width > 1100
+                      labelType: isExtendedRail
                           ? NavigationRailLabelType.none
                           : NavigationRailLabelType.selected,
                       destinations: const [
